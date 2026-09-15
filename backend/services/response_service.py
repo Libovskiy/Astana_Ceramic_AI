@@ -2,6 +2,7 @@ from backend.services.instruction_service import extract_actions
 from backend.services.ai_service import suggest_next_action
 from backend.services.knowledge_service import get_relevant_resolutions
 from backend.services.procedures_service import find_matching_procedure
+from backend.services.plc_error_service import find_by_code
 
 
 def build_answer(
@@ -21,6 +22,11 @@ def build_answer(
     вызывающий код должен эскалировать обращение на специалиста.
 
     Порядок приоритета источников (по решению пользователя):
+    0. Код ошибки PLC (plc_error_service) — если в тексте жалобы есть
+       код вида A45/E45/F0.03 и в базе для него уже вписано решение,
+       отдаём его без обращения к ИИ вообще: это самый точный источник
+       из всех (человек считал код прямо с панели) и самый дешёвый —
+       не тратим токены на то, что и так известно однозначно.
     1. Реальная инструкция завода (procedures_service) — если для
        этого станка есть написанная человеком процедура, подходящая
        под вопрос, показываем её шаги. Самый надёжный источник —
@@ -37,6 +43,28 @@ def build_answer(
     """
 
     exclude_actions = exclude_actions or []
+
+    # -------------------------------------
+    # 0. Код ошибки PLC — точнее источника не бывает, если решение
+    #    для этого кода уже кто-то вписал в базу.
+    # -------------------------------------
+
+    plc_matches = [m for m in find_by_code(question) if (m.get("solution") or "").strip()]
+
+    if plc_matches:
+
+        match = plc_matches[0]
+
+        return {
+            "case_id": case_id,
+            "machine": machine.capitalize(),
+            "recommendation": match["solution"],
+            "actions": [{"text": match["solution"]}],
+            "explanation": {
+                "confidence": "Высокая",
+                "basis": [f"Код ошибки PLC {match['code']}: {match['title']} (линия «{match['line']}»)"]
+            }
+        }
 
     # -------------------------------------
     # 1. Реальная инструкция завода — высший приоритет, если нашлась.

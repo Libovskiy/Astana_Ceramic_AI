@@ -117,6 +117,20 @@ app = FastAPI()
 
 @app.on_event("startup")
 def start_webhmi_collector():
+    # Коллектор ходит на панель WebHMI и получает 403: пароль в коде
+    # не подходит. Каждые 30 секунд — строка ошибки в логе, и в этом
+    # шуме тонут настоящие сбои.
+    #
+    # Данные при этом идут через расширение в браузере и пишутся в
+    # базу. Включить обратно: ACAI_WEBHMI_COLLECTOR=1 в .env, когда
+    # появится действующий доступ к панели.
+    import os as _os
+
+    if (_os.environ.get("ACAI_WEBHMI_COLLECTOR") or "0").strip() != "1":
+        print("[webhmi] Серверный сбор выключен "
+              "(ACAI_WEBHMI_COLLECTOR=1 — включить). "
+              "Показания идут через расширение браузера.")
+        return
     try:
         from backend.services.webhmi_collector import start_collector_thread
         start_collector_thread()
@@ -164,6 +178,9 @@ app.include_router(maintenance_summary_router)
 from backend.api.equipment_health_routes import router as equipment_health_router
 app.include_router(equipment_health_router)
 
+from backend.api.plc_errors_routes import router as plc_errors_router
+app.include_router(plc_errors_router)
+
 from backend.api.docs_files_routes import router as docs_files_router
 app.include_router(docs_files_router)
 
@@ -208,6 +225,9 @@ init_downtime_table()
 init_procedures_tables()
 init_regulation_extensions()
 init_task_tables()
+
+from backend.services.plc_error_service import init_plc_error_table
+init_plc_error_table()
 
 from backend.services.equipment_state_service import (
     init_state_events
