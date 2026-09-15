@@ -150,3 +150,12 @@
 .btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn-block { width: 100%; display: block; }
+
+/* ── АДАПТИВ ──
+   Кнопки "Руководство"/"История" в конце строки оборудования — на
+   узком экране им не хватает места рядом с названием и статусом,
+   без переноса они бы вылезали за край. */
+@media (max-width: 768px) {
+  .diagnostic-actions { flex-wrap: wrap; }
+  .last-check { text-align: left; min-width: 0; }
+}
