@@ -6,6 +6,76 @@
  * Каждая страница подключает этот файл + свой JS.
  */
 
+// ── ЗВУК НОВЫХ ОПОВЕЩЕНИЙ ─────────────────────────────────
+// Звук синтезируется в браузере (WebAudio), без mp3-файла.
+// Пищит только когда число срочных оповещений ВЫРОСЛО — если
+// человек закрыл обращение и счётчик упал, звука быть не должно.
+// Браузер не даёт играть звук до первого клика по странице —
+// это ловим через unlock() на первый клик/нажатие клавиши.
+const AcaiSound = (function () {
+  let audioContext = null;
+  let unlocked = false;
+  let lastCount = null;
+  const STORAGE_KEY = "acai_sound_enabled";
+
+  function isEnabled() {
+    try { return localStorage.getItem(STORAGE_KEY) !== "0"; }
+    catch { return true; }
+  }
+
+  function unlock() {
+    if (unlocked) return;
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === "suspended") audioContext.resume();
+      unlocked = true;
+    } catch { unlocked = false; }
+  }
+  document.addEventListener("click", unlock);
+  document.addEventListener("keydown", unlock);
+
+  function tone(freq, startAt, duration) {
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, startAt);
+    gain.gain.linearRampToValueAtTime(0.25, startAt + 0.02);
+    gain.gain.linearRampToValueAtTime(0, startAt + duration);
+    osc.connect(gain); gain.connect(audioContext.destination);
+    osc.start(startAt); osc.stop(startAt + duration + 0.05);
+  }
+
+  function beep() {
+    if (!isEnabled()) return;
+    unlock();
+    if (!audioContext) return;
+    try {
+      const now = audioContext.currentTime;
+      tone(880, now, 0.16);
+      tone(1170, now + 0.2, 0.22);
+    } catch {}
+  }
+
+  function watchCount(count) {
+    if (lastCount !== null && count > lastCount) beep();
+    lastCount = count;
+  }
+
+  return {
+    beep,
+    watchCount,
+    toggle() {
+      const next = isEnabled() ? "0" : "1";
+      try { localStorage.setItem(STORAGE_KEY, next); } catch {}
+      if (next === "1") beep();
+      return next === "1";
+    },
+    isEnabled,
+  };
+})();
+window.AcaiSound = AcaiSound;
+
 // ── УТИЛИТЫ ───────────────────────────────────────────────
 const ACAI = {
   // API запрос с сессионной кукой
@@ -256,6 +326,7 @@ const BELL_ICONS = {
   escalated_case:      '🔺',
   pending_confirmation:'✅',
   recurring_issue:     '🔁',
+  maintenance_due:      '🔧',
 };
 
 const BELL_COLORS = {
@@ -274,6 +345,7 @@ const BELL_LINKS = {
   escalated_case:       '/cases',
   pending_confirmation: '/cases',
   recurring_issue:      '/analytics',
+  maintenance_due:      '/maintenance',
 };
 
 function bellLink(item) {
@@ -350,12 +422,18 @@ async function loadBell() {
     countEl.style.display = 'none';
   }
 
+  AcaiSound.watchCount(urgent.length);
+
   if (panel.style.display !== 'block') return;
 
   panel.innerHTML = items.length ? `
     <div style="padding:12px 14px;border-bottom:1px solid var(--border);
-                font-size:12px;color:var(--text-dim)">
-      Требует внимания: ${urgent.length} из ${items.length}
+                font-size:12px;color:var(--text-dim);display:flex;
+                align-items:center;justify-content:space-between;gap:8px">
+      <span>Требует внимания: ${urgent.length} из ${items.length}</span>
+      <button type="button" onclick="event.stopPropagation();this.textContent=AcaiSound.toggle()?'🔊':'🔇'"
+        title="Звук новых оповещений" style="border:none;background:none;cursor:pointer;
+        font-size:14px;color:var(--text-dim);flex-shrink:0">${AcaiSound.isEnabled()?'🔊':'🔇'}</button>
     </div>
     ${items.map(item => `
       <div onclick="window.location.href='${bellLink(item)}'"

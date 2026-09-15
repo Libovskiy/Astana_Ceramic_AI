@@ -212,7 +212,164 @@ def get_notifications(user):
     except Exception as error:
         print(f"[notification_service] Задачи пропущены: {error}")
 
+    # ТО раз в месяц/квартал и т.д. — без напоминания про него
+    # вспоминают, только когда посмотрят график сами, а туда никто
+    # не заходит без повода. Колокольчик — единственный повод.
+    try:
+        notifications.extend(_maintenance_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] ТО пропущено: {error}")
+
     return notifications
+
+
+# =========================================================
+# ТО: ПРОСРОЧЕННОЕ И НА ЭТОТ МЕСЯЦ
+# =========================================================
+
+MAINTENANCE_NOTIFY_ROLES = {
+    "admin", "director", "chief_engineer",
+    "chief_mechanic", "chief_electrician", "engineer",
+}
+
+
+def _maintenance_start():
+    """
+    Месяц, с которого график ТО считается действующим — тот же смысл,
+    что и в backend/api/maintenance_summary_routes.py: до этого месяца
+    работы внесли задним числом, просрочкой это не считается.
+    """
+    import os
+
+    raw = (os.environ.get("ACAI_MAINTENANCE_START") or "").strip()
+
+    if not raw:
+        from pathlib import Path
+        from backend.config import BASE_DIR
+
+        env_file = Path(BASE_DIR) / ".env"
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if line.startswith("ACAI_MAINTENANCE_START="):
+                    raw = line.split("=", 1)[1].strip()
+                    break
+
+    try:
+        year_str, month_str = raw.split("-")[:2]
+        return int(year_str), int(month_str)
+    except Exception:
+        return None, None
+
+
+def _maintenance_notifications(user):
+    """
+    Работы по графику ТО, срок которых наступил (этот месяц) или прошёл,
+    а отметки о выполнении в maintenance_log ещё нет. Один пункт на
+    станок с числом работ — иначе колокольчик разбухает: работ в
+    графике десятки на каждый станок.
+    """
+    import sqlite3
+    from datetime import datetime
+
+    from backend.config import DB_NAME
+
+    role = user.get("role")
+    if role not in MAINTENANCE_NOTIFY_ROLES:
+        return []
+
+    now = datetime.now()
+    year, month_now = now.year, now.month
+    start_year, start_month = _maintenance_start()
+
+    out = []
+    try:
+        conn = sqlite3.connect(DB_NAME, timeout=10)
+        conn.row_factory = sqlite3.Row
+    except Exception:
+        return out
+
+    try:
+        schedule = conn.execute(
+            """SELECT s.id, s.equipment_id, s.work_name, s.months,
+                      e.name AS equipment_name, e.discipline
+               FROM maintenance_schedule s
+               LEFT JOIN equipment e ON e.id = s.equipment_id
+               WHERE s.year = ?""",
+            (year,),
+        ).fetchall()
+        done = {
+            (row["schedule_id"], row["month"])
+            for row in conn.execute(
+                "SELECT schedule_id, month FROM maintenance_log WHERE year = ?",
+                (year,),
+            ).fetchall()
+        }
+    except sqlite3.OperationalError:
+        # графика ТО в базе ещё нет — не ломаем колокольчик
+        return out
+    finally:
+        conn.close()
+
+    by_equipment: dict[int, dict] = {}
+
+    for row in schedule:
+
+        if role in ("chief_mechanic",) and row["discipline"] not in ("mechanical", "both", None):
+            continue
+        if role in ("chief_electrician",) and row["discipline"] not in ("electrical", "both", None):
+            continue
+
+        for part in str(row["months"] or "").split(","):
+            part = part.strip()
+            if not part.isdigit():
+                continue
+            m = int(part)
+            if not (1 <= m <= month_now):
+                continue
+
+            before_start = bool(start_year) and (
+                year < start_year or (year == start_year and m < start_month)
+            )
+            if before_start:
+                continue
+
+            if (row["id"], m) in done:
+                continue
+
+            eq_id = row["equipment_id"]
+            bucket = by_equipment.setdefault(eq_id, {
+                "equipment_name": row["equipment_name"],
+                "overdue": 0,
+                "due_now": 0,
+            })
+
+            if m < month_now:
+                bucket["overdue"] += 1
+            else:
+                bucket["due_now"] += 1
+
+    for eq_id, info in by_equipment.items():
+
+        total = info["overdue"] + info["due_now"]
+        overdue = info["overdue"]
+
+        if overdue:
+            title = f"ТО просрочено: {overdue} из {total}"
+            severity = "critical"
+        else:
+            title = f"ТО в этом месяце: {total}"
+            severity = "warning"
+
+        out.append({
+            "type": "maintenance_due",
+            "severity": severity,
+            "icon": "🔧",
+            "title": title,
+            "subtitle": info["equipment_name"] or "Оборудование",
+            "url": "/maintenance",
+        })
+
+    return out
 
 
 # =========================================================
