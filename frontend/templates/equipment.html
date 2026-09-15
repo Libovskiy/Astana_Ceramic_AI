@@ -578,6 +578,15 @@ async function init(){
   await loadEquipment();
 }
 init();
+
+// Автообновление списка — чтобы новое оборудование/документ, добавленные
+// с другого устройства, появились сами, без ручного обновления страницы.
+// Пропускаем, если открыта модалка — не мешаем текущему действию.
+setInterval(() => {
+  const overlay = document.getElementById('_overlay');
+  if (overlay && !overlay.classList.contains('hidden')) return; // модалка открыта — не мешаем
+  loadEquipment();
+}, 45000);
 </script>
 </body>
 </html>

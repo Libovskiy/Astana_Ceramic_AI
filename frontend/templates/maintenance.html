@@ -393,6 +393,12 @@ async function init(){
   await loadSchedule();
 }
 init();
+
+setInterval(() => {
+  const overlay = document.getElementById('_overlay');
+  if (overlay && !overlay.classList.contains('hidden')) return; // модалка открыта — не мешаем
+  loadSchedule();
+}, 45000);
 </script>
 </body>
 </html>
