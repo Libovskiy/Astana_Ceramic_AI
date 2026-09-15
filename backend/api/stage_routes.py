@@ -35,7 +35,7 @@ def create_stage(
         raise HTTPException(400, "Этап с таким названием уже есть")
     stage = models.Stage(name=payload.name, order=payload.order)
     db.add(stage)
-    log_action(db, user, "stage.create", entity_type="stage", details={"name": payload.name})
+    log_action(db=db, actor=user, action="stage.create", entity_type="stage", details={"name": payload.name})
     db.commit()
     db.refresh(stage)
     return stage
@@ -51,7 +51,7 @@ def deactivate_stage(
     if not stage:
         raise HTTPException(404, "Этап не найден")
     stage.is_active = False
-    log_action(db, user, "stage.deactivate", entity_type="stage", entity_id=stage_id)
+    log_action(db=db, actor=user, action="stage.deactivate", entity_type="stage", entity_id=stage_id)
     db.commit()
     return {"ok": True}
 
