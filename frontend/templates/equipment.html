@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Оборудование — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
+.eq-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,transform .1s;position:relative;overflow:hidden;}
+.eq-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--border);}
+.eq-card.ok::before{background:var(--ok);}
+.eq-card.warn::before{background:var(--warn);}
+.eq-card.danger::before{background:var(--danger);}
+.eq-card:hover{border-color:var(--accent);transform:translateY(-1px);}
+.eq-name{font-size:14px;font-weight:600;margin-bottom:2px;}
+.eq-type{font-size:11px;color:var(--text-dim);margin-bottom:8px;}
+.health-bar{height:3px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden;}
+.health-fill{height:100%;border-radius:2px;}
+.to-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;}
+.to-badge.overdue{background:rgba(239,68,68,.15);color:var(--danger);}
+.to-badge.soon{background:rgba(245,158,11,.15);color:var(--warn);}
+.to-badge.ok{background:rgba(34,197,94,.1);color:var(--ok);}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.filter-btn{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;}
+.filter-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.section-head{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Оборудование</div>
+        <div class="topbar-sub">Производственная структура завода</div>
+      </div>
+      <div class="topbar-right">
+        <input class="input" id="searchInput" placeholder="🔍 Поиск..." style="width:200px" oninput="renderEquipment()">
+        <button class="btn primary" id="addEqBtn" style="display:none" onclick="openAddEquipment()">+ Оборудование</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+      <div class="metrics" id="metrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div id="equipmentContent"><div class="empty">Загрузка...</div></div>
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:580px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allEquipment=[];let activeFilter='all';let currentUser=null;
+const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+
+function eqClass(s){return s==='Ошибка'?'danger':s==='Внимание'?'warn':s==='Работает'?'ok':'';}
+function healthColor(h){return h>=80?'var(--ok)':h>=50?'var(--warn)':'var(--danger)';}
+
+// Сводка по реальному графику ТО (maintenance_schedule + maintenance_log).
+// Поля equipment.next_maintenance_at заполняются только кнопкой «ТО выполнено»
+// в самой карточке и про внесённые 78 работ ничего не знают.
+let toSummary={};   // {equipment_id: {next_month, overdue_count, ...}}
+
+// Исправность считается по фактам за 90 дней (обращения, эскалации,
+// простои, просроченное ТО, текущий статус). Колонка equipment.health
+// осталась от старой схемы: там всегда 100, её больше не используем.
+let healthData={};
+
+async function loadHealth(){
+  try{
+    const r=await ACAI.get('/api/equipment/health');
+    healthData=r.health||{};
+  }catch{ healthData={}; }
+}
+
+function healthOf(eqId){
+  const h=healthData[eqId];
+  return h?h.health:null;
+}
+
+function healthTip(eqId){
+  const h=healthData[eqId];
+  if(!h) return '';
+  const lines=[`За ${h.window_days} дней:`];
+  if(h.cases) lines.push(`обращений — ${h.cases}${h.escalated?`, из них эскалаций ${h.escalated}`:''}`);
+  if(h.downtime_minutes) lines.push(`простой — ${Math.round(h.downtime_minutes/60*10)/10} ч`);
+  if(h.overdue_maintenance) lines.push(`просрочено работ ТО — ${h.overdue_maintenance}`);
+  if(lines.length===1) lines.push('замечаний нет');
+  return lines.join('\n');
+}
+
+async function loadMaintenanceSummary(){
+  try{
+    const r=await ACAI.get('/api/maintenance/summary');
+    toSummary=r.summary||{};
+  }catch{ toSummary={}; }
+}
+
+// «скоро» = работа стоит на текущий месяц; «просрочено» = месяц прошёл без отметки
+function toState(eqId){
+  const s=toSummary[eqId];
+  if(!s) return null;
+  if(s.overdue_count>0) return {label:`ТО просрочено (${s.overdue_count})`,cls:'overdue'};
+  if(s.next_month && s.next_month===new Date().getMonth()+1)
+    return {label:'ТО в этом месяце',cls:'soon'};
+  return null;
+}
+
+function toInfo(eq){
+  if(!eq.next_maintenance_at)return null;
+  const diff=(new Date(eq.next_maintenance_at)-Date.now())/86400000;
+  if(diff<0)return{label:'ТО просрочено',cls:'overdue'};
+  if(diff<7)return{label:`ТО через ${Math.ceil(diff)}д`,cls:'soon'};
+  return{label:`ТО ${Math.ceil(diff)}д`,cls:'ok'};
+}
+
+async function loadEquipment(){
+  const r=await ACAI.get('/api/equipment');
+  allEquipment=r.equipment||r||[];
+  await Promise.all([loadMaintenanceSummary(), loadHealth()]);   // до отрисовки: от них зависят счётчики
+  renderFilters();renderEquipment();renderMetrics();
+}
+
+function renderMetrics(){
+  const t=allEquipment.length;
+  const w=allEquipment.filter(e=>e.status==='Работает').length;
+  const wn=allEquipment.filter(e=>e.status==='Внимание').length;
+  const er=allEquipment.filter(e=>e.status==='Ошибка').length;
+  const to=allEquipment.filter(e=>toState(e.id)).length;
+  document.getElementById('metrics').innerHTML=`
+    <div class="metric ok"><div class="metric-label">Работает</div><div class="metric-value ok">${w}</div><div class="metric-sub">из ${t} ед.</div></div>
+    <div class="metric ${wn>0?'warn':'ok'}"><div class="metric-label">Внимание</div><div class="metric-value ${wn>0?'warn':'ok'}">${wn}</div></div>
+    <div class="metric ${er>0?'danger':'ok'}"><div class="metric-label">Ошибка</div><div class="metric-value ${er>0?'danger':'ok'}">${er}</div></div>
+    <div class="metric ${to>0?'warn':'ok'}"><div class="metric-label">ТО скоро</div><div class="metric-value ${to>0?'warn':'ok'}">${to}</div><div class="metric-sub">по графику</div></div>
+    <div class="metric accent"><div class="metric-label">Исправность</div><div class="metric-value accent">${avgHealth()}%</div><div class="metric-sub">средняя за 90 дней</div></div>`;
+}
+
+function avgHealth(){
+  const vals=allEquipment.map(e=>healthOf(e.id)).filter(v=>v!=null);
+  if(!vals.length) return 100;
+  return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+}
+
+function renderFilters(){
+  const locs=[...new Set(allEquipment.map(e=>e.location||e.stage||'Без цеха'))];
+  const sorted=[...ZONES.filter(z=>locs.includes(z)),...locs.filter(l=>!ZONES.includes(l)).sort()];
+  const counts={all:allEquipment.length,to:0};
+  sorted.forEach(l=>counts[l]=allEquipment.filter(e=>(e.location||e.stage||'Без цеха')===l).length);
+  counts.to=allEquipment.filter(e=>toState(e.id)).length;
+  document.getElementById('filters').innerHTML=[
+    `<button class="filter-btn ${activeFilter==='all'?'active':''}" data-filter="all">Все (${counts.all})</button>`,
+    `<button class="filter-btn ${activeFilter==='problem'?'active':''}" data-filter="problem" style="${activeFilter==='problem'?'':'color:var(--warn)'}">⚠ Проблемы</button>`,
+    `<button class="filter-btn ${activeFilter==='to'?'active':''}" data-filter="to" style="${activeFilter==='to'?'':'color:var(--warn)'}">🔧 ТО скоро (${counts.to})</button>`,
+    ...sorted.map(l=>`<button class="filter-btn ${activeFilter===l?'active':''}" data-filter="${l}">${l} (${counts[l]})</button>`)
+  ].join('');
+  document.querySelectorAll('.filter-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{activeFilter=btn.dataset.filter;renderFilters();renderEquipment();});
+  });
+}
+
+function renderEquipment(){
+  const q=(document.getElementById('searchInput')?.value||'').toLowerCase();
+  let items=allEquipment;
+  if(activeFilter==='problem')items=items.filter(e=>e.status!=='Работает');
+  else if(activeFilter==='to')items=items.filter(e=>toState(e.id));
+  else if(activeFilter!=='all')items=items.filter(e=>(e.location||e.stage||'Без цеха')===activeFilter);
+  if(q)items=items.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.type||'').toLowerCase().includes(q)||(e.location||'').toLowerCase().includes(q));
+  if(!items.length){document.getElementById('equipmentContent').innerHTML='<div class="empty">Ничего не найдено</div>';return;}
+  if(activeFilter==='all'||activeFilter==='problem'||activeFilter==='to'){
+    const byStage={};for(const e of items){const s=e.location||e.stage||'Без цеха';if(!byStage[s])byStage[s]=[];byStage[s].push(e);}
+    const sorted=[...ZONES.filter(z=>byStage[z]),...Object.keys(byStage).filter(z=>!ZONES.includes(z))];
+    document.getElementById('equipmentContent').innerHTML=sorted.map(stage=>`
+      <div class="section-head">${stage} <span style="font-weight:400;color:var(--text-dim)">(${byStage[stage].length} ед.)</span></div>
+      <div class="eq-grid">${byStage[stage].map(renderCard).join('')}</div>`).join('');
+  }else{
+    document.getElementById('equipmentContent').innerHTML=`<div class="eq-grid">${items.map(renderCard).join('')}</div>`;
+  }
+  document.querySelectorAll('.eq-card').forEach(card=>{
+    card.addEventListener('click',()=>openDetail(parseInt(card.dataset.id)));
+  });
+}
+
+function renderCard(e){
+  const cls=eqClass(e.status);const h=healthOf(e.id)??100;const hColor=healthColor(h);
+  const to=toInfo(e);
+  return`<div class="eq-card ${cls}" data-id="${e.id}">
+    <div class="eq-name">${e.name}</div>
+    <div class="eq-type">${e.type||'—'}</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span class="badge ${cls}" style="font-size:10px">${e.status||'—'}</span>
+      ${to?`<span class="to-badge ${to.cls}">${to.label}</span>`:''}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px">
+      <span style="font-size:10px;color:var(--text-dim)" title="${healthTip(e.id)}">Исправность</span>
+      <span style="font-family:var(--mono);font-size:11px;color:${hColor}">${h}%</span>
+    </div>
+    <div class="health-bar"><div class="health-fill" style="width:${h}%;background:${hColor}"></div></div>
+  </div>`;
+}
+
+async function openDetail(id){
+  const r=await ACAI.get(`/api/equipment/${id}`);
+  const e=r.equipment||r;if(!e)return;
+  const cls=eqClass(e.status);const h=healthOf(e.id)??100;const hColor=healthColor(h);
+  const canEdit=['admin','director','chief_engineer','chief_mechanic','chief_electrician'].includes(currentUser?.role||'');
+  const isAdmin=['admin','director'].includes(currentUser?.role||'');
+  const to=toInfo(e);
+
+  // история
+  let journal=[];
+  try{const jr=await ACAI.get(`/api/equipment/${id}/journal`);journal=jr.journal||jr||[];}catch{}
+  const journalHtml=journal.length
+    ?journal.slice(0,5).map(j=>`<div style="padding:7px 10px;border-radius:8px;background:var(--surface-2);margin-bottom:4px;border-left:3px solid ${j.type==='case'?'var(--accent)':'var(--ok)'}">
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:12px;font-weight:600">${j.title||j.symptom||j.action||'—'}</span>
+          <span style="font-size:10px;color:var(--text-dim)">${j.date?new Date(j.date.replace(' ','T')).toLocaleDateString('ru-RU'):'—'}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim)">${j.description||j.resolution||''}</div>
+      </div>`).join('')
+    :'<div class="empty">История пуста</div>';
+
+  // форматируем даты ТО
+  const lastTO=e.last_maintenance_at?new Date(e.last_maintenance_at).toLocaleDateString('ru-RU'):'Не указано';
+  const nextTO=e.next_maintenance_at?new Date(e.next_maintenance_at).toLocaleDateString('ru-RU'):'Не запланировано';
+
+  ACAI.showModal(`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span class="dot-status ${cls}" style="width:10px;height:10px"></span>
+      <h3 style="margin:0;flex:1">${e.name}</h3>
+      <span class="badge ${cls}">${e.status}</span>
+    </div>
+
+    <!-- РЕДАКТИРОВАНИЕ -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="field"><label>Название</label><input class="input" id="ed-name" value="${e.name||''}" ${canEdit?'':'readonly'}></div>
+      <div class="field"><label>Тип</label><input class="input" id="ed-type" value="${e.type||''}" ${canEdit?'':'readonly'}></div>
+      <div class="field"><label>Цех</label>
+        <select class="input" id="ed-location" ${canEdit?'':'disabled'}>
+          ${ZONES.map(z=>`<option ${(e.location||'')==z?'selected':''}>${z}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Статус</label>
+        <select class="input" id="ed-status" ${canEdit?'':'disabled'}>
+          ${['Работает','Внимание','Ошибка'].map(s=>`<option ${(e.status||'')==s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <!-- ТО РАСПИСАНИЕ -->
+    <div style="background:var(--surface-2);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">🔧 ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Последнее ТО</div>
+          <div style="font-size:13px;font-weight:600" id="ed-to-last">${lastTO}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Следующее ТО</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-dim)" id="ed-to-next">${nextTO}</div>
+        </div>
+        <div id="ed-to-works" style="grid-column:1/-1"></div>
+        ${canEdit?`
+        <div class="field"><label>Интервал (дни)</label><input class="input" id="ed-to-days" type="number" value="${e.maintenance_interval_days||30}" min="1"></div>
+        <div class="field"><label>Выполнить ТО сейчас</label><button class="btn ok" style="width:100%" onclick="completeMaintenance(${e.id})">✓ ТО выполнено</button></div>
+        `:''}
+      </div>
+    </div>
+
+    <!-- ДОКУМЕНТЫ -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📄 ДОКУМЕНТЫ</div>
+    <div id="ed-docs" style="margin-bottom:8px"><div style="font-size:12px;color:var(--text-dim)">Загрузка...</div></div>
+    ${canEdit?`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 12px;background:var(--surface-2);border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      📎 Прикрепить документ (PDF)
+      <input type="file" accept=".pdf,.doc,.docx" style="display:none" onchange="uploadDoc(${e.id},this)">
+    </label>`:''}
+
+    <!-- ФОТО С ОБХОДОВ -->
+    <div id="ed-photos-wrap" style="display:none;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📷 ФОТО С ОБХОДОВ</div>
+      <div id="ed-photos" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- ИСТОРИЯ -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📋 ИСТОРИЯ (${journal.length})</div>
+    <div style="max-height:160px;overflow-y:auto;margin-bottom:10px">${journalHtml}</div>
+
+    <div id="ed-err" style="color:var(--danger);font-size:12px;min-height:14px"></div>
+    <div class="modal-foot">
+      ${isAdmin?`<button class="btn danger sm" onclick="archiveEquipment(${e.id})">🗄 Архив</button>`:''}
+      <a href="/diagnostics?equipment_id=${e.id}" class="btn secondary">🔧 Диагностика</a>
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      ${canEdit?`<button class="btn primary" onclick="saveEquipment(${e.id})">💾 Сохранить</button>`:''}
+    </div>
+  `);
+  loadDocs(id);
+  loadChecklistPhotos(id);
+  loadMaintenanceCard(id);
+}
+
+// Данные по ТО берём из графика, а не из полей equipment.
+// Дата запуска: месяцы до неё красными не красим. График внесли в
+// сентябре, а работы в нём расписаны с января — без отсечки вся карточка
+// была бы красной, и люди перестали бы на неё смотреть.
+let toStartCard={year:null,month:null};
+
+async function loadMaintenanceCard(id){
+  let d=null;
+  try{
+    const [summary, settings] = await Promise.all([
+      ACAI.get(`/api/maintenance/summary?equipment_id=${id}`),
+      ACAI.get('/api/maintenance/settings').catch(()=>({}))
+    ]);
+    d = summary;
+    toStartCard = {year:settings.start_year||null, month:settings.start_month||null};
+  }catch{ return; }
+
+  const sum=d.equipment_summary, works=d.works||[];
+  const lastEl=document.getElementById('ed-to-last');
+  const nextEl=document.getElementById('ed-to-next');
+  const worksEl=document.getElementById('ed-to-works');
+  if(!lastEl||!nextEl||!worksEl) return;   // модалку успели закрыть
+
+  if(sum&&sum.last){
+    lastEl.textContent=ACAI.shortDate(sum.last.done_at);
+    lastEl.title=`${sum.last.work_name||''} · ${sum.last.done_by||''}`;
+  }else if(sum){
+    lastEl.textContent='В этом году не отмечалось';
+  }
+
+  if(!sum){
+    nextEl.textContent='Нет в графике ТО';
+    return;
+  }
+  if(sum.overdue_count>0){
+    nextEl.textContent=`Просрочено: ${sum.overdue_count}`;
+    nextEl.style.color='var(--danger)';
+    if(sum.overdue_first) nextEl.title=`${sum.overdue_first.work_name} — ${MONTHS[sum.overdue_first.month]}`;
+  }else if(sum.next_month){
+    nextEl.textContent=`${sum.next_month_name} · ${sum.next_work||''}`;
+    nextEl.style.color=(sum.next_month===new Date().getMonth()+1)?'var(--warn)':'var(--ok)';
+  }else{
+    nextEl.textContent='Всё выполнено';
+    nextEl.style.color='var(--ok)';
+  }
+
+  if(works.length){
+    const now=new Date().getMonth()+1;
+    worksEl.innerHTML=`
+      <div style="font-size:10px;color:var(--text-dim);margin:10px 0 4px">
+        РАБОТЫ ПО ГРАФИКУ ${sum.year} · выполнено ${sum.done_count} из ${sum.planned_count}
+      </div>
+      ${works.map(w=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${w.work_name}</span>
+          <span style="display:flex;gap:2px;flex-shrink:0">
+            ${w.months.map(m=>{
+              const done=w.done_months.includes(m);
+              const late=!done && m<now && !(toStartCard.year &&
+                (sum.year<toStartCard.year ||
+                 (sum.year===toStartCard.year && m<toStartCard.month)));
+              return`<span title="${MONTHS[m]}" style="width:16px;height:16px;border-radius:4px;
+                font-size:9px;display:flex;align-items:center;justify-content:center;
+                background:${done?'var(--ok)':late?'var(--danger)':'var(--surface)'};
+                color:${done||late?'#fff':'var(--text-dim)'};
+                border:1px solid ${done?'var(--ok)':late?'var(--danger)':'var(--border)'}">${m}</span>`;
+            }).join('')}
+          </span>
+        </div>`).join('')}
+      <a href="/maintenance" style="font-size:11px;color:var(--accent);display:inline-block;margin-top:6px">Открыть график ТО →</a>`;
+  }else{
+    worksEl.innerHTML=`<div style="font-size:11px;color:var(--text-dim);margin-top:8px">
+      Работ в графике нет. <a href="/maintenance" style="color:var(--accent)">Добавить →</a></div>`;
+  }
+}
+
+const MONTHS=['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+
+// Снимки, которые рабочие прикрепили на обходе смены.
+async function loadChecklistPhotos(id){
+  let photos=[];
+  try{
+    const r=await ACAI.get(`/api/checklist/photos?equipment_id=${id}`);
+    photos=r.photos||[];
+  }catch{ return; }
+  if(!photos.length) return;
+
+  const wrap=document.getElementById('ed-photos-wrap');
+  const box=document.getElementById('ed-photos');
+  if(!wrap||!box) return;   // модалку успели закрыть
+
+  const COLOR={bad:'var(--danger)',warn:'var(--warn)'};
+  box.innerHTML=photos.map(p=>{
+    const url=`/api/checklist/photo/${p.id}`;
+    const when=ACAI.shortDate(p.created_at);
+    const tip=[when,p.note||'',p.uploaded_by||''].filter(Boolean).join(' · ');
+    return`<img src="${url}" title="${tip.replace(/"/g,'&quot;')}"
+      onclick="viewChecklistPhoto('${url}','${tip.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')"
+      style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;
+             border:2px solid ${COLOR[p.status]||'var(--border)'}">`;
+  }).join('');
+  wrap.style.display='';
+}
+
+function viewChecklistPhoto(url,caption){
+  // модалка оборудования уже открыта — вторую поверх не ставим,
+  // показываем снимок в новой вкладке через объект-ссылку
+  const w=window.open('','_blank');
+  if(!w){ window.location.href=url; return; }
+  w.document.write(`<title>Фото обхода</title>
+    <body style="margin:0;background:#111;display:flex;flex-direction:column;
+                 align-items:center;justify-content:center;height:100vh;
+                 font-family:system-ui;color:#ccc">
+      <img src="${url}" style="max-width:96vw;max-height:88vh;object-fit:contain">
+      <div style="padding:10px;font-size:13px">${caption||''}</div>
+    </body>`);
+  w.document.close();
+}
+
+async function completeMaintenance(id){
+  const days=parseInt(document.getElementById('ed-to-days')?.value||30);
+  const now=new Date();const next=new Date(now);next.setDate(now.getDate()+days);
+  try{
+    await fetch(`/api/equipment/${id}/set-status`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'Работает'})});
+    // обновляем даты ТО
+    await fetch(`/api/settings/equipment/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        name:document.getElementById('ed-name')?.value,
+        last_maintenance_at:now.toISOString().slice(0,10),
+        next_maintenance_at:next.toISOString().slice(0,10),
+        maintenance_interval_days:days,
+      })
+    });
+    ACAI.toast('ТО выполнено ✓','ok');ACAI.closeModal();await loadEquipment();
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+// Файл в карточке и файл в базе знаний — разные вещи. Скан без
+// текстового слоя загрузится и будет виден, но ИИ его не прочитает.
+// Без пометки человек уверен, что документ «есть», и не понимает,
+// почему система по нему молчит.
+const DOC_STATE = {
+  indexed: {icon:'✓', color:'var(--ok)'},
+  scan:    {icon:'⚠', color:'var(--warn)'},
+  pending: {icon:'…', color:'var(--text-dim)'},
+  not_pdf: {icon:'—', color:'var(--text-dim)'},
+  missing: {icon:'✕', color:'var(--danger)'},
+  unknown: {icon:'?', color:'var(--text-dim)'},
+};
+
+async function loadDocs(id){
+  try{
+    const r=await ACAI.get(`/api/equipment/${id}/documents`);
+    const docs=r.documents||[];
+    document.getElementById('ed-docs').innerHTML=docs.length
+      ?docs.map(d=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface-2);border-radius:7px;margin-bottom:4px">
+          <span>📄</span>
+          <a href="${d.url}" target="_blank" style="flex:1;font-size:12px;color:var(--accent);text-decoration:none">${d.title||d.name}</a>
+          <span class="doc-state" data-doc="${d.id}" style="font-size:11px;color:var(--text-dim)"></span>
+          <button onclick="deleteDoc(${id},${d.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;padding:2px 6px" title="Удалить">✕</button>
+        </div>`).join('')
+      :'<div style="font-size:12px;color:var(--text-dim)">Документов нет</div>';
+
+    if(docs.length) loadDocStatus(id);
+  }catch{}
+}
+
+async function loadDocStatus(id){
+  let items=[];
+  try{
+    const r=await ACAI.get(`/api/equipment/${id}/documents/status`);
+    items=r.documents||[];
+  }catch{ return; }
+
+  for(const item of items){
+    const el=document.querySelector(`.doc-state[data-doc="${item.id}"]`);
+    if(!el) continue;                       // модалку успели закрыть
+    const view=DOC_STATE[item.state]||DOC_STATE.unknown;
+    el.textContent=`${view.icon} ${item.hint}`;
+    el.style.color=view.color;
+    el.title=item.hint;
+  }
+}
+
+async function deleteDoc(eqId,docId){
+  if(!confirm('Удалить документ?'))return;
+  try{
+    await fetch(`/api/equipment/${eqId}/documents/${docId}`,{method:'DELETE',credentials:'include'});
+    ACAI.toast('Удалено');loadDocs(eqId);
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+async function uploadDoc(id,input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async function(){
+    const b64=reader.result.split(',')[1];
+    try{
+      const r=await fetch(`/api/equipment/${id}/documents/upload-b64`,{
+        method:'POST',credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({filename:file.name,data:b64})
+      });
+      const rd=await r.json();
+      if(rd.success){ACAI.toast('Документ загружен ✓','ok');loadDocs(id);}
+      else ACAI.toast(rd.message||'Ошибка','danger');
+    }catch(e){ACAI.toast(e.message,'danger');}
+  };
+  reader.readAsDataURL(file);
+  input.value='';
+}
+
+async function saveEquipment(id){
+  const name=document.getElementById('ed-name')?.value.trim();
+  const type=document.getElementById('ed-type')?.value.trim();
+  const location=document.getElementById('ed-location')?.value;
+  const status=document.getElementById('ed-status')?.value;
+  const errEl=document.getElementById('ed-err');
+  if(!name){errEl.textContent='Введите название';return;}
+  try{
+    const r=await fetch(`/api/settings/equipment/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,stage:location,location})});
+    const rd=await r.json();if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
+    const eq=allEquipment.find(e=>e.id===id);
+    if(eq&&eq.status!==status)await ACAI.post(`/api/equipment/${id}/set-status`,{status});
+    ACAI.toast('Сохранено ✓','ok');ACAI.closeModal();await loadEquipment();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function archiveEquipment(id){
+  if(!confirm('Скрыть из списков? В БД останется.'))return;
+  try{await fetch(`/api/settings/equipment/${id}/archive`,{method:'PATCH',credentials:'include'});ACAI.toast('Архивировано');ACAI.closeModal();await loadEquipment();}
+  catch(e){ACAI.toast(e.message,'danger');}
+}
+
+function openAddEquipment(){
+  ACAI.showModal(`
+    <h3>Добавить оборудование</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field" style="grid-column:1/-1"><label>Название *</label><input class="input" id="ae-name" placeholder="Например: Дробилка DTE 117"></div>
+      <div class="field"><label>Тип</label><input class="input" id="ae-type" placeholder="Дробилка, Вальцы..."></div>
+      <div class="field"><label>Цех *</label>
+        <select class="input" id="ae-location">${ZONES.map(z=>`<option>${z}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Интервал ТО (дней)</label><input class="input" id="ae-to" type="number" value="30" min="1"></div>
+    </div>
+    <div id="ae-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitAddEquipment()">Добавить</button>
+    </div>
+  `);
+}
+
+async function submitAddEquipment(){
+  const name=document.getElementById('ae-name')?.value.trim();
+  const type=document.getElementById('ae-type')?.value.trim();
+  const location=document.getElementById('ae-location')?.value;
+  const days=parseInt(document.getElementById('ae-to')?.value||30);
+  const errEl=document.getElementById('ae-err');
+  if(!name){errEl.textContent='Введите название';return;}
+  try{
+    const r=await fetch('/api/settings/equipment',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type:type||null,stage:location,location,maintenance_interval_days:days})});
+    const rd=await r.json();if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
+    ACAI.toast('Оборудование добавлено ✓','ok');ACAI.closeModal();await loadEquipment();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function init(){
+  const ctx=await initLayout();currentUser=ctx?.user;
+  if(['admin','director','chief_engineer'].includes(currentUser?.role||''))document.getElementById('addEqBtn').style.display='block';
+  await loadEquipment();
+}
+init();
+</script>
+</body>
+</html>

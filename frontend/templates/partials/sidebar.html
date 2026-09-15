@@ -1,0 +1,118 @@
+<aside class="sidebar">
+
+    <div class="brand">
+        <div class="brand-icon">AI</div>
+        <div>
+            <div class="brand-title">ACAI</div>
+            <div class="brand-subtitle">AI Assistant</div>
+        </div>
+    </div>
+
+    <nav class="sidebar-menu">
+
+        <a href="/" class="menu-item">
+            <span>⌂</span>
+            <span>Панель управления</span>
+        </a>
+
+        <a href="/chat" class="menu-item">
+            <span>⌁</span>
+            <span>Обращения</span>
+        </a>
+
+        <a href="/equipment" class="menu-item">
+            <span>▣</span>
+            <span>Оборудование</span>
+        </a>
+
+        <a href="/mechanics" class="menu-item">
+            <span>🔧</span>
+            <span>Механика</span>
+        </a>
+
+        <a href="/electrical" class="menu-item">
+            <span>⚡</span>
+            <span>Электрика</span>
+        </a>
+
+        <a href="/production" class="menu-item">
+            <span>⛓</span>
+            <span>Производство</span>
+        </a>
+
+        <a href="/lab" class="menu-item">
+            <span>⚗</span>
+            <span>Лаборатория</span>
+        </a>
+
+        <a href="/regulations" class="menu-item">
+            <span>📐</span>
+            <span>Регламенты</span>
+        </a>
+
+        <a href="/knowledge" class="menu-item">
+            <span>📚</span>
+            <span>Знания</span>
+        </a>
+
+        <a href="/analytics" class="menu-item">
+            <span>◔</span>
+            <span>Аналитика</span>
+        </a>
+
+        <a href="/settings" class="menu-item">
+            <span>⚙</span>
+            <span>Настройки</span>
+        </a>
+
+    </nav>
+
+    <div class="sidebar-user">
+
+        <div class="user-profile">
+
+            <div class="user-avatar" id="userInitial">?</div>
+
+            <div class="user-info">
+
+                <input
+                    id="userName"
+                    class="user-name-input"
+                    type="text"
+                    placeholder="Ваше имя"
+                    autocomplete="off"
+                >
+
+                <select
+                    id="userShift"
+                    class="user-shift-select"
+                ></select>
+
+            </div>
+
+        </div>
+
+        <div class="online-status">
+            <span></span>
+            Онлайн
+        </div>
+
+        <button
+            type="button"
+            onclick="logout()"
+            class="parts-logout"
+        >
+            Выйти
+        </button>
+
+        <button
+            type="button"
+            onclick="logoutAll()"
+            class="parts-logout parts-logout-danger"
+        >
+            Выйти со всех устройств
+        </button>
+
+    </div>
+
+</aside>

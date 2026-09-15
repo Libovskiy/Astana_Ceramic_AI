@@ -1,0 +1,178 @@
+/* ================================================================
+   ACAI — стили для страницы "Производство" (production.html, production.js)
+   Подключать после acai.css и equipment-page.css (для .dashboard-card,
+   .card-header, .empty-state, .btn-primary).
+   ================================================================ */
+
+.production-section { margin-top: 8px; }
+.section-header { margin-bottom: 14px; }
+.section-header h2 { font-size: 14px; font-weight: 600; }
+.section-header p { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+.production-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.flow-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+.production-stage {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  width: 190px;
+  flex-shrink: 0;
+}
+.production-stage.stage-ok      { border-top-color: var(--ok); }
+.production-stage.stage-warning { border-top-color: var(--warn); }
+.production-stage.stage-error   { border-top-color: var(--danger); }
+
+.stage-icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.production-stage h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+
+.stage-equipment-count { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+.stage-equipment-count strong { font-family: var(--mono); font-size: 16px; color: var(--text); font-weight: 600; }
+
+.stage-status { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.stage-status span:first-child {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0;
+}
+.production-stage.stage-ok .stage-status span:first-child      { background: var(--ok); }
+.production-stage.stage-warning .stage-status span:first-child { background: var(--warn); }
+.production-stage.stage-error .stage-status span:first-child   { background: var(--danger); }
+.stage-status-text { font-size: 12px; color: var(--text-dim); }
+
+.stage-metrics { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.stage-metric { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
+.stage-metric strong { color: var(--text); font-weight: 600; }
+.stage-metric.stage-metric-warning strong { color: var(--warn); }
+
+.stage-link {
+  width: 100%;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.stage-link:hover { filter: brightness(1.15); }
+
+.production-actions { margin-top: 8px; }
+.primary-button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.primary-button:hover { filter: brightness(1.1); }
+
+/* ── Модалки этапа и производственной карты ──
+   Собственная реализация страницы (не через ACAI.openModal),
+   переключается через .hidden (уже есть в acai.css). */
+.modal.hidden { display: none !important; }
+.modal:not(.hidden) {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.55);
+}
+.modal-window {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 28px; height: 28px;
+  border: none; border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--text); }
+.modal-icon { font-size: 26px; margin-bottom: 8px; }
+.modal-window h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.modal-window p { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }
+
+.production-detail-status {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+  font-size: 13px;
+}
+.production-detail-status span { color: var(--text-dim); }
+
+.production-detail-card {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.production-detail-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+.production-detail-header span { color: var(--text-dim); }
+.production-detail-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+
+.production-progress-bar {
+  height: 6px; border-radius: 4px; background: var(--border); overflow: hidden;
+}
+.production-progress-value { height: 100%; background: var(--accent); border-radius: 4px; }
+
+.production-map-window { width: min(680px, 92vw); }
+.production-map {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.map-stage {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  text-align: center;
+  min-width: 90px;
+}
+.map-stage span { display: block; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+.map-stage strong { font-size: 13px; }
+.map-arrow { color: var(--text-dim); font-size: 16px; }
+
+.plan-input {
+  font-family: inherit;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 9px 11px;
+}
+.plan-input:focus { outline: none; border-color: var(--accent); }

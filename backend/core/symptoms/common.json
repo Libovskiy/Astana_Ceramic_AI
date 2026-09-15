@@ -1,0 +1,102 @@
+{
+    "machine": "common",
+    "comment": "Сквозные симптомы — применяются к ЛЮБОМУ станку завода, если для него нет своего файла или в нём не нашлось совпадения. Файл станка (например messersi.json) имеет приоритет при равном счёте. Дополняйте список словами, которыми реально говорят ваши рабочие.",
+    "symptoms": [
+        {
+            "id": "not_start",
+            "name": "Не запускается",
+            "search": "machine does not start troubleshooting power supply",
+            "keywords": ["не запускается", "не стартует", "не включается", "не заводится", "не пускается"]
+        },
+        {
+            "id": "stops_itself",
+            "name": "Останавливается сам",
+            "search": "unexpected stop emergency stop alarm reset",
+            "keywords": ["останавливается", "встает", "встаёт", "глохнет", "отключается сам", "аварийный останов", "стоп"]
+        },
+        {
+            "id": "alarm_code",
+            "name": "Ошибка на панели",
+            "search": "alarm code error message display troubleshooting",
+            "keywords": ["ошибка", "авария", "код", "алярм", "красная лампа", "мигает", "панель", "hmi", "дисплей"]
+        },
+        {
+            "id": "overheat",
+            "name": "Перегрев",
+            "search": "overheating motor bearing temperature cooling",
+            "keywords": ["перегрев", "греется", "горячий", "нагревается", "дымит", "запах гари", "температура подшипник"]
+        },
+        {
+            "id": "noise",
+            "name": "Посторонний шум или стук",
+            "search": "abnormal noise knocking bearing wear inspection",
+            "keywords": ["шум", "стук", "скрежет", "гул", "гудит", "скрипит", "щелкает", "щёлкает", "свист"]
+        },
+        {
+            "id": "vibration",
+            "name": "Вибрация",
+            "search": "excessive vibration alignment balancing fixing bolts",
+            "keywords": ["вибраци", "вибрирует", "трясет", "трясёт", "бьет", "бьёт", "болтается", "разбалансировка"]
+        },
+        {
+            "id": "oil_leak",
+            "name": "Утечка масла или смазки",
+            "search": "oil leak seal gasket lubrication level",
+            "keywords": ["масло", "течет", "течёт", "подтекает", "утечк", "смазк", "сальник", "лужа", "капает"]
+        },
+        {
+            "id": "air_leak",
+            "name": "Не держит давление (пневматика)",
+            "search": "air leak pneumatic pressure drop cylinder valve",
+            "keywords": ["давление", "воздух", "пневматика", "не держит", "травит", "шипит", "цилиндр", "компрессор", "вакуум"]
+        },
+        {
+            "id": "sensor",
+            "name": "Не срабатывает датчик",
+            "search": "sensor not detecting photocell proximity switch adjustment",
+            "keywords": ["датчик", "фотоэлемент", "фотодатчик", "концевик", "не видит", "не реагирует", "не срабатывает", "индуктивный"]
+        },
+        {
+            "id": "jam",
+            "name": "Заклинило или застряло",
+            "search": "jam blockage stuck material removal",
+            "keywords": ["заклинило", "застрял", "застряло", "клинит", "зажевало", "забился", "забилось", "затор", "залипает"]
+        },
+        {
+            "id": "belt",
+            "name": "Проблема с лентой или цепью",
+            "search": "belt slipping misalignment tension chain wear",
+            "keywords": ["лента", "ремень", "цепь", "сход", "съезжает", "проскальзывает", "буксует", "натяжение", "порвалась", "провисает"]
+        },
+        {
+            "id": "motor",
+            "name": "Не работает двигатель или привод",
+            "search": "motor does not run drive gearbox failure inspection",
+            "keywords": ["двигатель", "мотор", "привод", "редуктор", "не крутит", "не вращается", "не тянет", "остановился"]
+        },
+        {
+            "id": "temperature_control",
+            "name": "Не держит температуру",
+            "search": "temperature control burner heating regulation setpoint",
+            "keywords": ["не держит температур", "температур", "не греет", "не нагревает", "холодная", "перетоп", "горелка", "теплоноситель", "недожог"]
+        },
+        {
+            "id": "fan",
+            "name": "Проблема с вентиляцией или тягой",
+            "search": "fan airflow damper draft ventilation problem",
+            "keywords": ["вентилятор", "тяга", "не дует", "не тянет воздух", "заслонк", "шибер", "продув", "рециркуляция"]
+        },
+        {
+            "id": "robot",
+            "name": "Робот сбоит или не берет деталь",
+            "search": "robot alarm gripper pick position teach recovery",
+            "keywords": ["робот", "манипулятор", "захват", "не берет", "не берёт", "роняет", "промахивается", "позици", "fanuc"]
+        },
+        {
+            "id": "quality",
+            "name": "Брак продукции",
+            "search": "product quality defect cracks deformation adjustment",
+            "keywords": ["брак", "трещин", "кривой", "деформаци", "разваливается", "крошится", "неровный", "скол"]
+        }
+    ]
+}

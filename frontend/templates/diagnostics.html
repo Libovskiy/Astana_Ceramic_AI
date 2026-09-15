@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Диагностика — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+/* ШАГ 1 — выбор цеха */
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.zone-btn {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .15s, transform .1s;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 10px;
+}
+.zone-btn:hover { border-color: var(--accent); transform: translateY(-2px); }
+.zone-btn .z-icon { font-size: 36px; }
+.zone-btn .z-name { font-size: 15px; font-weight: 700; }
+.zone-btn .z-count { font-size: 12px; color: var(--text-dim); }
+
+/* ШАГ 2 — выбор оборудования */
+.eq-big-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.eq-big-btn {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .15s, transform .1s;
+}
+.eq-big-btn:hover { border-color: var(--accent); transform: translateY(-2px); }
+.eq-big-btn.ok   { border-color: rgba(34,197,94,.3); }
+.eq-big-btn.warn { border-color: rgba(245,158,11,.4); }
+.eq-big-btn.danger { border-color: rgba(239,68,68,.4); }
+.eq-big-btn .eq-icon { font-size: 28px; margin-bottom: 8px; }
+.eq-big-btn .eq-bname { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.eq-big-btn .eq-bstatus { font-size: 11px; margin-top: 6px; }
+
+/* ШАГ 3 — описание проблемы */
+.problem-area {
+  max-width: 600px; margin: 0 auto;
+}
+.problem-area .eq-selected {
+  background: var(--surface-2); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.problem-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.quick-btn {
+  padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px; cursor: pointer; transition: all .15s;
+}
+.quick-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ШАГ 4 — результат */
+.result-box {
+  max-width: 600px; margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px;
+}
+.action-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.action-list li {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; background: var(--surface-2); border-radius: 8px;
+  font-size: 13px;
+}
+.action-list li::before { content: '→'; color: var(--accent); flex-shrink: 0; font-weight: 700; }
+
+/* хлебные крошки */
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); margin-bottom: 20px; flex-wrap: wrap; }
+.breadcrumb .bc-sep { color: var(--border); }
+.breadcrumb .bc-link { cursor: pointer; color: var(--accent); }
+.breadcrumb .bc-link:hover { text-decoration: underline; }
+.breadcrumb .bc-cur { color: var(--text); font-weight: 500; }
+
+.step-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.step-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
+
+.feedback-row { display: flex; gap: 10px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Диагностика</div>
+        <div class="topbar-sub">ИИ-ассистент ACAI</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page" id="pageContent">
+      <div class="empty">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+const ZONES = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+const ZONE_ICONS = {
+  'Массаподготовка': '⚙️',
+  'Формовка': '🏗️',
+  'Сушка / Углесушка': '🌬️',
+  'Обжиг': '🔥',
+  'Упаковка': '📦',
+};
+const QUICK_PROBLEMS = [
+  'Не запускается','Сильный шум','Вибрация','Перегрев',
+  'Утечка масла','Остановился сам','Плохое качество продукции','Другое'
+];
+
+let allEquipment = [];
+let selectedZone = null;
+let selectedEquipment = null;
+let currentCaseId = null;
+let awaitingFeedback = false;
+
+function eqClass(s) {
+  if (s==='Ошибка') return 'danger';
+  if (s==='Внимание') return 'warn';
+  return 'ok';
+}
+
+async function init() {
+  const r = await ACAI.get('/api/equipment');
+  allEquipment = r.equipment || [];
+
+  // если в URL есть equipment_id — пропускаем шаги
+  const params = new URLSearchParams(window.location.search);
+  const eid = parseInt(params.get('equipment_id'));
+  if (eid) {
+    const eq = allEquipment.find(e=>e.id===eid);
+    if (eq) { selectedEquipment = eq; renderStep3(); return; }
+  }
+
+  renderStep1();
+}
+
+// ── ШАГ 1: выбор цеха ────────────────────────────────────
+function renderStep1() {
+  selectedZone = null; selectedEquipment = null;
+
+  const byZone = {};
+  for (const e of allEquipment) {
+    const z = e.location || e.stage || 'Другое';
+    if (!byZone[z]) byZone[z] = { total:0, problems:0 };
+    byZone[z].total++;
+    if (e.status !== 'Работает') byZone[z].problems++;
+  }
+
+  const zones = [...ZONES.filter(z=>byZone[z]),
+                 ...Object.keys(byZone).filter(z=>!ZONES.includes(z))];
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="step-title">Выберите цех</div>
+    <div class="step-sub">В каком цехе возникла проблема?</div>
+    <div class="zone-grid">
+      ${zones.map(z => {
+        const s = byZone[z] || {total:0,problems:0};
+        const problemBadge = s.problems > 0
+          ? `<span style="color:var(--warn);font-size:11px">⚠ ${s.problems} проблем</span>` : '';
+        return `<div class="zone-btn" onclick="selectZone('${z}')">
+          <div class="z-icon">${ZONE_ICONS[z]||'🏭'}</div>
+          <div class="z-name">${z}</div>
+          <div class="z-count">${s.total} единиц ${problemBadge}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+// ── ШАГ 2: выбор оборудования ─────────────────────────────
+function selectZone(zone) {
+  selectedZone = zone;
+  const items = allEquipment.filter(e => (e.location||e.stage||'Другое') === zone);
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="breadcrumb">
+      <span class="bc-link" onclick="renderStep1()">Цехи</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">${zone}</span>
+    </div>
+    <div class="step-title">Выберите оборудование</div>
+    <div class="step-sub">Какой станок или машина требует диагностики?</div>
+    <div class="eq-big-grid">
+      ${items.map(e => {
+        const cls = eqClass(e.status);
+        const statusColor = cls==='danger'?'var(--danger)':cls==='warn'?'var(--warn)':'var(--ok)';
+        const icon = getEqIcon(e.type||e.name);
+        return `<div class="eq-big-btn ${cls}" onclick="selectEquipment(${e.id})">
+          <div class="eq-icon">${icon}</div>
+          <div class="eq-bname">${e.name}</div>
+          <div class="eq-bstatus" style="color:${statusColor}">${e.status||'Работает'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function getEqIcon(nameOrType) {
+  const s = (nameOrType||'').toLowerCase();
+  if (s.includes('пресс')||s.includes('press')) return '🔩';
+  if (s.includes('конвей')||s.includes('транспорт')||s.includes('conveyor')) return '➡️';
+  if (s.includes('печь')||s.includes('kiln')||s.includes('обжиг')) return '🔥';
+  if (s.includes('сушил')||s.includes('сушка')||s.includes('drying')) return '💨';
+  if (s.includes('насос')||s.includes('pump')) return '💧';
+  if (s.includes('вальц')||s.includes('дробил')) return '⚙️';
+  if (s.includes('упаков')||s.includes('packer')) return '📦';
+  if (s.includes('смесит')) return '🌀';
+  if (s.includes('бункер')) return '🗃️';
+  if (s.includes('датчик')) return '📡';
+  return '🔧';
+}
+
+// ── ШАГ 3: описание проблемы ──────────────────────────────
+function selectEquipment(id) {
+  selectedEquipment = allEquipment.find(e=>e.id===id);
+  if (!selectedEquipment) return;
+  renderStep3();
+}
+
+function renderStep3() {
+  currentCaseId = null; awaitingFeedback = false;
+  const e = selectedEquipment;
+  const cls = eqClass(e.status);
+  const statusColor = cls==='danger'?'var(--danger)':cls==='warn'?'var(--warn)':'var(--ok)';
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="breadcrumb">
+      <span class="bc-link" onclick="renderStep1()">Цехи</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-link" onclick="selectZone('${e.location||e.stage||''}')">
+        ${e.location||e.stage||'—'}
+      </span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">${e.name}</span>
+    </div>
+
+    <div class="problem-area">
+      <div class="eq-selected">
+        <span class="dot-status ${cls}"></span>
+        <div style="flex:1">
+          <div style="font-size:15px;font-weight:700">${e.name}</div>
+          <div style="font-size:12px;color:var(--text-dim)">${e.type||'—'} · ${e.location||'—'}</div>
+        </div>
+        <span class="badge ${cls}">${e.status||'Работает'}</span>
+      </div>
+
+      <div class="step-title">Опишите проблему</div>
+      <div class="step-sub" style="margin-bottom:14px">Что именно случилось? Выберите или напишите своими словами.</div>
+
+      <div class="problem-quick">
+        ${QUICK_PROBLEMS.map(p => `<button class="quick-btn" onclick="quickSelect('${p}')">${p}</button>`).join('')}
+      </div>
+
+      <textarea class="input" id="problemInput" rows="3"
+        placeholder="Например: станок гудит и вибрирует, остановился через 5 минут работы..."
+        style="margin-bottom:12px;font-size:14px"></textarea>
+
+      <button class="btn primary lg" style="width:100%" onclick="submitProblem()">
+        🔍 Запустить диагностику
+      </button>
+    </div>
+  `;
+}
+
+function quickSelect(text) {
+  const inp = document.getElementById('problemInput');
+  if (inp) {
+    inp.value = text === 'Другое' ? '' : text;
+    inp.focus();
+  }
+}
+
+// ── ШАГ 4: результат ──────────────────────────────────────
+async function submitProblem() {
+  const question = document.getElementById('problemInput')?.value.trim();
+  if (!question) {
+    ACAI.toast('Опишите проблему', 'warn');
+    document.getElementById('problemInput')?.focus();
+    return;
+  }
+
+  showLoading();
+
+  try {
+    const r = await ACAI.post('/diagnose', {
+      equipment_id: selectedEquipment.id,
+      question,
+    });
+
+    if (!r.success) {
+      ACAI.toast(r.message || 'Ошибка', 'danger');
+      renderStep3();
+      return;
+    }
+
+    currentCaseId = r.case_id;
+    awaitingFeedback = r.awaiting_feedback;
+    renderResult(question, r);
+
+  } catch(e) {
+    ACAI.toast(e.message, 'danger');
+    renderStep3();
+  }
+}
+
+function showLoading() {
+  document.getElementById('pageContent').innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
+      <div style="font-size:40px;animation:spin 1s linear infinite">⚙️</div>
+      <div style="font-size:16px;font-weight:600">ACAI анализирует проблему...</div>
+      <div style="font-size:13px;color:var(--text-dim)">Проверяем базу знаний и историю ${selectedEquipment?.name}</div>
+    </div>
+    <style>@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}</style>
+  `;
+}
+
+function renderResult(question, r) {
+  const e = selectedEquipment;
+// Механику важно видеть, откуда взялся совет: из руководства по его
+// станку или ИИ рассуждает по общим соображениям. Без этого он либо
+// верит всему подряд, либо не верит ничему. Сервер это уже считает —
+// страница просто не показывала.
+function explanationBlock(explanation){
+  if(!explanation) return '';
+
+  const confidence = explanation.confidence || '—';
+  const basis = explanation.basis || [];
+
+  const color = confidence === 'Высокая' ? 'var(--ok)'
+              : confidence === 'Средняя' ? 'var(--warn)'
+              : 'var(--text-dim)';
+
+  return `
+    <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${basis.length?'8px':'0'}">
+        <span style="font-size:11px;color:var(--text-dim)">НА ЧЁМ ОСНОВАНО</span>
+        <span style="font-size:11px;font-weight:700;color:${color}">${confidence} уверенность</span>
+      </div>
+      ${basis.map(item=>`
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6">• ${item}</div>
+      `).join('')}
+    </div>`;
+}
+
+  const actions = (r.actions||[]).map(a => `<li>${a}</li>`).join('');
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="breadcrumb">
+      <span class="bc-link" onclick="renderStep1()">Цехи</span>
+      <span class="bc-sep">›</span>
+      <span class="bc-cur">${e.name}</span>
+    </div>
+
+    <div class="result-box">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">ДИАГНОСТИКА</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">${e.name}</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+        Проблема: ${question}
+      </div>
+
+      <div style="font-size:14px;line-height:1.7;margin-bottom:12px">${r.recommendation||'—'}</div>
+
+      ${explanationBlock(r.explanation)}
+
+      ${actions ? `
+        <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">ДЕЙСТВИЯ:</div>
+        <ul class="action-list">${actions}</ul>
+      ` : ''}
+
+      ${r.escalated ? `
+        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:12px;margin-top:12px;color:var(--danger);font-size:13px">
+          ⚠️ Требуется специалист. Обратитесь к главному механику или инженеру.
+        </div>` : ''}
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Рекомендация помогла?</div>
+        <div class="feedback-row">
+          <button class="btn ok" style="flex:1" onclick="sendFeedback(true)">✓ Да, помогло</button>
+          <button class="btn secondary" style="flex:1" onclick="sendFeedback(false)">✕ Нет, попробовать ещё</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <button class="btn secondary" style="width:100%" onclick="renderStep1()">
+          ← Новая диагностика
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function sendFeedback(helped) {
+  if (helped) {
+    document.getElementById('pageContent').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;text-align:center">
+        <div style="font-size:60px">✅</div>
+        <div style="font-size:20px;font-weight:700">Отлично!</div>
+        <div style="font-size:14px;color:var(--text-dim)">Проблема решена. Обращение зафиксировано.</div>
+        <button class="btn primary" onclick="renderStep1()">← Вернуться к цехам</button>
+      </div>`;
+    return;
+  }
+
+  showLoading();
+  try {
+    const r = await ACAI.post(`/case/${currentCaseId}/feedback`, { helped: false });
+    currentCaseId = r.case_id || currentCaseId;
+    awaitingFeedback = r.awaiting_feedback;
+
+    const question = document.querySelector('.result-box')?.dataset?.question || '—';
+    renderResult(question, r);
+  } catch(e) {
+    ACAI.toast(e.message, 'danger');
+    renderStep1();
+  }
+}
+
+initLayout();
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Отчёты — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.report-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:20px; cursor:pointer;
+  transition:border-color .15s, transform .1s;
+  display:flex; flex-direction:column; gap:8px;
+}
+.report-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.rc-icon { font-size:28px; }
+.rc-title { font-size:15px; font-weight:700; }
+.rc-desc { font-size:12px; color:var(--text-dim); }
+.rc-btn { margin-top:auto; }
+
+.report-section { margin-bottom:20px; }
+.section-title { font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border); }
+
+.stat-row { display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface-2);border-radius:8px;margin-bottom:5px; }
+.stat-row:last-child { margin-bottom:0; }
+.stat-label { font-size:13px; }
+.stat-val { font-family:var(--mono);font-size:14px;font-weight:700; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Отчёты</div>
+        <div class="topbar-sub">Сводные данные для руководства</div>
+      </div>
+      <div class="topbar-right">
+        <select class="input" id="periodSelect" style="width:130px">
+          <option value="today">Сегодня</option>
+          <option value="week" selected>7 дней</option>
+          <option value="month">30 дней</option>
+        </select>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <!-- БЫСТРЫЕ ОТЧЁТЫ -->
+      <div class="report-section">
+        <div class="section-title">Быстрые отчёты</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px">
+          <div class="report-card" onclick="showReport('equipment')">
+            <div class="rc-icon">⚙️</div>
+            <div class="rc-title">Состояние оборудования</div>
+            <div class="rc-desc">Статусы, последние проверки, ТО</div>
+            <button class="btn secondary sm rc-btn">Сформировать</button>
+          </div>
+          <div class="report-card" onclick="showReport('cases')">
+            <div class="rc-icon">📋</div>
+            <div class="rc-title">Обращения за период</div>
+            <div class="rc-desc">Все инциденты, время решения</div>
+            <button class="btn secondary sm rc-btn">Сформировать</button>
+          </div>
+          <div class="report-card" onclick="showReport('downtime')">
+            <div class="rc-icon">⏸️</div>
+            <div class="rc-title">Простои</div>
+            <div class="rc-desc">По оборудованию и цехам</div>
+            <button class="btn secondary sm rc-btn">Сформировать</button>
+          </div>
+          <div class="report-card" onclick="showReport('sensors')">
+            <div class="rc-icon">📊</div>
+            <div class="rc-title">Показатели WebHMI</div>
+            <div class="rc-desc">Загрузка массоподготовки</div>
+            <button class="btn secondary sm rc-btn">Сформировать</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- СВОДНАЯ СТАТИСТИКА -->
+      <div id="reportContent">
+        <div class="report-section" id="summarySection">
+          <div class="section-title">Сводная статистика — <span id="periodLabel">7 дней</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="summaryGrids">
+            <div class="empty">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+const PERIOD_LABELS = {today:'Сегодня',week:'7 дней',month:'30 дней'};
+
+document.getElementById('periodSelect').addEventListener('change', () => {
+  document.getElementById('periodLabel').textContent = PERIOD_LABELS[document.getElementById('periodSelect').value];
+  loadSummary();
+});
+
+async function loadSummary() {
+  const period = document.getElementById('periodSelect').value;
+  const [summary, dash] = await Promise.allSettled([
+    ACAI.get(`/api/reports/summary?period=${period}`),
+    ACAI.get('/dashboard'),
+  ]);
+
+  const s = summary.value;
+  const d = dash.value;
+  if (!s?.success || !d) { document.getElementById('summaryGrids').innerHTML='<div class="empty">Ошибка загрузки</div>'; return; }
+
+  const eq = d.equipment||[];
+  const working = eq.filter(e=>e.status==='Работает').length;
+  const problems = eq.filter(e=>e.status!=='Работает').length;
+  const dt = s.downtime||{};
+  const perf = s.performance||{};
+
+  document.getElementById('summaryGrids').innerHTML = `
+    <div class="card">
+      <div class="card-head"><h2>Оборудование</h2></div>
+      <div class="card-body" style="padding:10px 14px">
+        <div class="stat-row"><span class="stat-label">Всего единиц</span><span class="stat-val">${eq.length}</span></div>
+        <div class="stat-row"><span class="stat-label">Работает</span><span class="stat-val" style="color:var(--ok)">${working}</span></div>
+        <div class="stat-row"><span class="stat-label">Проблемы</span><span class="stat-val" style="color:${problems>0?'var(--warn)':'var(--ok)'}">${problems}</span></div>
+        <div class="stat-row"><span class="stat-label">Открытых обращений</span><span class="stat-val" style="color:${d.open_cases>0?'var(--danger)':'var(--ok)'}">${d.open_cases||0}</span></div>
+        <div class="stat-row"><span class="stat-label">Закрыто за период</span><span class="stat-val">${d.closed_cases||0}</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Простои</h2></div>
+      <div class="card-body" style="padding:10px 14px">
+        <div class="stat-row"><span class="stat-label">Инцидентов</span><span class="stat-val">${dt.incidents_count||0}</span></div>
+        <div class="stat-row"><span class="stat-label">Суммарно</span><span class="stat-val" style="color:${(dt.total_minutes||0)>60?'var(--warn)':'var(--ok)'}">
+          ${dt.total_minutes>=60?Math.floor(dt.total_minutes/60)+'ч '+dt.total_minutes%60+'м':(dt.total_minutes||0)+'м'}
+        </span></div>
+        <div class="stat-row"><span class="stat-label">Среднее время реш.</span><span class="stat-val">${d.average_resolution_minutes ? d.average_resolution_minutes+'м' : '—'}</span></div>
+        <div class="stat-row"><span class="stat-label">Выполнение плана</span><span class="stat-val" style="color:${(perf.plan_completion_pct||0)>=90?'var(--ok)':'var(--warn)'}">
+          ${perf.plan_completion_pct != null ? perf.plan_completion_pct+'%' : '—'}
+        </span></div>
+      </div>
+    </div>
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-head"><h2>Топ проблем за период</h2></div>
+      <div class="card-body" style="padding:10px 14px">
+        ${(d.top_problems||[]).slice(0,6).map((p,i)=>`
+          <div class="stat-row">
+            <span class="stat-label">${i+1}. ${p.symptom}</span>
+            <span class="stat-val" style="color:var(--accent)">${p.count} раз</span>
+          </div>`).join('') || '<div class="empty">Нет данных</div>'}
+      </div>
+    </div>
+  `;
+}
+
+async function showReport(type) {
+  if (type==='equipment') {
+    const r = await ACAI.get('/api/equipment');
+    const eq = r.equipment||r||[];
+    const byLoc = {};
+    for(const e of eq){ const l=e.location||'—'; if(!byLoc[l]) byLoc[l]=[]; byLoc[l].push(e); }
+
+    ACAI.showModal(`
+      <h3>Состояние оборудования</h3>
+      <div style="max-height:400px;overflow-y:auto">
+        ${Object.entries(byLoc).map(([loc,items])=>`
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;padding:8px 0 4px">${loc}</div>
+          ${items.map(e=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:13px">${e.name}</span>
+            <span style="font-size:12px;font-weight:600;color:${e.status==='Работает'?'var(--ok)':e.status==='Внимание'?'var(--warn)':'var(--danger)'}">${e.status}</span>
+          </div>`).join('')}`).join('')}
+      </div>
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+        <button class="btn primary" onclick="printReport()">🖨 Печать</button>
+      </div>
+    `);
+  } else if (type==='sensors') {
+    const r = await ACAI.get('/api/sensors/latest');
+    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+    ACAI.showModal(`
+      <h3>Показатели WebHMI</h3>
+      <div>
+        ${Object.entries(r).map(([k,v])=>`
+          <div class="stat-row">
+            <span class="stat-label">${LABELS[k]||k}</span>
+            <span class="stat-val">${parseFloat(v.value).toFixed(1)}${k.includes('проц')?'%':k.includes('гц')?' Гц':''}</span>
+          </div>`).join('') || '<div class="empty">Нет данных — откройте вкладку WebHMI</div>'}
+      </div>
+      <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>
+    `);
+  } else {
+    ACAI.toast('Используйте страницу Аналитика для детальных отчётов', 'warn');
+  }
+}
+
+function printReport() {
+  window.print();
+}
+
+initLayout();
+document.getElementById('periodLabel').textContent = PERIOD_LABELS[document.getElementById('periodSelect').value];
+loadSummary();
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.acai.server</string>
+
+    <!-- Флаг reload намеренно не передаётся: перезагрузчик нужен
+         при разработке, в пилоте он только мешает (лишний процесс
+         и непредсказуемый рестарт при правке файла).
+         Хост 0.0.0.0 — чтобы заходить с телефонов в цеху,
+         а не только с самого Mac. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin/uvicorn</string>
+        <string>backend.api.main:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant</string>
+
+    <!-- Стартовать при входе в систему -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Поднимать обратно, если процесс упал.
+         Это главное, ради чего всё затевалось: без него первое
+         же падение = конец пилота, и никто об этом не узнает,
+         пока рабочий не придёт с вопросом "почему не грузится". -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Не долбиться в бесконечном цикле, если падает на старте -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/server.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/server.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+</dict>
+</plist>

@@ -1,0 +1,683 @@
+/* =========================================================
+   ЛАБОРАТОРИЯ
+   frontend/static/lab.css
+   ========================================================= */
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f5f7;
+    color: #0f172a;
+}
+
+.lab-app {
+    max-width: 1240px;
+    margin: 0 auto;
+    background: #fff;
+    min-height: 100vh;
+}
+
+.lab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid #e6eaf0;
+}
+
+.lab-title { font-size: 18px; font-weight: 700; }
+.lab-subtitle { font-size: 12px; color: #64748b; }
+
+.lab-header-right { display: flex; gap: 8px; }
+
+.lab-btn {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    background: #eef1f6;
+    color: #0f172a;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.lab-btn-primary {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background: #3b5bfd;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lab-btn-done {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background: #16a34a;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* ================= ВКЛАДКИ ================= */
+
+.lab-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 12px 20px 0;
+}
+
+.lab-tab {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px 10px 0 0;
+    background: #f1f4f9;
+    color: #475569;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.lab-tab-active {
+    background: #3b5bfd;
+    color: #fff;
+    font-weight: 600;
+}
+
+.lab-panel { padding: 20px; }
+.lab-hidden { display: none; }
+
+/* ================= ЖУРНАЛ ================= */
+
+.lab-new {
+    width: 100%;
+    padding: 14px;
+    margin-bottom: 16px;
+    border: none;
+    border-radius: 12px;
+    background: #3b5bfd;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Незавершённые — то, к чему надо вернуться. Стоят выше журнала
+   намеренно: это единственное, что требует действия. */
+.lab-pending { margin-bottom: 18px; }
+
+.lab-pending-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #92400e;
+    margin-bottom: 8px;
+}
+
+.lab-pending-row {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 12px 14px;
+    margin-bottom: 6px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.lab-pending-date { font-weight: 600; }
+.lab-pending-what { color: #92400e; font-size: 13px; }
+
+.lab-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.lab-table th {
+    text-align: left;
+    padding: 10px 8px;
+    border-bottom: 2px solid #e6eaf0;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.lab-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #f1f4f9;
+}
+
+.lab-table tbody tr { cursor: pointer; }
+.lab-table tbody tr:hover { background: #f8fafc; }
+
+.lab-row-pending { background: #fffbeb; }
+
+.lab-best { background: #f0fdf4; }
+
+/* ================= КАРТОЧКА ================= */
+
+.lab-entry-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.lab-back {
+    border: none;
+    background: none;
+    color: #3b5bfd;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.lab-entry-title { font-size: 17px; font-weight: 700; }
+
+.lab-done { color: #16a34a; font-size: 13px; font-weight: 600; }
+.lab-wait { color: #d97706; font-size: 13px; font-weight: 600; }
+
+/* Три блока по этапам: запись живёт несколько суток, и человек
+   должен видеть, какой этап он сейчас заполняет. */
+.lab-block {
+    border: 1px solid #e6eaf0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+}
+
+.lab-block-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 14px;
+}
+
+.lab-sub {
+    margin-top: 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.lab-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #3b5bfd;
+    color: #fff;
+    font-size: 13px;
+}
+
+.lab-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+}
+
+.lab-grid label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: #64748b;
+    gap: 5px;
+}
+
+.lab-grid input,
+.lab-grid select {
+    padding: 10px 12px;
+    border: 1px solid #dbe2ec;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.lab-grid input:focus,
+.lab-grid select:focus {
+    outline: none;
+    border-color: #3b5bfd;
+}
+
+.lab-grid input:disabled { background: #f8fafc; color: #64748b; }
+
+.lab-wide { grid-column: 1 / -1; }
+
+.lab-auto { color: #94a3b8; }
+
+.lab-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 0 24px;
+}
+
+.lab-save-result { font-size: 14px; }
+
+.lab-ok { color: #16a34a; }
+.lab-error { color: #dc2626; }
+
+/* ================= АНАЛИТИКА ================= */
+
+.lab-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.lab-stat {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+
+.lab-stat b { display: block; font-size: 24px; }
+.lab-stat span { font-size: 12px; color: #64748b; }
+
+.lab-card {
+    border: 1px solid #e6eaf0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+}
+
+.lab-card-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+
+.lab-note {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.lab-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.lab-bar-label { width: 56px; color: #64748b; }
+
+.lab-bar {
+    flex: 1;
+    height: 22px;
+    background: #f1f4f9;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.lab-bar-fill { height: 100%; background: #3b5bfd; }
+
+.lab-bar-value { width: 110px; text-align: right; color: #475569; }
+
+.lab-ask {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.lab-ask input {
+    flex: 1;
+    min-width: 130px;
+    padding: 11px 14px;
+    border: 1px solid #dbe2ec;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+.lab-suggestion { margin-top: 14px; }
+
+.lab-answer {
+    background: #eef2ff;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.lab-empty {
+    padding: 24px 12px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+/* ================= ТЕЛЕФОН ================= */
+
+@media (max-width: 700px) {
+
+    .lab-panel { padding: 14px; }
+
+    .lab-grid { grid-template-columns: 1fr; }
+
+    .lab-table { font-size: 12px; }
+    .lab-table th, .lab-table td { padding: 8px 4px; }
+
+    .lab-actions { flex-direction: column; align-items: stretch; }
+    .lab-btn-primary, .lab-btn-done { width: 100%; }
+}
+
+/* =========================================================
+   РЕЖИМ ПРОСМОТРА
+   Заблокированное поле должно ВЫГЛЯДЕТЬ заблокированным,
+   иначе человек тыкает в него и думает, что сайт сломался.
+   ========================================================= */
+
+.lab-readonly {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #1e40af;
+}
+
+.lab-view-only .lab-grid input,
+.lab-view-only .lab-grid select {
+    background: #f1f4f9;
+    color: #64748b;
+    border-color: #e6eaf0;
+    cursor: not-allowed;
+}
+
+.lab-view-only .lab-block { opacity: 0.9; }
+
+/* =========================================================
+   РАЗГОВОР С ACAI
+   ========================================================= */
+
+.lab-consult-hint {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: #eef2ff;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #3730a3;
+    line-height: 1.5;
+}
+
+.lab-ask-box {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+
+.lab-ask-box textarea {
+    flex: 1;
+    padding: 12px 14px;
+    border: 1px solid #dbe2ec;
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.lab-ask-box textarea:focus {
+    outline: none;
+    border-color: #3b5bfd;
+}
+
+.lab-qa {
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border: 1px solid #e6eaf0;
+    border-radius: 12px;
+}
+
+.lab-q {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.lab-a {
+    font-size: 15px;
+    line-height: 1.55;
+    color: #0f172a;
+    white-space: pre-wrap;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border-radius: 10px;
+}
+
+.lab-qa-meta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+/* =========================================================
+   СВОДКА СЛОВАМИ
+   ========================================================= */
+
+.lab-plain { margin-bottom: 16px; }
+
+.lab-plain-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    font-size: 15px;
+    line-height: 1.5;
+    background: #f8fafc;
+}
+
+.lab-plain-good { background: #f0fdf4; }
+.lab-plain-warning { background: #fffbeb; }
+
+.lab-plain-icon { flex-shrink: 0; }
+
+.lab-more {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid #dbe2ec;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    color: #475569;
+    cursor: pointer;
+}
+
+@media (max-width: 700px) {
+    .lab-ask-box { flex-direction: column; align-items: stretch; }
+    .lab-ask-box button { width: 100%; }
+}
+
+/* =========================================================
+   ПОЛНЫЙ ОТЧЁТ
+   Тридцать колонок в экран не помещаются и не должны:
+   таблица прокручивается вбок, как в Excel.
+   ========================================================= */
+
+.lab-report-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 10px;
+}
+
+.lab-report-scroll {
+    overflow-x: auto;
+    border: 1px solid #e6eaf0;
+    border-radius: 8px;
+}
+
+.lab-report-table {
+    font-size: 12px;
+    white-space: nowrap;
+    min-width: 100%;
+}
+
+.lab-report-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 1;
+}
+
+.lab-report-table td { padding: 8px 10px; }
+
+/* =========================================================
+   ВИДЫ ПРОДУКЦИИ И ГРУППЫ ЖУРНАЛА
+   ========================================================= */
+
+.lab-product-row {
+    display: flex;
+    gap: 8px;
+}
+
+.lab-product-row select { flex: 1; }
+
+.lab-add-product {
+    width: 42px;
+    border: 1px solid #dbe2ec;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 20px;
+    color: #3b5bfd;
+    cursor: pointer;
+}
+
+.lab-group {
+    border: 1px solid #e6eaf0;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.lab-group-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 16px;
+    border: none;
+    background: #f8fafc;
+    font-size: 15px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.lab-group-arrow { color: #64748b; font-size: 12px; }
+
+.lab-group-name { font-weight: 700; }
+
+.lab-group-meta {
+    margin-left: auto;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.lab-group-body { padding: 4px 12px 12px; }
+
+.lab-del {
+    border: none;
+    background: none;
+    color: #dc2626;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.lab-del:hover { background: #fef2f2; border-radius: 6px; }
+
+/* =========================================================
+   ШАПКА ЛАБОРАТОРИИ НА ТЕЛЕФОНЕ
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+    .lab-header {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .lab-header > div:first-child { min-width: 0; flex: 1; }
+
+    .lab-title {
+        font-size: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .lab-subtitle {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .lab-header-right { gap: 6px; flex-shrink: 0; }
+
+    .lab-header-right .lab-btn {
+        font-size: 0;
+        padding: 0;
+        width: 38px;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+    }
+
+    .lab-header-right .lab-btn::after {
+        font-size: 17px;
+        line-height: 1;
+    }
+
+    .lab-header-right a::after { content: "▤"; }
+
+    .lab-header-right button::after { content: "⏻"; }
+
+    /* Выход красным — как и везде */
+    .lab-header-right button {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    /* Вкладки во всю ширину, чтобы попадать пальцем */
+    .lab-tabs { padding: 10px 12px 0; }
+
+    .lab-tab {
+        flex: 1;
+        padding: 12px 4px;
+        font-size: 13px;
+    }
+
+}
+
+/* ===== Общая оболочка ACAI для лаборатории ===== */
+.lab-app.main-content {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    background: #fff;
+}
+
+@media (max-width: 650px) {
+    .lab-app.main-content {
+        width: 100%;
+    }
+}

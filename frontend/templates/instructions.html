@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Инструкции — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.knowledge-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+.k-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:16px; cursor:pointer;
+  transition:border-color .15s, transform .1s;
+  display:flex; flex-direction:column; gap:8px;
+}
+.k-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.k-icon { font-size:28px; }
+.k-title { font-size:14px; font-weight:600; }
+.k-machine { font-size:12px; color:var(--text-dim); }
+.k-desc { font-size:12px; color:var(--text-dim); flex:1; }
+.k-footer { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
+.k-steps { font-size:11px; color:var(--text-dim); }
+
+.section-head {
+  font-size:11px; font-weight:700; color:var(--text-dim);
+  text-transform:uppercase; letter-spacing:.06em;
+  margin:20px 0 10px; padding-bottom:6px;
+  border-bottom:1px solid var(--border);
+}
+
+/* детали инструкции */
+.step-item {
+  display:flex; gap:14px; padding:12px 0;
+  border-bottom:1px solid var(--border);
+}
+.step-item:last-child { border-bottom:none; }
+.step-num {
+  width:28px; height:28px; border-radius:50%;
+  background:var(--accent); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700; flex-shrink:0;
+}
+.step-body { flex:1; }
+.step-title { font-size:13px; font-weight:600; margin-bottom:3px; }
+.step-desc { font-size:12px; color:var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Инструкции</div>
+        <div class="topbar-sub">Пошаговые руководства по оборудованию</div>
+      </div>
+      <div class="topbar-right">
+        <input class="input" id="searchInst" placeholder="🔍 Поиск..." style="width:200px">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page" id="pageContent">
+      <div class="empty">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="_overlay">
+  <div class="modal" id="_modal" style="width:600px;max-width:95vw"></div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allKnowledge = [];
+
+async function load() {
+  const r = await ACAI.get('/api/knowledge');
+  const grouped = r.grouped || {};
+  allKnowledge = grouped;
+  render(grouped);
+}
+
+function render(grouped) {
+  const q = document.getElementById('searchInst')?.value.toLowerCase() || '';
+  const page = document.getElementById('pageContent');
+
+  const sections = Object.entries(grouped).filter(([machine, items]) => {
+    if (!q) return true;
+    return machine.toLowerCase().includes(q) ||
+      items.some(i => (i.symptom||'').toLowerCase().includes(q) || (i.resolution||'').toLowerCase().includes(q));
+  });
+
+  if (!sections.length) {
+    page.innerHTML = '<div class="empty">Ничего не найдено</div>';
+    return;
+  }
+
+  page.innerHTML = sections.map(([machine, items]) => {
+    const filtered = q ? items.filter(i =>
+      (i.symptom||'').toLowerCase().includes(q) ||
+      (i.resolution||'').toLowerCase().includes(q)
+    ) : items;
+
+    if (!filtered.length) return '';
+
+    return `
+      <div class="section-head">🔧 ${machine}</div>
+      <div class="knowledge-grid">
+        ${filtered.map(item => `
+          <div class="k-card" onclick="openInstruction(${JSON.stringify(item).replace(/"/g,'&quot;')})">
+            <div class="k-icon">📋</div>
+            <div class="k-title">${item.symptom||'Инструкция'}</div>
+            <div class="k-machine">${machine}</div>
+            <div class="k-desc">${(item.resolution||'').slice(0,80)}${(item.resolution||'').length>80?'...':''}</div>
+            <div class="k-footer">
+              <span class="k-steps">${item.steps?.length||0} шагов</span>
+              <span class="badge accent" style="font-size:10px">Открыть →</span>
+            </div>
+          </div>`).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function openInstruction(item) {
+  if (typeof item === 'string') item = JSON.parse(item);
+  const steps = item.steps || [];
+
+  const stepsHtml = steps.length
+    ? steps.map((s,i) => `
+        <div class="step-item">
+          <div class="step-num">${i+1}</div>
+          <div class="step-body">
+            <div class="step-title">${s.title||s.action||`Шаг ${i+1}`}</div>
+            ${s.description||s.details ? `<div class="step-desc">${s.description||s.details}</div>` : ''}
+          </div>
+        </div>`).join('')
+    : `<div class="empty">Пошаговых действий нет</div>`;
+
+  ACAI.showModal(`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="font-size:24px">📋</span>
+      <div>
+        <h3 style="margin:0">${item.symptom||'Инструкция'}</h3>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${item.machine||''}</div>
+      </div>
+    </div>
+
+    ${item.resolution ? `
+      <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6">
+        ${item.resolution}
+      </div>` : ''}
+
+    ${steps.length ? `
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:10px">ПОШАГОВЫЕ ДЕЙСТВИЯ</div>
+      ${stepsHtml}` : ''}
+
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+    </div>
+  `);
+}
+
+document.getElementById('searchInst').addEventListener('input', () => render(allKnowledge));
+
+initLayout();
+load();
+</script>
+</body>
+</html>

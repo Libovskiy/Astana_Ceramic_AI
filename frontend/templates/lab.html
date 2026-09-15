@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Лаборатория — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.tab-bar{display:flex;gap:2px;background:var(--surface-2);border-radius:10px;padding:4px;margin-bottom:20px;}
+.tab-btn{flex:1;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-dim);transition:all .15s;}
+.tab-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.2);}
+.journal-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
+.journal-card:hover{border-color:var(--accent);}
+.journal-date{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.journal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
+.journal-field{background:var(--surface-2);border-radius:8px;padding:8px 10px;}
+.journal-field-label{font-size:10px;color:var(--text-dim);margin-bottom:2px;}
+.journal-field-val{font-size:14px;font-weight:700;font-family:var(--mono);}
+.form-section{background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:12px;}
+.form-section-title{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Лаборатория</div>
+        <div class="topbar-sub">Журнал анализов и контроль качества</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn primary" id="addEntryBtn" style="display:none" onclick="openNewEntry()">+ Запись</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="metrics" id="labMetrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('journal',this)">📋 Журнал</button>
+        <button class="tab-btn" onclick="switchTab('analytics',this)">📊 Аналитика</button>
+      </div>
+
+      <div id="tab-journal">
+        <div id="journalList"><div class="empty">Загрузка...</div></div>
+      </div>
+
+      <div id="tab-analytics" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" id="analyticsContent">
+          <div class="empty">Загрузка...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:640px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let entries=[];let canWrite=false;let currentTab='journal';
+
+function switchTab(tab,btn){
+  currentTab=tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-journal').style.display=tab==='journal'?'':'none';
+  document.getElementById('tab-analytics').style.display=tab==='analytics'?'':'none';
+  if(tab==='analytics')loadAnalytics();
+}
+
+async function load(){
+  const r=await ACAI.get('/api/lab/entries?limit=30');
+  entries=r.entries||[];
+  canWrite=r.can_write||false;
+  if(canWrite)document.getElementById('addEntryBtn').style.display='block';
+  renderMetrics();
+  renderJournal();
+}
+
+function renderMetrics(){
+  const total=entries.length;
+  const last=entries[0];
+  const lastDate=last?.log_date||'—';
+  const lastStrength=last?.strength_value||'—';
+  const pending=entries.filter(e=>!e.fired_weight&&!e.strength_value).length;
+  document.getElementById('labMetrics').innerHTML=`
+    <div class="metric accent"><div class="metric-label">Записей</div><div class="metric-value accent">${total}</div></div>
+    <div class="metric accent"><div class="metric-label">Последняя</div><div class="metric-value accent" style="font-size:16px">${lastDate}</div></div>
+    <div class="metric ${lastStrength!=='—'?'ok':''}"><div class="metric-label">Прочность (посл.)</div><div class="metric-value">${lastStrength!=='—'?lastStrength+' кг/см²':'—'}</div></div>
+    <div class="metric ${pending>0?'warn':'ok'}"><div class="metric-label">Ожидают данных</div><div class="metric-value ${pending>0?'warn':'ok'}">${pending}</div><div class="metric-sub">без результата</div></div>`;
+}
+
+function val(v,unit=''){return v!=null&&v!==''?`${v}${unit}`:'—';}
+
+function renderJournal(){
+  if(!entries.length){document.getElementById('journalList').innerHTML='<div class="empty">Записей нет — нажмите "+ Запись"</div>';return;}
+  document.getElementById('journalList').innerHTML=entries.map(e=>`
+    <div class="journal-card" onclick="openEntry(${e.id})">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <span class="journal-date">📅 ${e.log_date||'—'}</span>
+          ${e.brigade?`<span style="font-size:11px;color:var(--text-dim);margin-left:8px">Бригада: ${e.brigade}</span>`:''}
+          ${e.product_type?`<span class="badge neutral" style="font-size:10px;margin-left:8px">${e.product_type}</span>`:''}
+        </div>
+        <div style="display:flex;gap:6px">
+          ${e.strength_value?`<span class="badge ok">✓ Прочность: ${e.strength_value} кг/см²</span>`:'<span class="badge warn">Ожидает обжига</span>'}
+          ${canWrite?`<button onclick="editEntry(event,${e.id})" class="btn secondary sm">Редактировать</button>`:''}
+        </div>
+      </div>
+      <div class="journal-grid">
+        ${e.moisture_optima!=null?`<div class="journal-field"><div class="journal-field-label">Влажность Optima</div><div class="journal-field-val">${val(e.moisture_optima,'%')}</div></div>`:''}
+        ${e.moisture_smk126!=null?`<div class="journal-field"><div class="journal-field-label">Влажность СМК 126</div><div class="journal-field-val">${val(e.moisture_smk126,'%')}</div></div>`:''}
+        ${e.kiln_temperature!=null?`<div class="journal-field"><div class="journal-field-label">Температура печи</div><div class="journal-field-val">${val(e.kiln_temperature,'°C')}</div></div>`:''}
+        ${e.clay_percent!=null?`<div class="journal-field"><div class="journal-field-label">Глина</div><div class="journal-field-val">${val(e.clay_percent,'%')}</div></div>`:''}
+        ${e.coal_moisture_delivery!=null?`<div class="journal-field"><div class="journal-field-label">Влажность угля</div><div class="journal-field-val">${val(e.coal_moisture_delivery,'%')}</div></div>`:''}
+        ${e.raw_weight!=null?`<div class="journal-field"><div class="journal-field-label">Вес сырца</div><div class="journal-field-val">${val(e.raw_weight,'г')}</div></div>`:''}
+        ${e.fired_weight!=null?`<div class="journal-field"><div class="journal-field-label">Вес обожжённого</div><div class="journal-field-val">${val(e.fired_weight,'г')}</div></div>`:''}
+        ${e.water_absorption!=null?`<div class="journal-field"><div class="journal-field-label">Водопоглощение</div><div class="journal-field-val">${val(e.water_absorption,'%')}</div></div>`:''}
+        ${e.feed_clay_hz!=null?`<div class="journal-field"><div class="journal-field-label">Питатель глины (Гц)</div><div class="journal-field-val">${val(e.feed_clay_hz,' Гц')}</div></div>`:''}
+        ${e.feed_sand_hz!=null?`<div class="journal-field"><div class="journal-field-label">Питатель песка (Гц)</div><div class="journal-field-val">${val(e.feed_sand_hz,' Гц')}</div></div>`:''}
+      </div>
+      ${e.note?`<div style="font-size:12px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">📝 ${e.note}</div>`:''}
+    </div>`).join('');
+}
+
+function openNewEntry(){
+  showEntryForm(null);
+}
+
+function editEntry(ev,id){
+  ev.stopPropagation();
+  const e=entries.find(x=>x.id===id);
+  showEntryForm(e);
+}
+
+function openEntry(id){
+  const e=entries.find(x=>x.id===id);
+  if(!e)return;
+  if(canWrite)showEntryForm(e);
+}
+
+function showEntryForm(e){
+  const isNew=!e;
+  const today=new Date().toISOString().slice(0,10);
+  ACAI.showModal(`
+    <h3>${isNew?'Новая запись':'Редактировать запись'}</h3>
+
+    <div class="form-section">
+      <div class="form-section-title">Общее</div>
+      <div class="form-grid">
+        <div class="field"><label>Дата *</label><input class="input" id="f-date" type="date" value="${e?.log_date||today}"></div>
+        <div class="field"><label>Бригада</label><input class="input" id="f-brigade" value="${e?.brigade||''}"></div>
+        <div class="field"><label>Тип продукта</label><input class="input" id="f-product" value="${e?.product_type||''}"></div>
+        <div class="field"><label>Производство (шт)</label><input class="input" id="f-production" type="number" value="${e?.product_production||''}"></div>
+        <div class="field"><label>Вагонеток/день</label><input class="input" id="f-wagons" type="number" value="${e?.wagons_per_day||''}"></div>
+        <div class="field"><label>Температура печи (°C)</label><input class="input" id="f-kiln-temp" type="number" value="${e?.kiln_temperature||''}"></div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Состав шихты</div>
+      <div class="form-grid">
+        <div class="field"><label>Глина (%)</label><input class="input" id="f-clay" type="number" step="0.1" value="${e?.clay_percent||''}"></div>
+        <div class="field"><label>Песок (%)</label><input class="input" id="f-sand" type="number" step="0.1" value="${e?.sand_percent||''}"></div>
+        <div class="field"><label>Питатель глины (Гц)</label><input class="input" id="f-clay-hz" type="number" step="0.1" value="${e?.feed_clay_hz||''}"></div>
+        <div class="field"><label>Питатель песка (Гц)</label><input class="input" id="f-sand-hz" type="number" step="0.1" value="${e?.feed_sand_hz||''}"></div>
+        <div class="field"><label>Зазор СМК 102 (мм)</label><input class="input" id="f-gap-smk" type="number" step="0.1" value="${e?.gap_smk102||''}"></div>
+        <div class="field"><label>Зазор УСМ 40 (мм)</label><input class="input" id="f-gap-usm" type="number" step="0.1" value="${e?.gap_usm40||''}"></div>
+        <div class="field"><label>Зазор Optima (мм)</label><input class="input" id="f-gap-opt" type="number" step="0.1" value="${e?.gap_optima||''}"></div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Влажность</div>
+      <div class="form-grid">
+        <div class="field"><label>Влажность Optima (%)</label><input class="input" id="f-moist-opt" type="number" step="0.1" value="${e?.moisture_optima||''}"></div>
+        <div class="field"><label>Влажность СМК 126 (%)</label><input class="input" id="f-moist-smk" type="number" step="0.1" value="${e?.moisture_smk126||''}"></div>
+        <div class="field"><label>Влажность угля (привоз, %)</label><input class="input" id="f-coal-del" type="number" step="0.1" value="${e?.coal_moisture_delivery||''}"></div>
+        <div class="field"><label>Влажность угля (мельница, %)</label><input class="input" id="f-coal-mill" type="number" step="0.1" value="${e?.coal_moisture_mill||''}"></div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Сырец и обжиг</div>
+      <div class="form-grid">
+        <div class="field"><label>Геометрия сырца</label><input class="input" id="f-raw-geo" value="${e?.raw_geometry||''}"></div>
+        <div class="field"><label>Вес сырца (г)</label><input class="input" id="f-raw-w" type="number" step="0.1" value="${e?.raw_weight||''}"></div>
+        <div class="field"><label>Вес сухого 1 (г)</label><input class="input" id="f-dry1" type="number" step="0.1" value="${e?.dried_weight_1||''}"></div>
+        <div class="field"><label>Влажность сухого 1 (%)</label><input class="input" id="f-dry1-m" type="number" step="0.1" value="${e?.dried_moisture_1||''}"></div>
+        <div class="field"><label>Вес обожжённого (г)</label><input class="input" id="f-fired-w" type="number" step="0.1" value="${e?.fired_weight||''}"></div>
+        <div class="field"><label>Геометрия обожжённого</label><input class="input" id="f-fired-geo" value="${e?.fired_geometry||''}"></div>
+        <div class="field"><label>Пустотность (%)</label><input class="input" id="f-void" type="number" step="0.1" value="${e?.voidness||''}"></div>
+        <div class="field"><label>Водопоглощение (%)</label><input class="input" id="f-water" type="number" step="0.1" value="${e?.water_absorption||''}"></div>
+        <div class="field"><label>Прочность д/ш (кг/см²)</label><input class="input" id="f-str-d" value="${e?.strength_d||''}"></div>
+        <div class="field"><label>Прочность н/и (кг/см²)</label><input class="input" id="f-str-n" value="${e?.strength_n||''}"></div>
+      </div>
+    </div>
+
+    <div class="field"><label>Примечание</label><textarea class="input" id="f-note" rows="2">${e?.note||''}</textarea></div>
+
+    <div id="f-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitEntry(${e?.id||'null'})">${isNew?'Создать':'Сохранить'}</button>
+    </div>
+  `);
+}
+
+function gv(id){const el=document.getElementById(id);if(!el)return null;const v=el.value.trim();return v===''?null:isNaN(v)?v:parseFloat(v);}
+
+async function submitEntry(id){
+  const date=document.getElementById('f-date')?.value;
+  if(!date){document.getElementById('f-err').textContent='Укажите дату';return;}
+  const data={
+    log_date:date, brigade:gv('f-brigade'), product_type:gv('f-product'),
+    product_production:gv('f-production'), wagons_per_day:gv('f-wagons'),
+    kiln_temperature:gv('f-kiln-temp'), clay_percent:gv('f-clay'),
+    sand_percent:gv('f-sand'), feed_clay_hz:gv('f-clay-hz'),
+    feed_sand_hz:gv('f-sand-hz'), gap_smk102:gv('f-gap-smk'),
+    gap_usm40:gv('f-gap-usm'), gap_optima:gv('f-gap-opt'),
+    moisture_optima:gv('f-moist-opt'), moisture_smk126:gv('f-moist-smk'),
+    coal_moisture_delivery:gv('f-coal-del'), coal_moisture_mill:gv('f-coal-mill'),
+    raw_geometry:gv('f-raw-geo'), raw_weight:gv('f-raw-w'),
+    dried_weight_1:gv('f-dry1'), dried_moisture_1:gv('f-dry1-m'),
+    fired_weight:gv('f-fired-w'), fired_geometry:gv('f-fired-geo'),
+    voidness:gv('f-void'), water_absorption:gv('f-water'),
+    strength_d:gv('f-str-d'), strength_n:gv('f-str-n'),
+    note:gv('f-note'),
+  };
+  // убираем null
+  Object.keys(data).forEach(k=>{if(data[k]===null)delete data[k];});
+  try{
+    if(id){
+      await fetch(`/api/lab/entries/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({data})});
+    }else{
+      await ACAI.post('/api/lab/entries',{data});
+    }
+    ACAI.toast('Сохранено ✓','ok');ACAI.closeModal();await load();
+  }catch(e){document.getElementById('f-err').textContent=e.message;}
+}
+
+async function loadAnalytics(){
+  try{
+    const r=await ACAI.get('/api/lab/analysis');
+    const d=r.summary||r;
+    document.getElementById('analyticsContent').innerHTML=`
+      <div class="card">
+        <div class="card-head"><h2>Средние показатели</h2></div>
+        <div class="card-body" style="padding:10px 14px">
+          ${renderAnalyticRow('Прочность',d.avg_strength,'кг/см²')}
+          ${renderAnalyticRow('Водопоглощение',d.avg_water_absorption,'%')}
+          ${renderAnalyticRow('Влажность Optima',d.avg_moisture_optima,'%')}
+          ${renderAnalyticRow('Влажность угля (привоз)',d.avg_coal_moisture_delivery,'%')}
+          ${renderAnalyticRow('Температура печи',d.avg_kiln_temperature,'°C')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Лучший состав</h2></div>
+        <div class="card-body" style="padding:10px 14px" id="bestMix">
+          <div class="empty">Загрузка...</div>
+        </div>
+      </div>`;
+    // загружаем лучший состав
+    const bm=await ACAI.get('/api/lab/analysis');
+    const best=bm.best_mixes||[];
+    document.getElementById('bestMix').innerHTML=best.length
+      ?best.slice(0,3).map(m=>`<div style="padding:8px 10px;background:var(--surface-2);border-radius:8px;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600">Глина ${m.clay_percent}% / Песок ${m.sand_percent}%</div>
+          <div style="font-size:11px;color:var(--text-dim)">Прочность: ${m.strength_value} кг/см² · ${m.count} замеров</div>
+        </div>`).join('')
+      :'<div class="empty">Недостаточно данных</div>';
+  }catch(e){document.getElementById('analyticsContent').innerHTML=`<div class="empty">${e.message}</div>`;}
+}
+
+function renderAnalyticRow(label,val,unit){
+  if(val==null)return`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">${label}</span><span style="color:var(--text-dim)">—</span></div>`;
+  return`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">${label}</span><span style="font-family:var(--mono);font-weight:700">${parseFloat(val).toFixed(1)} ${unit}</span></div>`;
+}
+
+async function init(){
+  const ctx=await initLayout();
+  await load();
+}
+init();
+</script>
+</body>
+</html>

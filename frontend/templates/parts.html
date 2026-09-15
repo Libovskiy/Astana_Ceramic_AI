@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Запчасти — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+.part-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;transition:border-color .15s;}
+.part-card:hover{border-color:var(--accent);}
+.part-card.low{border-left:3px solid var(--danger);}
+.part-card.ok{border-left:3px solid var(--ok);}
+.part-name{font-size:14px;font-weight:600;margin-bottom:4px;}
+.part-eq{font-size:11px;color:var(--text-dim);margin-bottom:8px;}
+.part-qty{font-family:var(--mono);font-size:20px;font-weight:700;}
+.filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filter-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;}
+.filter-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Склад запчастей</div>
+        <div class="topbar-sub">Наличие и учёт запчастей</div>
+      </div>
+      <div class="topbar-right">
+        <input class="input" id="searchParts" placeholder="🔍 Поиск..." style="width:200px" oninput="renderParts()">
+        <button class="btn primary" onclick="openAddPart()">+ Запчасть</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="metrics" id="partsMetrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <div class="filters-row">
+        <button class="filter-chip active" data-f="">Все</button>
+        <button class="filter-chip" data-f="low" style="color:var(--danger)">⚠ Заканчиваются</button>
+        <button class="filter-chip" data-f="mechanical">Механика</button>
+        <button class="filter-chip" data-f="electrical">Электрика</button>
+        <button class="filter-chip" data-f="consumable">Расходники</button>
+      </div>
+
+      <div class="parts-grid" id="partsList"><div class="empty">Загрузка...</div></div>
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allParts=[];let activeFilter='';
+
+const CAT_LABELS={mechanical:'Механика',electrical:'Электрика',consumable:'Расходники',other:'Прочее'};
+
+async function load(){
+  try{
+    const r=await ACAI.get('/api/parts');
+    allParts=r.parts||[];
+  }catch{allParts=[];}
+  renderMetrics();renderParts();
+}
+
+function renderMetrics(){
+  const total=allParts.length;
+  const low=allParts.filter(p=>p.quantity<=p.min_quantity).length;
+  const zero=allParts.filter(p=>p.quantity===0).length;
+  document.getElementById('partsMetrics').innerHTML=`
+    <div class="metric accent"><div class="metric-label">Позиций</div><div class="metric-value accent">${total}</div></div>
+    <div class="metric ${low>0?'danger':'ok'}"><div class="metric-label">Заканчиваются</div><div class="metric-value ${low>0?'danger':'ok'}">${low}</div><div class="metric-sub">≤ минимума</div></div>
+    <div class="metric ${zero>0?'danger':'ok'}"><div class="metric-label">Отсутствуют</div><div class="metric-value ${zero>0?'danger':'ok'}">${zero}</div></div>
+    <div class="metric ok"><div class="metric-label">В наличии</div><div class="metric-value ok">${total-zero}</div></div>`;
+}
+
+function renderParts(){
+  const q=(document.getElementById('searchParts')?.value||'').toLowerCase();
+  let items=allParts;
+  if(activeFilter==='low')items=items.filter(p=>p.quantity<=p.min_quantity);
+  else if(activeFilter)items=items.filter(p=>p.category===activeFilter);
+  if(q)items=items.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.equipment_name||'').toLowerCase().includes(q));
+  if(!items.length){document.getElementById('partsList').innerHTML='<div class="empty">Ничего не найдено</div>';return;}
+  document.getElementById('partsList').innerHTML=items.map(p=>{
+    const isLow=p.quantity<=p.min_quantity;
+    const color=p.quantity===0?'var(--danger)':isLow?'var(--warn)':'var(--ok)';
+    return`<div class="part-card ${isLow?'low':'ok'}">
+      <div class="part-name">${p.name}</div>
+      <div class="part-eq">${p.equipment_name||'Общее'} · ${CAT_LABELS[p.category]||p.category||'—'}</div>
+      ${p.part_number?`<div style="font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-bottom:6px">${p.part_number}</div>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div>
+          <div style="font-size:10px;color:var(--text-dim)">В наличии</div>
+          <div class="part-qty" style="color:${color}">${p.quantity} ${p.unit||'шт'}</div>
+          ${p.min_quantity?`<div style="font-size:10px;color:var(--text-dim)">Мин: ${p.min_quantity}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="btn ok sm" onclick="changeQty(${p.id},1)">+ Приход</button>
+          <button class="btn danger sm" onclick="changeQty(${p.id},-1)">− Расход</button>
+        </div>
+      </div>
+      ${p.last_used_at?`<div style="font-size:10px;color:var(--text-dim);margin-top:6px">Последн. использ: ${p.last_used_at.slice(0,10)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function changeQty(id,direction){
+  const part=allParts.find(p=>p.id===id);
+  if(!part)return;
+  const label=direction>0?'Приход (сколько поступило?)':'Расход (сколько использовано?)';
+  const qty=prompt(label,'1');
+  if(!qty||isNaN(qty)||parseFloat(qty)<=0)return;
+  try{
+    await ACAI.post(`/api/parts/${id}/move`,{quantity:parseFloat(qty)*direction});
+    ACAI.toast(direction>0?'Приход записан ✓':'Расход записан ✓','ok');
+    await load();
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+function openAddPart(){
+  ACAI.get('/api/equipment').then(r=>{
+    const eq=r.equipment||r||[];
+    ACAI.showModal(`
+      <h3>Добавить запчасть</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="grid-column:1/-1"><label>Название *</label><input class="input" id="np-name" placeholder="Например: Подшипник 6205"></div>
+        <div class="field"><label>Артикул / номер</label><input class="input" id="np-num" placeholder="6205-2RS"></div>
+        <div class="field"><label>Категория</label>
+          <select class="input" id="np-cat">
+            <option value="mechanical">Механика</option>
+            <option value="electrical">Электрика</option>
+            <option value="consumable">Расходники</option>
+            <option value="other">Прочее</option>
+          </select>
+        </div>
+        <div class="field"><label>Оборудование</label>
+          <select class="input" id="np-eq">
+            <option value="">— Общее —</option>
+            ${eq.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Единица</label><input class="input" id="np-unit" value="шт" placeholder="шт, м, кг..."></div>
+        <div class="field"><label>Количество</label><input class="input" id="np-qty" type="number" value="0" min="0"></div>
+        <div class="field"><label>Минимальный остаток</label><input class="input" id="np-min" type="number" value="1" min="0"></div>
+      </div>
+      <div id="np-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+        <button class="btn primary" onclick="submitAddPart()">Добавить</button>
+      </div>
+    `);
+  });
+}
+
+async function submitAddPart(){
+  const name=document.getElementById('np-name')?.value.trim();
+  const errEl=document.getElementById('np-err');
+  if(!name){errEl.textContent='Введите название';return;}
+  try{
+    await ACAI.post('/api/parts',{
+      name,
+      part_number:document.getElementById('np-num')?.value.trim()||null,
+      category:document.getElementById('np-cat')?.value||'other',
+      equipment_id:parseInt(document.getElementById('np-eq')?.value)||null,
+      unit:document.getElementById('np-unit')?.value||'шт',
+      quantity:parseFloat(document.getElementById('np-qty')?.value)||0,
+      min_quantity:parseFloat(document.getElementById('np-min')?.value)||1,
+    });
+    ACAI.toast('Запчасть добавлена ✓','ok');ACAI.closeModal();await load();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+document.querySelectorAll('.filter-chip').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-chip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');activeFilter=btn.dataset.f;renderParts();
+  });
+});
+
+initLayout();load();
+</script>
+</body>
+</html>

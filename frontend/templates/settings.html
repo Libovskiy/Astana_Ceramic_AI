@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Настройки — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
+.u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
+.u-name{font-size:13px;font-weight:600;}
+.u-login{font-size:11px;color:var(--text-dim);font-family:var(--mono);}
+.online-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Настройки</div>
+        <div class="topbar-sub">Пользователи и система</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn primary" onclick="openAddUser()">+ Пользователь</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head">
+          <h2>Пользователи</h2>
+          <span id="userCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">—</span>
+        </div>
+        <div class="card-body" style="padding:10px 14px">
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <input class="input" id="userSearch" placeholder="🔍 Поиск..." style="width:200px" oninput="renderUsers()">
+          </div>
+          <div id="userList"><div class="empty">Загрузка...</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><h2>Смена пароля</h2></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:500px">
+            <div class="field" style="grid-column:1/-1"><label>Текущий пароль</label><input class="input" id="cp-current" type="password"></div>
+            <div class="field"><label>Новый пароль</label><input class="input" id="cp-new" type="password"></div>
+            <div class="field"><label>Повтор</label><input class="input" id="cp-new2" type="password"></div>
+          </div>
+          <div id="cp-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+          <button class="btn primary" onclick="changePassword()">Сменить пароль</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Система</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
+            <div><div style="font-size:13px;font-weight:500">Версия ACAI</div><div style="font-size:11px;color:var(--text-dim)">FastAPI + SQLite</div></div>
+            <span class="badge ok">v2</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
+            <div><div style="font-size:13px;font-weight:500">WebHMI коллектор</div><div style="font-size:11px;color:var(--text-dim)" id="collectorStatus">Проверка...</div></div>
+            <span class="badge" id="collectorBadge">—</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
+            <div><div style="font-size:13px;font-weight:500">Мобильная версия</div><div style="font-size:11px;color:var(--text-dim)">Для рабочих в цеху</div></div>
+            <a href="/mobile" class="btn secondary sm">Открыть →</a>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
+            <div><div style="font-size:13px;font-weight:500">GitHub репозиторий</div><div style="font-size:11px;color:var(--text-dim)">Исходный код проекта</div></div>
+            <a href="https://github.com/Libovskiy/Astana_Ceramic_AI" target="_blank" class="btn secondary sm">GitHub →</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
+const ROLE_ORDER={admin:0,director:1,chief_engineer:2,engineer:3,shift_supervisor:4,analyst:5,technologist:6,lab_technician:7,chief_mechanic:8,chief_electrician:9,mechanic:10,electrician:11,worker:12};
+let allUsers=[];let validRoles=[];
+
+function avatarColor(n){const c=['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#ef4444'];let h=0;for(const ch of n||'')h=(h*31+ch.charCodeAt(0))&0xffffffff;return c[Math.abs(h)%c.length];}
+function initials(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();}
+
+async function load(){
+  const r=await ACAI.get('/api/settings/users');
+  validRoles=r.valid_roles||[];
+  allUsers=r.users||[];
+  allUsers.sort((a,b)=>(ROLE_ORDER[a.role]??99)-(ROLE_ORDER[b.role]??99));
+  document.getElementById('userCount').textContent=`${allUsers.length} чел.`;
+  renderUsers();
+
+  // статус коллектора
+  try{
+    const s=await ACAI.get('/api/sensors/latest');
+    const keys=Object.keys(s);
+    if(keys.length>0){
+      const ts=Object.values(s)[0].recorded_at;
+      const sec=Math.floor((Date.now()-new Date(String(ts).replace(' ','T')).getTime())/1000);
+      if(sec<120){document.getElementById('collectorStatus').textContent=`Данные ${sec}с назад`;document.getElementById('collectorBadge').className='badge ok';document.getElementById('collectorBadge').textContent='Активен';}
+      else{document.getElementById('collectorStatus').textContent=`Нет данных ${Math.floor(sec/60)}м`;document.getElementById('collectorBadge').className='badge warn';document.getElementById('collectorBadge').textContent='Нет данных';}
+    }else{document.getElementById('collectorStatus').textContent='Откройте вкладку WebHMI';document.getElementById('collectorBadge').className='badge neutral';document.getElementById('collectorBadge').textContent='Нет';}
+  }catch{}
+}
+
+function renderUsers(){
+  const q=(document.getElementById('userSearch')?.value||'').toLowerCase();
+  const users=allUsers.filter(u=>!q||(u.full_name||'').toLowerCase().includes(q)||(u.username||'').toLowerCase().includes(q));
+  const ROLE_COLORS={admin:'var(--danger)',director:'var(--accent)',chief_engineer:'var(--accent)',engineer:'var(--accent)',worker:'var(--ok)',shift_supervisor:'var(--warn)',chief_mechanic:'var(--warn)',mechanic:'var(--ok)'};
+  document.getElementById('userList').innerHTML=users.map(u=>`
+    <div class="user-row">
+      <div class="u-avatar" style="background:${avatarColor(u.full_name)}">${initials(u.full_name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="u-name">${u.full_name||'—'}</div>
+        <div class="u-login">@${u.username}</div>
+      </div>
+      <span style="font-size:11px;font-weight:600;color:${ROLE_COLORS[u.role]||'var(--text-dim)'};flex-shrink:0">${ROLE_LABELS[u.role]||u.role}</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>
+        <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')">🔑 Пароль</button>
+        <button class="btn danger sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
+      </div>
+    </div>`).join('')||'<div class="empty">Нет пользователей</div>';
+}
+
+function openAddUser(){
+  const roleOpts=(validRoles.length?validRoles:Object.keys(ROLE_LABELS)).map(r=>`<option value="${r}">${ROLE_LABELS[r]||r}</option>`).join('');
+  ACAI.showModal(`
+    <h3>Новый пользователь</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>Логин *</label><input class="input" id="nu-login" placeholder="ivan.petrov"></div>
+      <div class="field"><label>Роль *</label><select class="input" id="nu-role">${roleOpts}</select></div>
+      <div class="field" style="grid-column:1/-1"><label>Полное имя *</label><input class="input" id="nu-name" placeholder="Иван Петров"></div>
+      <div class="field"><label>Пароль *</label><input class="input" id="nu-pass" type="password"></div>
+      <div class="field"><label>Повтор *</label><input class="input" id="nu-pass2" type="password"></div>
+    </div>
+    <div id="nu-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitAddUser()">Создать</button>
+    </div>
+  `);
+}
+async function submitAddUser(){
+  const login=document.getElementById('nu-login')?.value.trim();
+  const name=document.getElementById('nu-name')?.value.trim();
+  const role=document.getElementById('nu-role')?.value;
+  const pass=document.getElementById('nu-pass')?.value;
+  const pass2=document.getElementById('nu-pass2')?.value;
+  const errEl=document.getElementById('nu-err');
+  if(!login||!name||!pass){errEl.textContent='Заполните все поля';return;}
+  if(pass!==pass2){errEl.textContent='Пароли не совпадают';return;}
+  try{
+    await ACAI.post('/api/settings/users',{username:login,full_name:name,role,password:pass});
+    ACAI.toast('Пользователь создан','ok');ACAI.closeModal();await load();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+function openEditUser(u){
+  if(typeof u==='string')u=JSON.parse(u);
+  const roleOpts=(validRoles.length?validRoles:Object.keys(ROLE_LABELS)).map(r=>`<option value="${r}" ${r===u.role?'selected':''}>${ROLE_LABELS[r]||r}</option>`).join('');
+  ACAI.showModal(`
+    <h3>Редактировать: ${u.full_name}</h3>
+    <div class="field"><label>Роль</label><select class="input" id="eu-role">${roleOpts}</select></div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Логин: @${u.username}</div>
+    <div id="eu-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitEditUser(${u.id})">Сохранить</button>
+    </div>
+  `);
+}
+async function submitEditUser(id){
+  const role=document.getElementById('eu-role')?.value;
+  try{
+    const r=await fetch(`/api/settings/users/${id}/role`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})});
+    const rd=await r.json();
+    if(!rd.success){document.getElementById('eu-err').textContent=rd.message||'Ошибка';return;}
+    ACAI.toast('Роль обновлена');ACAI.closeModal();await load();
+  }catch(e){document.getElementById('eu-err').textContent=e.message;}
+}
+
+function openChangeUserPassword(id,name){
+  ACAI.showModal(`
+    <h3>Пароль: ${name}</h3>
+    <div class="field"><label>Новый пароль *</label><input class="input" id="up-new" type="password"></div>
+    <div class="field"><label>Повтор *</label><input class="input" id="up-new2" type="password"></div>
+    <div id="up-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitUserPassword(${id})">Сменить</button>
+    </div>
+  `);
+}
+async function submitUserPassword(id){
+  const p=document.getElementById('up-new')?.value;
+  const p2=document.getElementById('up-new2')?.value;
+  const errEl=document.getElementById('up-err');
+  if(!p){errEl.textContent='Введите пароль';return;}
+  if(p!==p2){errEl.textContent='Пароли не совпадают';return;}
+  try{
+    const r=await fetch(`/api/settings/users/${id}/password`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});
+    const rd=await r.json();
+    if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
+    ACAI.toast('Пароль изменён','ok');ACAI.closeModal();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function changePassword(){
+  const curr=document.getElementById('cp-current')?.value;
+  const np=document.getElementById('cp-new')?.value;
+  const np2=document.getElementById('cp-new2')?.value;
+  const errEl=document.getElementById('cp-err');
+  if(!curr||!np){errEl.textContent='Заполните все поля';return;}
+  if(np!==np2){errEl.textContent='Пароли не совпадают';return;}
+  try{
+    const r=await fetch('/api/auth/change-password',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password:curr,new_password:np})});
+    const rd=await r.json();
+    if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
+    ACAI.toast('Пароль изменён','ok');
+    document.getElementById('cp-current').value='';document.getElementById('cp-new').value='';document.getElementById('cp-new2').value='';
+    errEl.textContent='';
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function revokeUser(id,name){
+  if(!confirm(`Завершить все сессии пользователя "${name}"?`))return;
+  try{await fetch(`/api/settings/users/${id}/revoke-sessions`,{method:'POST',credentials:'include'});ACAI.toast('Сессии завершены');}
+  catch(e){ACAI.toast(e.message,'danger');}
+}
+
+initLayout();load();
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.acai.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin/python</string>
+        <string>backup_db.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant</string>
+
+    <!-- Каждый день в 02:00. В отличие от cron, launchd
+         досчитает пропущенный запуск, если Mac в это время
+         спал, — а он почти наверняка спит. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/backup.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/backup.error.log</string>
+
+</dict>
+</plist>

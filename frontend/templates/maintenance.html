@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>График ТО — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.to-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+.to-table{width:100%;border-collapse:collapse;min-width:900px;}
+.to-table th{background:var(--surface-2);padding:8px 10px;font-size:11px;font-weight:700;color:var(--text-dim);text-align:center;border:1px solid var(--border);white-space:nowrap;}
+.to-table th.eq-col{text-align:left;min-width:180px;}
+.to-table th.work-col{text-align:left;min-width:200px;}
+.to-table td{padding:6px 8px;border:1px solid var(--border);font-size:12px;vertical-align:middle;}
+.to-table td.eq-cell{font-weight:700;background:var(--surface-2);font-size:11px;}
+.to-table td.work-cell{font-size:11px;color:var(--text-dim);background:var(--surface);}
+.to-table tr:hover td{background:rgba(59,130,246,.04);}
+
+/* ячейка месяца */
+.month-cell{text-align:center;cursor:pointer;position:relative;min-width:52px;}
+.mo-planned{width:100%;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .15s;}
+.mo-planned:hover{filter:brightness(1.2);}
+.mo-done{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);}
+.mo-pending{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);}
+.mo-overdue{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);}
+.mo-empty{background:transparent;border:1px dashed transparent;}
+.mo-empty:hover{border-color:var(--border);}
+
+/* типы работ */
+.type-capital{color:#ef4444;}    /* капремонт — звезда */
+.type-monthly{color:#f59e0b;}    /* раз в месяц — треугольник */
+.type-weekly{color:#3b82f6;}     /* 4 раза в месяц — ромб */
+.type-quarterly{color:#10b981;}  /* раз в квартал */
+
+/* группа оборудования */
+.eq-group-head{background:rgba(59,130,246,.08);font-weight:700;font-size:12px;color:var(--accent);}
+
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:12px;}
+.leg-icon{font-size:16px;width:20px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">График ТО</div>
+        <div class="topbar-sub">Планово-предупредительный ремонт оборудования</div>
+      </div>
+      <div class="topbar-right">
+        <select class="input" id="yearSelect" style="width:100px" onchange="loadSchedule()">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+        </select>
+        <button class="btn primary" id="addBtn" style="display:none" onclick="openAddWork()">+ Работа</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <!-- ЛЕГЕНДА -->
+      <div class="legend">
+        <div class="leg-item"><span class="leg-icon type-capital">★</span> Капитальный ремонт</div>
+        <div class="leg-item"><span class="leg-icon type-monthly">▲</span> 1 раз в месяц</div>
+        <div class="leg-item"><span class="leg-icon type-weekly">◆</span> 4 раза в месяц</div>
+        <div class="leg-item"><span class="leg-icon type-quarterly">●</span> 1 раз в квартал</div>
+        <div class="leg-item"><span style="width:20px;height:16px;background:rgba(34,197,94,.2);border:1px solid var(--ok);border-radius:3px;display:inline-block"></span> Выполнено</div>
+        <div class="leg-item"><span style="width:20px;height:16px;background:rgba(59,130,246,.15);border:1px solid var(--accent);border-radius:3px;display:inline-block"></span> Запланировано</div>
+        <div class="leg-item"><span style="width:20px;height:16px;background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:3px;display:inline-block"></span> Просрочено</div>
+      </div>
+
+      <!-- МЕТРИКИ -->
+      <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="toMetrics">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <!-- ТАБЛИЦА -->
+      <div class="to-table-wrap">
+        <table class="to-table" id="toTable">
+          <thead>
+            <tr>
+              <th class="work-col">Наименование работ</th>
+              <th>Тип</th>
+              <th>Часы</th>
+              <th>Янв</th><th>Фев</th><th>Мар</th><th>Апр</th>
+              <th>Май</th><th>Июн</th><th>Июл</th><th>Авг</th>
+              <th>Сен</th><th>Окт</th><th>Ноя</th><th>Дек</th>
+              <th style="width:36px"></th>
+            </tr>
+          </thead>
+          <tbody id="toBody"><tr><td colspan="17" class="empty">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:560px;max-width:95vw"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+const TYPE_ICONS={capital:'★',monthly:'▲',weekly:'◆',quarterly:'●',annual:'★'};
+const TYPE_LABELS={capital:'Капремонт',monthly:'Ежемесячно',weekly:'Еженедельно',quarterly:'Раз в квартал',annual:'Раз в год'};
+const TYPE_COLORS={capital:'type-capital',monthly:'type-monthly',weekly:'type-weekly',quarterly:'type-quarterly',annual:'type-capital'};
+
+let schedule=[];let logs=[];let allEquipment=[];let currentUser=null;
+const now=new Date();const curMonth=now.getMonth()+1;
+
+async function loadSchedule(){
+  const year=document.getElementById('yearSelect').value;
+  const [sr,er]=await Promise.all([
+    ACAI.get(`/api/maintenance/schedule?year=${year}`),
+    ACAI.get('/api/equipment'),
+    loadToSettings()   // отсечка нужна до отрисовки: от неё зависит окраска
+  ]);
+  schedule=sr.schedule||[];
+  logs=sr.logs||[];
+  allEquipment=er.equipment||er||[];
+  renderMetrics();
+  renderTable();
+}
+
+// С какого месяца считаем просрочку. График внесли в сентябре, а работы
+// в нём расписаны с января — без отсечки весь год сразу красный.
+// Значение задаётся на сервере, в .env: ACAI_MAINTENANCE_START=2026-09
+let toStart={year:null,month:null};
+
+async function loadToSettings(){
+  try{
+    const r=await ACAI.get('/api/maintenance/settings');
+    toStart={year:r.start_year,month:r.start_month};
+  }catch{ toStart={year:null,month:null}; }
+}
+
+function monthOverdue(year,m){
+  const isPast=(year<now.getFullYear())||(year===now.getFullYear()&&m<curMonth);
+  if(!isPast) return false;
+  if(toStart.year&&(year<toStart.year||(year===toStart.year&&m<toStart.month))) return false;
+  return true;
+}
+
+function renderMetrics(){
+  const year=parseInt(document.getElementById('yearSelect').value);
+  const total=schedule.length;
+  const planned=schedule.reduce((s,r)=>{const ms=r.months.split(',').map(Number);return s+ms.length;},0);
+  const done=logs.length;
+  const overdue=schedule.reduce((s,r)=>{
+    const ms=r.months.split(',').map(Number).filter(m=>monthOverdue(year,m));
+    const doneMths=logs.filter(l=>l.schedule_id===r.id).map(l=>l.month);
+    return s+ms.filter(m=>!doneMths.includes(m)).length;
+  },0);
+  document.getElementById('toMetrics').innerHTML=`
+    <div class="metric accent"><div class="metric-label">Видов работ</div><div class="metric-value accent">${total}</div></div>
+    <div class="metric accent"><div class="metric-label">Запланировано</div><div class="metric-value accent">${planned}</div><div class="metric-sub">выполнений за год</div></div>
+    <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div></div>
+    <div class="metric ${overdue>0?'danger':'ok'}"><div class="metric-label">Просрочено</div><div class="metric-value ${overdue>0?'danger':'ok'}">${overdue}</div></div>`;
+}
+
+// состояние свёрнутых групп
+const collapsed = new Set();
+
+function toggleEq(eqId){
+  if(collapsed.has(eqId)) collapsed.delete(eqId);
+  else collapsed.add(eqId);
+  // переключаем видимость строк
+  document.querySelectorAll(`tr.eq-rows-${eqId}`).forEach(tr=>{
+    tr.style.display=collapsed.has(eqId)?'none':'';
+  });
+  // меняем иконку
+  const arrow=document.getElementById(`arrow-${eqId}`);
+  if(arrow) arrow.textContent=collapsed.has(eqId)?'▶':'▼';
+}
+
+function renderTable(){
+  const year=parseInt(document.getElementById('yearSelect').value);
+  if(!schedule.length){
+    document.getElementById('toBody').innerHTML=`<tr><td colspan="17" style="text-align:center;padding:30px;color:var(--text-dim)">
+      График пуст. Нажмите "+ Работа" чтобы добавить первую запись.
+    </td></tr>`;
+    return;
+  }
+
+  // группируем по оборудованию
+  const byEq={};
+  for(const r of schedule){
+    const key=r.equipment_id;
+    if(!byEq[key])byEq[key]={name:r.equipment_name||'—',location:r.location||'—',rows:[]};
+    byEq[key].rows.push(r);
+  }
+
+  // сортируем по цехам
+  const eqList=Object.entries(byEq).sort(([,a],[,b])=>{
+    const ai=ZONES.indexOf(a.location);const bi=ZONES.indexOf(b.location);
+    if(ai!==-1&&bi!==-1)return ai-bi;
+    if(ai!==-1)return-1;if(bi!==-1)return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  let html='';
+  let lastZone='';
+
+  for(const [eqId,eq] of eqList){
+    // заголовок зоны
+    if(eq.location!==lastZone){
+      lastZone=eq.location;
+      html+=`<tr><td colspan="17" style="background:rgba(59,130,246,.05);padding:6px 10px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${eq.location}</td></tr>`;
+    }
+
+    // считаем статистику для оборудования
+    const allPlanned=eq.rows.reduce((s,r)=>s+r.months.split(',').length,0);
+    const allDone=eq.rows.reduce((s,r)=>s+logs.filter(l=>l.schedule_id===r.id).length,0);
+    const allOverdue=eq.rows.reduce((s,r)=>{
+      const pm=r.months.split(',').map(Number);
+      const dm=logs.filter(l=>l.schedule_id===r.id).map(l=>l.month);
+      return s+pm.filter(m=>m<curMonth&&year<=now.getFullYear()&&!dm.includes(m)).length;
+    },0);
+    const isCollapsed=collapsed.has(eqId);
+    const pct=allPlanned?Math.round(allDone/allPlanned*100):0;
+
+    // заголовок оборудования — кликабельный
+    html+=`<tr style="background:var(--surface-2);cursor:pointer" onclick="toggleEq('${eqId}')">
+      <td style="padding:8px 10px;font-weight:700;font-size:13px">
+        <span id="arrow-${eqId}" style="color:var(--text-dim);margin-right:6px;font-size:10px">${isCollapsed?'▶':'▼'}</span>
+        ${eq.name}
+        <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">${eq.rows.length} видов работ</span>
+      </td>
+      <td></td>
+      <td style="font-size:12px;color:${allOverdue>0?'var(--danger)':pct>0?'var(--ok)':'var(--text-dim)'}">
+        ${allOverdue>0?`⚠ ${allOverdue} просрочено`:pct>0?`${pct}%`:''}
+      </td>
+      <td colspan="13"></td>
+    </tr>`;
+
+    // строки работ
+    eq.rows.forEach((row,idx)=>{
+      const plannedMonths=row.months.split(',').map(Number);
+      const doneLogs=logs.filter(l=>l.schedule_id===row.id);
+      const doneMonths=doneLogs.map(l=>l.month);
+      const typeIcon=TYPE_ICONS[row.work_type]||'●';
+      const typeColor=TYPE_COLORS[row.work_type]||'';
+      const typeLabel=TYPE_LABELS[row.work_type]||row.work_type;
+
+      const monthCells=MONTHS.map((_,i)=>{
+        const m=i+1;
+        const isPlanned=plannedMonths.includes(m);
+        const isDone=doneMonths.includes(m);
+        const isOverdue=isPlanned&&!isDone&&monthOverdue(year,m);
+
+        if(!isPlanned&&!isDone)return`<td class="month-cell"><div class="mo-planned mo-empty"></div></td>`;
+
+        let cls='mo-pending';
+        if(isDone)cls='mo-done';
+        else if(isOverdue)cls='mo-overdue';
+
+        return`<td class="month-cell">
+          <div class="mo-planned ${cls}" onclick="toggleMonth(${row.id},${row.equipment_id},'${row.work_name}',${m},${year},${isDone})" title="${isDone?'Выполнено — нажмите отменить':'Нажмите отметить выполнено'}">
+            <span class="${typeColor}" style="font-size:13px;${isDone?'color:var(--ok)':''}">${isDone?'✓':typeIcon}</span>
+          </div>
+        </td>`;
+      }).join('');
+
+      html+=`<tr class="eq-rows-${eqId}" style="${isCollapsed?'display:none':''}">
+        <td class="work-cell" style="padding-left:24px">${row.work_name}</td>
+        <td style="text-align:center"><span class="${typeColor}" title="${typeLabel}">${typeIcon}</span></td>
+        <td style="text-align:center;font-size:11px;color:var(--text-dim)">${row.duration_hours||'—'}</td>
+        ${monthCells}
+        <td style="text-align:center">
+          ${currentUser&&['admin','director','chief_engineer','chief_mechanic'].includes(currentUser.role)?
+            `<button onclick="deleteWork(${row.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px" title="Удалить">✕</button>`:''}
+        </td>
+      </tr>`;
+    });
+  }
+
+  document.getElementById('toBody').innerHTML=html;
+}
+
+async function toggleMonth(schedId,eqId,workName,month,year,isDone){
+  try{
+    if(isDone){
+      await fetch('/api/maintenance/log',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedule_id:schedId,month,year})});
+      ACAI.toast('Отменено');
+    }else{
+      await ACAI.post('/api/maintenance/log',{schedule_id:schedId,equipment_id:eqId,work_name:workName,month,year});
+      ACAI.toast('Отмечено ✓','ok');
+    }
+    await loadSchedule();
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+async function deleteWork(id){
+  if(!confirm('Удалить эту работу из графика?'))return;
+  try{
+    await fetch(`/api/maintenance/schedule/${id}`,{method:'DELETE',credentials:'include'});
+    ACAI.toast('Удалено');await loadSchedule();
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+function openAddWork(){
+  const year=document.getElementById('yearSelect').value;
+  const eqOpts=allEquipment.map(e=>`<option value="${e.id}">${e.name} · ${e.location||'—'}</option>`).join('');
+  // чекбоксы месяцев
+  const monthChecks=MONTHS.map((m,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+    <input type="checkbox" value="${i+1}" checked style="cursor:pointer"> ${m}
+  </label>`).join('');
+
+  ACAI.showModal(`
+    <h3>Добавить работу в график</h3>
+    <div class="field"><label>Оборудование *</label>
+      <select class="input" id="aw-eq"><option value="">— Выберите —</option>${eqOpts}</select>
+    </div>
+    <div class="field"><label>Наименование работ *</label>
+      <input class="input" id="aw-name" placeholder="Например: Смазка опорных подшипников">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>Тип работы</label>
+        <select class="input" id="aw-type">
+          <option value="monthly">▲ Ежемесячно</option>
+          <option value="weekly">◆ 4 раза в месяц</option>
+          <option value="quarterly">● Раз в квартал</option>
+          <option value="capital">★ Капитальный ремонт</option>
+          <option value="annual">★ Раз в год</option>
+        </select>
+      </div>
+      <div class="field"><label>Время (часов)</label>
+        <input class="input" id="aw-hours" type="number" step="0.5" value="0.5" min="0.1">
+      </div>
+    </div>
+    <div class="field"><label>Ответственный</label>
+      <input class="input" id="aw-resp" placeholder="Гл. механик / Гл. электрик">
+    </div>
+    <div class="field"><label>Месяцы выполнения</label>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;background:var(--surface-2);border-radius:8px;padding:10px" id="aw-months">
+        ${monthChecks}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button onclick="selectAllMonths(true)" class="btn secondary sm">Все</button>
+        <button onclick="selectAllMonths(false)" class="btn secondary sm">Ни один</button>
+        <button onclick="selectQuarter()" class="btn secondary sm">Раз в квартал</button>
+      </div>
+    </div>
+    <div id="aw-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitAddWork(${year})">Добавить</button>
+    </div>
+  `);
+}
+
+function selectAllMonths(v){
+  document.querySelectorAll('#aw-months input[type=checkbox]').forEach(cb=>cb.checked=v);
+}
+function selectQuarter(){
+  document.querySelectorAll('#aw-months input[type=checkbox]').forEach((cb,i)=>{cb.checked=[2,5,8,11].includes(i);});
+}
+
+async function submitAddWork(year){
+  const eqId=document.getElementById('aw-eq')?.value;
+  const name=document.getElementById('aw-name')?.value.trim();
+  const errEl=document.getElementById('aw-err');
+  if(!eqId){errEl.textContent='Выберите оборудование';return;}
+  if(!name){errEl.textContent='Введите наименование работ';return;}
+  const months=[...document.querySelectorAll('#aw-months input[type=checkbox]:checked')].map(cb=>cb.value).join(',');
+  if(!months){errEl.textContent='Выберите хотя бы один месяц';return;}
+  try{
+    await ACAI.post('/api/maintenance/schedule',{
+      equipment_id:parseInt(eqId),
+      work_name:name,
+      work_type:document.getElementById('aw-type')?.value||'monthly',
+      months,
+      duration_hours:parseFloat(document.getElementById('aw-hours')?.value||0.5),
+      responsible:document.getElementById('aw-resp')?.value||null,
+      year:parseInt(year),
+    });
+    ACAI.toast('Работа добавлена ✓','ok');ACAI.closeModal();await loadSchedule();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function init(){
+  const ctx=await initLayout();currentUser=ctx?.user;
+  if(currentUser&&['admin','director','chief_engineer','chief_mechanic','chief_electrician'].includes(currentUser.role)){
+    document.getElementById('addBtn').style.display='block';
+  }
+  await loadSchedule();
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Журнал — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.log-item {
+  display:flex; align-items:flex-start; gap:14px;
+  padding:12px 0; border-bottom:1px solid var(--border);
+}
+.log-item:last-child { border-bottom:none; }
+.log-icon {
+  width:34px; height:34px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:15px; flex-shrink:0;
+}
+.log-body { flex:1; min-width:0; }
+.log-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:3px; }
+.log-who { font-size:13px; font-weight:600; }
+.log-what { font-size:13px; color:var(--text-dim); }
+.log-target { font-size:12px; color:var(--accent); font-family:var(--mono); }
+.log-detail { font-size:11px; color:var(--text-dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.log-time { font-size:11px; color:var(--text-dim); font-family:var(--mono); flex-shrink:0; white-space:nowrap; }
+
+.action-icon { font-size:14px; }
+
+.filters-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+.filter-chip {
+  padding:5px 12px; border-radius:999px; border:1px solid var(--border);
+  background:var(--surface-2); color:var(--text-dim);
+  cursor:pointer; font-size:12px; font-weight:500; transition:all .15s;
+}
+.filter-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Журнал действий</div>
+        <div class="topbar-sub">История всех действий в системе</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page">
+
+      <!-- ФИЛЬТРЫ -->
+      <div class="filters-row">
+        <button class="filter-chip active" data-action="">Все</button>
+        <button class="filter-chip" data-action="login">Входы</button>
+        <button class="filter-chip" data-action="case">Обращения</button>
+        <button class="filter-chip" data-action="equipment">Оборудование</button>
+        <button class="filter-chip" data-action="repair">Ремонты</button>
+        <input class="input" id="searchLog" placeholder="🔍 Поиск по имени..." style="width:200px;margin-left:auto">
+        <select class="input" id="limitSelect" style="width:120px">
+          <option value="50">50 записей</option>
+          <option value="100">100 записей</option>
+          <option value="200" selected>200 записей</option>
+        </select>
+      </div>
+
+      <!-- ЖУРНАЛ -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Последние действия</h2>
+          <span id="logCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">—</span>
+        </div>
+        <div class="card-body" style="padding:0 16px" id="logList">
+          <div class="empty">Загрузка...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allEntries = [];
+let currentAction = '';
+let searchQ = '';
+
+const ACTION_META = {
+  // авторизация
+  login:              { icon:'🔐', bg:'rgba(59,130,246,.1)', label:'Вход в систему' },
+  logout:             { icon:'🚪', bg:'rgba(100,116,139,.1)', label:'Выход' },
+  login_failed:       { icon:'⚠️', bg:'rgba(239,68,68,.1)', label:'Неудачный вход' },
+  // обращения
+  case_created:       { icon:'📋', bg:'rgba(59,130,246,.1)', label:'Создано обращение' },
+  case_taken:         { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
+  case_draft_close:   { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Черновик закрытия' },
+  case_approve_close: { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Закрыто' },
+  // оборудование
+  equipment_archived: { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Архивировано' },
+  equipment_restored: { icon:'♻️', bg:'rgba(34,197,94,.1)', label:'Восстановлено' },
+  maintenance_completed: { icon:'🔧', bg:'rgba(34,197,94,.1)', label:'ТО выполнено' },
+  // ремонт
+  repair_completed:   { icon:'🛠️', bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
+  downtime_started:   { icon:'⏸️', bg:'rgba(239,68,68,.1)', label:'Простой начат' },
+  downtime_ended:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой завершён' },
+};
+
+function getMeta(action) {
+  // точное совпадение
+  if (ACTION_META[action]) return ACTION_META[action];
+  // частичное
+  for (const [key, meta] of Object.entries(ACTION_META)) {
+    if (action?.includes(key)) return meta;
+  }
+  return { icon:'📝', bg:'rgba(100,116,139,.1)', label: action };
+}
+
+function getRoleLabel(role) {
+  return {
+    admin:'Администратор', director:'Директор',
+    chief_engineer:'Гл. инженер', engineer:'Инженер',
+    worker:'Рабочий', shift_supervisor:'Мастер смены',
+    chief_mechanic:'Гл. механик', mechanic:'Механик',
+    chief_electrician:'Гл. электрик', electrician:'Электрик',
+  }[role] || role;
+}
+
+async function loadLog() {
+  const limit = document.getElementById('limitSelect').value;
+  const params = new URLSearchParams({ limit });
+  if (currentAction) params.set('action', currentAction);
+  if (searchQ) params.set('search', searchQ);
+
+  const r = await ACAI.get(`/api/audit-log?${params}`);
+  allEntries = r.entries || [];
+  renderLog();
+}
+
+function renderLog() {
+  document.getElementById('logCount').textContent = `${allEntries.length} записей`;
+
+  if (!allEntries.length) {
+    document.getElementById('logList').innerHTML = '<div class="empty">Записей нет</div>';
+    return;
+  }
+
+  document.getElementById('logList').innerHTML = allEntries.map(e => {
+    const meta = getMeta(e.action);
+    const who = e.full_name || e.username || '—';
+    const roleLabel = getRoleLabel(e.role);
+    const target = e.target || '';
+    const detail = e.details || '';
+
+    // форматируем время
+    const ts = e.created_at ? new Date(e.created_at.replace(' ','T')) : null;
+    const timeStr = ts ? ts.toLocaleString('ru-RU', {
+      day:'2-digit', month:'2-digit',
+      hour:'2-digit', minute:'2-digit'
+    }) : '—';
+    const agoStr = ts ? ACAI.timeAgo(e.created_at) : '—';
+
+    return `<div class="log-item">
+      <div class="log-icon" style="background:${meta.bg}">${meta.icon}</div>
+      <div class="log-body">
+        <div class="log-head">
+          <span class="log-who">${who}</span>
+          <span class="badge neutral" style="font-size:10px">${roleLabel}</span>
+          <span class="log-what">${meta.label}</span>
+          ${target ? `<span class="log-target">${target}</span>` : ''}
+        </div>
+        ${detail ? `<div class="log-detail">${detail}</div>` : ''}
+      </div>
+      <div class="log-time" title="${timeStr}">${agoStr}</div>
+    </div>`;
+  }).join('');
+}
+
+// фильтры по типу действия
+document.querySelectorAll('.filter-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentAction = btn.dataset.action;
+    loadLog();
+  });
+});
+
+document.getElementById('searchLog').addEventListener('input', e => {
+  searchQ = e.target.value;
+  loadLog();
+});
+
+document.getElementById('limitSelect').addEventListener('change', loadLog);
+
+initLayout();
+loadLog();
+setInterval(loadLog, 60000);
+</script>
+</body>
+</html>

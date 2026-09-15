@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Обращения — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.case-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;border-left:4px solid var(--border);transition:border-color .15s;}
+.case-card:hover{border-color:var(--accent);}
+.case-card.escalated{border-left-color:var(--danger);}
+.case-card.open{border-left-color:var(--accent);}
+.case-card.draft{border-left-color:var(--warn);}
+.case-card.closed{border-left-color:var(--ok);opacity:.75;}
+.case-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;}
+.case-title{font-size:15px;font-weight:700;}
+.case-badges{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;}
+.case-body{font-size:13px;color:var(--text-dim);margin-bottom:8px;}
+.case-meta{display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text-dim);flex-wrap:wrap;}
+.case-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.reaction-time{font-family:var(--mono);font-weight:700;}
+.reaction-time.fast{color:var(--ok);}
+.reaction-time.slow{color:var(--warn);}
+.reaction-time.critical{color:var(--danger);}
+.filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filter-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;}
+.filter-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Обращения</div>
+        <div class="topbar-sub">Все инциденты и запросы на обслуживание</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn primary" onclick="openNewCase()">+ Новое обращение</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="metrics" id="caseMetrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <div class="filters-row">
+        <button class="filter-chip active" data-filter="">Все</button>
+        <button class="filter-chip" data-filter="open">Открытые</button>
+        <button class="filter-chip" data-filter="escalated">Эскалация</button>
+        <button class="filter-chip" data-filter="draft">На проверке</button>
+        <button class="filter-chip" data-filter="closed">Закрытые</button>
+        <!-- фильтр по цеху -->
+        <select class="input" id="zoneFilter" style="width:180px;margin-left:4px" onchange="renderCases()">
+          <option value="">Все цехи</option>
+          <option>Массаподготовка</option>
+          <option>Формовка</option>
+          <option>Сушка / Углесушка</option>
+          <option>Обжиг</option>
+          <option>Упаковка</option>
+        </select>
+        <input class="input" id="searchCases" placeholder="🔍 Поиск..." style="width:200px;margin-left:auto" oninput="renderCases()">
+      </div>
+
+      <div id="casesList"><div class="empty">Загрузка...</div></div>
+    </div>
+  </div>
+</div>
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:520px;max-width:95vw"></div></div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allCases=[];let currentFilter='';let currentUser=null;
+
+const STATUS_MAP={'Открыто':'open','Требует специалиста':'escalated','Черновик закрытия':'draft','Закрыто':'closed'};
+const STATUS_LABEL={'open':'Открыто','escalated':'Эскалация','draft':'На проверке','closed':'Закрыто'};
+const STATUS_COLOR={'open':'var(--accent)','escalated':'var(--danger)','draft':'var(--warn)','closed':'var(--ok)'};
+
+function reactionClass(created_at){
+  if(!created_at)return'';
+  const h=(Date.now()-new Date(created_at.replace(' ','T')).getTime())/3600000;
+  if(h<2)return'fast';if(h<8)return'slow';return'critical';
+}
+function reactionLabel(created_at){
+  if(!created_at)return'—';
+  const m=Math.floor((Date.now()-new Date(created_at.replace(' ','T')).getTime())/60000);
+  if(m<60)return`${m}м`;if(m<1440)return`${Math.floor(m/60)}ч ${m%60}м`;return`${Math.floor(m/1440)}д`;
+}
+
+async function load(){
+  const d=await ACAI.get('/dashboard');
+  allCases=d.recent_cases||[];
+  const eq=d.equipment||[];
+
+  const esc=allCases.filter(c=>c.status==='Требует специалиста').length;
+  const open=allCases.filter(c=>c.status==='Открыто').length;
+  const draft=allCases.filter(c=>c.status==='Черновик закрытия').length;
+  const closed=allCases.filter(c=>c.status==='Закрыто').length;
+  const avgMin=d.average_resolution_minutes;
+  const avgTxt=avgMin!=null?(avgMin<60?`${avgMin}м`:`${Math.floor(avgMin/60)}ч`):'—';
+
+  document.getElementById('caseMetrics').innerHTML=`
+    <div class="metric ${esc>0?'danger':'ok'}"><div class="metric-label">Эскалация</div><div class="metric-value ${esc>0?'danger':'ok'}">${esc}</div><div class="metric-sub">требует специалиста</div></div>
+    <div class="metric ${open>0?'accent':'ok'}"><div class="metric-label">Открытых</div><div class="metric-value accent">${open}</div><div class="metric-sub">в работе</div></div>
+    <div class="metric ${draft>0?'warn':'ok'}"><div class="metric-label">На проверке</div><div class="metric-value ${draft>0?'warn':'ok'}">${draft}</div><div class="metric-sub">черновик закрытия</div></div>
+    <div class="metric ok"><div class="metric-label">Закрыто</div><div class="metric-value ok">${closed}</div><div class="metric-sub">из ${allCases.length} всего</div></div>
+    <div class="metric accent"><div class="metric-label">Среднее решение</div><div class="metric-value accent">${avgTxt}</div><div class="metric-sub">время на закрытие</div></div>`;
+
+  renderCases();
+  loadCasePhotos();   // фото с обхода — одним запросом, потом перерисовка
+}
+
+function renderCases(){
+  const statusFilter=currentFilter;
+  const zoneFilter=document.getElementById('zoneFilter')?.value||'';
+  const q=(document.getElementById('searchCases')?.value||'').toLowerCase();
+
+  let items=allCases;
+  if(statusFilter){
+    const map={'open':'Открыто','escalated':'Требует специалиста','draft':'Черновик закрытия','closed':'Закрыто'};
+    items=items.filter(c=>c.status===map[statusFilter]);
+  }
+  if(zoneFilter) items=items.filter(c=>(c.equipment_location||'')===zoneFilter);
+  if(q) items=items.filter(c=>(c.equipment_name||c.machine||'').toLowerCase().includes(q)||(c.symptom||c.worker_question||'').toLowerCase().includes(q));
+
+  if(!items.length){
+    document.getElementById('casesList').innerHTML='<div class="empty">Нет обращений</div>';
+    return;
+  }
+
+  document.getElementById('casesList').innerHTML=items.map(c=>{
+    const cls=STATUS_MAP[c.status]||'open';
+    const color=STATUS_COLOR[cls];
+    const label=STATUS_LABEL[cls]||c.status;
+    const rClass=cls!=='closed'?reactionClass(c.created_at):'';
+    const rLabel=reactionLabel(c.created_at);
+    const dur=c.status==='Закрыто'&&c.created_at&&c.closed_at?
+      (()=>{const m=Math.floor((new Date(c.closed_at.replace(' ','T'))-new Date(c.created_at.replace(' ','T')))/60000);return m>=60?`${Math.floor(m/60)}ч ${m%60}м`:`${m}м`;})():null;
+
+    const actions=buildActions(c,cls);
+
+    return`<div class="case-card ${cls}">
+      <div class="case-head">
+        <div>
+          <div class="case-title">${c.equipment_name||c.machine||'Неизвестно'}</div>
+          ${c.equipment_location?`<div style="font-size:11px;color:var(--accent);margin-top:2px">📍 ${c.equipment_location}</div>`:''}
+        </div>
+        <div class="case-badges">
+          <span class="badge" style="background:${color}20;color:${color}">${label}</span>
+          ${c.draft_resolution_comment?'<span class="badge neutral">Комментарий</span>':''}
+        </div>
+      </div>
+      <div class="case-body">${c.symptom||c.worker_question||'—'}</div>
+      ${casePhotos(c.id)}
+      <div class="case-meta">
+        <span>⏱ Открыто: <span class="reaction-time ${rClass}">${rLabel} назад</span></span>
+        ${c.assigned_to?`<span>👤 ${c.assigned_to}</span>`:'<span style="color:var(--warn)">👤 Не назначен</span>'}
+        ${dur?`<span>✓ Решено за ${dur}</span>`:''}
+        ${c.id?`<span style="font-family:var(--mono)">#${c.id}</span>`:''}
+      </div>
+      ${actions?`<div class="case-actions">${actions}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function buildActions(c,cls){
+  if(!currentUser)return'';
+  const role=currentUser.role;
+  const parts=[];
+  if(cls==='open'||cls==='escalated'){
+    if(['chief_mechanic','mechanic','chief_electrician','electrician','engineer','chief_engineer'].includes(role))
+      parts.push(`<button class="btn secondary sm" onclick="takeCase(${c.id})">▶ Взять</button>`);
+    if(['shift_supervisor','chief_engineer','admin','director'].includes(role))
+      parts.push(`<button class="btn secondary sm" onclick="openDraftClose(${c.id})">✓ Закрыть</button>`);
+    if(['admin','director','chief_engineer'].includes(role))
+      parts.push(`<button class="btn secondary sm" onclick="openAssign(${c.id})">👤 Назначить</button>`);
+  }
+  if(cls==='draft'&&['chief_engineer','admin','director'].includes(role))
+    parts.push(`<button class="btn ok sm" onclick="approveClose(${c.id})">✓ Подтвердить закрытие</button>`);
+  if(c.equipment_id)
+    parts.push(`<a href="/diagnostics?equipment_id=${c.equipment_id}" class="btn secondary sm">🔧 Диагностика</a>`);
+  return parts.join('');
+}
+
+// ── фото с обхода смены ───────────────────────────────────
+let photosByCase={};   // {case_id: [photo_id, ...]}
+
+function casePhotos(caseId){
+  const ids=photosByCase[caseId];
+  if(!ids||!ids.length) return '';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${
+    ids.map(id=>`<img src="/api/checklist/photo/${id}" onclick="viewCasePhoto(${id})"
+      style="width:72px;height:72px;object-fit:cover;border-radius:8px;
+             border:1px solid var(--border);cursor:pointer">`).join('')
+  }</div>`;
+}
+
+async function loadCasePhotos(){
+  const ids=allCases.map(c=>c.id).filter(Boolean);
+  if(!ids.length) return;
+  try{
+    // одним запросом на всю страницу, а не по разу на обращение
+    const r=await ACAI.get(`/api/checklist/photos-by-case?case_ids=${ids.join(',')}`);
+    photosByCase={};
+    for(const [k,v] of Object.entries(r.photos||{})) photosByCase[+k]=v;
+    renderCases();
+  }catch{}
+}
+
+function viewCasePhoto(id){
+  ACAI.showModal(`
+    <img src="/api/checklist/photo/${id}" style="width:100%;border-radius:8px;max-height:72vh;object-fit:contain">
+    <div class="modal-foot">
+      <a class="btn secondary" href="/api/checklist/photo/${id}" target="_blank">Открыть оригинал</a>
+      <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+    </div>
+  `);
+}
+
+async function takeCase(id){
+  try{await ACAI.post(`/api/cases/${id}/take`,{});ACAI.toast('Взято в работу');await load();}
+  catch(e){ACAI.toast(e.message,'danger');}
+}
+
+async function approveClose(id){
+  ACAI.showModal(`
+    <h3>Подтвердить закрытие</h3>
+    <div class="field"><label>Финальный комментарий</label>
+      <textarea class="input" id="ac-comment" rows="3" placeholder="Что было сделано для устранения проблемы..."></textarea>
+    </div>
+    <div id="ac-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn ok" onclick="submitApprove(${id})">✓ Закрыть обращение</button>
+    </div>
+  `);
+}
+async function submitApprove(id){
+  const comment=document.getElementById('ac-comment')?.value.trim();
+  try{
+    await ACAI.post(`/case/${id}/approve-close`,{comment});
+    ACAI.toast('Обращение закрыто','ok');ACAI.closeModal();await load();
+  }catch(e){document.getElementById('ac-err').textContent=e.message;}
+}
+
+function openDraftClose(id){
+  ACAI.showModal(`
+    <h3>Черновик закрытия</h3>
+    <div class="field"><label>Что было сделано *</label>
+      <textarea class="input" id="dc-comment" rows="3" placeholder="Опишите выполненные действия..."></textarea>
+    </div>
+    <div id="dc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitDraftClose(${id})">Сохранить</button>
+    </div>
+  `);
+}
+async function submitDraftClose(id){
+  const comment=document.getElementById('dc-comment')?.value.trim();
+  if(!comment){document.getElementById('dc-err').textContent='Опишите что сделано';return;}
+  try{
+    await ACAI.post(`/case/${id}/draft-close`,{comment});
+    ACAI.toast('Черновик сохранён');ACAI.closeModal();await load();
+  }catch(e){document.getElementById('dc-err').textContent=e.message;}
+}
+
+async function openAssign(id){
+  const r=await ACAI.get('/api/settings/users');
+  const users=(r.users||[]).filter(u=>['chief_mechanic','mechanic','chief_electrician','electrician','engineer','chief_engineer'].includes(u.role));
+  ACAI.showModal(`
+    <h3>Назначить ответственного</h3>
+    <div class="field"><label>Специалист</label>
+      <select class="input" id="as-user">
+        <option value="">— Выберите —</option>
+        ${users.map(u=>`<option value="${u.full_name||u.username}">${u.full_name||u.username} (${u.role})</option>`).join('')}
+      </select>
+    </div>
+    <div id="as-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitAssign(${id})">Назначить</button>
+    </div>
+  `);
+}
+async function submitAssign(id){
+  const assignee=document.getElementById('as-user')?.value;
+  if(!assignee){document.getElementById('as-err').textContent='Выберите специалиста';return;}
+  try{
+    await ACAI.post(`/api/cases/${id}/take`,{assigned_to:assignee});
+    ACAI.toast('Ответственный назначен','ok');ACAI.closeModal();await load();
+  }catch(e){document.getElementById('as-err').textContent=e.message;}
+}
+
+function openNewCase(){
+  ACAI.get('/api/equipment').then(r=>{
+    const eq=r.equipment||r||[];
+    ACAI.showModal(`
+      <h3>Новое обращение</h3>
+      <div class="field"><label>Оборудование *</label>
+        <select class="input" id="nc-eq">
+          <option value="">— Выберите —</option>
+          ${eq.map(e=>`<option value="${e.id}">${e.name} · ${e.location||e.stage||'—'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Проблема</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          ${['Не запускается','Сильный шум','Вибрация','Перегрев','Утечка','Остановился','Другое'].map(s=>
+            `<button onclick="setNcSymptom(this,'${s}')" style="padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:12px;cursor:pointer">${s}</button>`
+          ).join('')}
+        </div>
+        <textarea class="input" id="nc-symptom" rows="2" placeholder="Опишите подробно..."></textarea>
+      </div>
+      <div id="nc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+        <a href="/diagnostics" class="btn secondary">🤖 ИИ диагностика</a>
+        <button class="btn primary" onclick="submitNewCase()">Зафиксировать</button>
+      </div>
+    `);
+  });
+}
+function setNcSymptom(btn,s){
+  document.getElementById('nc-symptom').value=s;
+  document.querySelectorAll('#_modal button[onclick*="setNcSymptom"]').forEach(b=>b.style.background='var(--surface-2)');
+  btn.style.background='var(--accent)';btn.style.color='#fff';
+}
+async function submitNewCase(){
+  const eqId=document.getElementById('nc-eq')?.value;
+  const symptom=document.getElementById('nc-symptom')?.value.trim();
+  const errEl=document.getElementById('nc-err');
+  if(!eqId){errEl.textContent='Выберите оборудование';return;}
+  if(!symptom){errEl.textContent='Опишите проблему';return;}
+  try{
+    await ACAI.post('/diagnose',{equipment_id:parseInt(eqId),question:symptom});
+    ACAI.toast('Обращение создано','ok');ACAI.closeModal();await load();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+document.querySelectorAll('.filter-chip').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-chip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');currentFilter=btn.dataset.filter;renderCases();
+  });
+});
+
+async function init(){const ctx=await initLayout();currentUser=ctx?.user;await load();}
+init();setInterval(load,30000);
+</script>
+</body>
+</html>

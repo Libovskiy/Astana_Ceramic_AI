@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>База знаний — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.kb-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:16px; margin-bottom:8px;
+  cursor:pointer; transition:border-color .15s;
+  border-left:4px solid var(--border);
+}
+.kb-card:hover { border-color:var(--accent); }
+.kb-card.confirmed { border-left-color:var(--ok); }
+.kb-machine { font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px; }
+.kb-symptom { font-size:14px;font-weight:600;margin-bottom:6px; }
+.kb-resolution { font-size:13px;color:var(--text-dim);line-height:1.5; }
+.kb-footer { display:flex;align-items:center;gap:10px;margin-top:8px;font-size:11px;color:var(--text-dim); }
+
+.section-head {
+  font-size:11px;font-weight:700;color:var(--text-dim);
+  text-transform:uppercase;letter-spacing:.06em;
+  margin:20px 0 10px;padding-bottom:6px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.section-count { background:var(--surface-2);padding:2px 8px;border-radius:999px;font-weight:400; }
+
+.search-wrap { position:relative;margin-bottom:16px; }
+.search-wrap input { padding-left:36px; }
+.search-wrap::before { content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">База знаний</div>
+        <div class="topbar-sub">Подтверждённые решения реальных проблем</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <!-- ПОИСК -->
+      <div class="search-wrap">
+        <input class="input" id="searchKb" placeholder="Поиск по оборудованию или симптому...">
+      </div>
+
+      <!-- СТАТИСТИКА -->
+      <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px" id="kbMetrics">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <!-- КОНТЕНТ -->
+      <div id="kbContent"><div class="empty">Загрузка...</div></div>
+
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="_overlay">
+  <div class="modal" id="_modal" style="width:580px;max-width:95vw"></div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let allKnowledge = {};
+let searchQ = '';
+
+async function load() {
+  const r = await ACAI.get('/api/knowledge');
+  allKnowledge = r.grouped || {};
+  renderMetrics();
+  render();
+}
+
+function renderMetrics() {
+  const machines = Object.keys(allKnowledge).length;
+  const total = Object.values(allKnowledge).reduce((s,a)=>s+a.length,0);
+  const confirmed = Object.values(allKnowledge).flat().filter(i=>i.confirmed_by).length;
+
+  document.getElementById('kbMetrics').innerHTML = `
+    <div class="metric accent">
+      <div class="metric-label">Единиц оборудования</div>
+      <div class="metric-value accent">${machines}</div>
+      <div class="metric-sub">с описанными решениями</div>
+    </div>
+    <div class="metric ok">
+      <div class="metric-label">Решений всего</div>
+      <div class="metric-value ok">${total}</div>
+      <div class="metric-sub">в базе знаний</div>
+    </div>
+    <div class="metric ok">
+      <div class="metric-label">Подтверждено</div>
+      <div class="metric-value ok">${confirmed}</div>
+      <div class="metric-sub">специалистами</div>
+    </div>
+  `;
+}
+
+function render() {
+  const q = searchQ.toLowerCase();
+  const sections = Object.entries(allKnowledge).filter(([machine, items]) => {
+    if (!q) return true;
+    return machine.toLowerCase().includes(q) ||
+      items.some(i => (i.symptom||'').toLowerCase().includes(q) || (i.resolution||'').toLowerCase().includes(q));
+  });
+
+  if (!sections.length) {
+    document.getElementById('kbContent').innerHTML = '<div class="empty">Ничего не найдено</div>';
+    return;
+  }
+
+  document.getElementById('kbContent').innerHTML = sections.map(([machine, items]) => {
+    const filtered = q ? items.filter(i =>
+      (i.symptom||'').toLowerCase().includes(q) ||
+      (i.resolution||'').toLowerCase().includes(q)
+    ) : items;
+    if (!filtered.length) return '';
+
+    return `
+      <div class="section-head">
+        <span>🔧 ${machine}</span>
+        <span class="section-count">${filtered.length} решений</span>
+      </div>
+      ${filtered.map(item => `
+        <div class="kb-card ${item.confirmed_by?'confirmed':''}" onclick="openItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">
+          <div class="kb-machine">${machine}</div>
+          <div class="kb-symptom">${item.symptom || 'Общее решение'}</div>
+          <div class="kb-resolution">${(item.resolution||'').slice(0,120)}${(item.resolution||'').length>120?'...':''}</div>
+          <div class="kb-footer">
+            ${item.confirmed_by ? `<span class="badge ok">✓ Подтверждено: ${item.confirmed_by}</span>` : '<span class="badge neutral">Из документации</span>'}
+            ${item.use_count ? `<span>Использовано ${item.use_count} раз</span>` : ''}
+            ${item.created_at ? `<span>${ACAI.shortDate(item.created_at)}</span>` : ''}
+          </div>
+        </div>`).join('')}
+    `;
+  }).join('');
+}
+
+function openItem(item) {
+  if (typeof item === 'string') item = JSON.parse(item);
+  ACAI.showModal(`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="font-size:24px">📋</span>
+      <div>
+        <h3 style="margin:0">${item.symptom || 'Решение'}</h3>
+        <div style="font-size:12px;color:var(--accent);margin-top:2px">${item.machine || '—'}</div>
+      </div>
+      ${item.confirmed_by ? '<span class="badge ok">✓ Подтверждено</span>' : ''}
+    </div>
+
+    <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7">
+      ${item.resolution || 'Описание отсутствует'}
+    </div>
+
+    ${item.steps?.length ? `
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">ПОШАГОВЫЕ ДЕЙСТВИЯ</div>
+      ${item.steps.map((s,i)=>`
+        <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${i+1}</div>
+          <div style="font-size:13px">${s.title||s.action||s}</div>
+        </div>`).join('')}
+    ` : ''}
+
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+    </div>
+  `);
+}
+
+document.getElementById('searchKb').addEventListener('input', e => {
+  searchQ = e.target.value;
+  render();
+});
+
+initLayout();
+load();
+</script>
+</body>
+</html>

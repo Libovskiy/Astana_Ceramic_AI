@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACAI — Производство</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<link rel="stylesheet" href="/static/equipment-page.css?v=1">
+<link rel="stylesheet" href="/static/production-page.css?v=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Производство</div>
+        <div class="topbar-sub">Состояние всей технологической цепочки</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page">
+
+      <!-- SHIFT PRODUCTION LOG -->
+      <section class="dashboard-card">
+        <div class="card-header">
+          <h2>Учёт выпуска</h2>
+          <p>Ввести количество поддонов за смену — система сама переведёт в штуки</p>
+        </div>
+
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
+          <div class="field" style="margin-bottom: 0;">
+            <label>Дата</label>
+            <input type="date" id="logDate" class="input">
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label>Смена</label>
+            <select id="logShift" class="select">
+              <option value="День">День</option>
+              <option value="Ночь">Ночь</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label>Вид кирпича</label>
+            <select id="logBrickType" class="select">
+              <option value="полнотелый">Полнотелый (396 шт/поддон)</option>
+              <option value="пустотелый">Пустотелый (440 шт/поддон)</option>
+              <option value="блок">Блок (60 шт/поддон)</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label>Поддонов</label>
+            <input type="number" id="logPallets" min="1" placeholder="0" class="input" style="width: 100px;">
+          </div>
+          <button type="button" id="submitProductionLog" class="btn btn-primary">Сохранить</button>
+        </div>
+
+        <div id="logResult" style="margin-top: 12px; font-size: 13px;"></div>
+      </section>
+
+      <!-- SHIFT PRODUCTION CHART -->
+      <section class="dashboard-card">
+        <div class="card-header">
+          <h2>Производство за смену</h2>
+          <p>Факт по времени внутри смены, относительно плана</p>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+          <select id="chartDate" class="select" style="max-width: 180px;"></select>
+          <select id="chartShift" class="select">
+            <option value="День">День</option>
+            <option value="Ночь">Ночь</option>
+          </select>
+        </div>
+
+        <div style="position: relative; height: 280px;">
+          <canvas id="shiftChart"></canvas>
+        </div>
+
+        <div class="metrics" style="margin-top: 20px;">
+          <div class="metric">
+            <div class="metric-label">Произведено</div>
+            <div class="metric-value" id="chartProduced">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">План на смену</div>
+            <div class="metric-value" id="chartTarget">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">От плана</div>
+            <div class="metric-value" id="chartPercent">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Осталось</div>
+            <div class="metric-value" id="chartRemaining">—</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MONTHLY PLAN -->
+      <section class="dashboard-card" id="planSection" style="display: none;">
+        <div class="card-header">
+          <h2>Месячный план</h2>
+          <p>В штуках, по каждому виду продукции</p>
+        </div>
+        <div id="planInputs" style="display: flex; gap: 16px; flex-wrap: wrap;"></div>
+        <div id="planSummary" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
+      </section>
+
+      <!-- SHIFT HISTORY -->
+      <section class="dashboard-card">
+        <div class="card-header">
+          <h2>История по сменам</h2>
+          <p id="averagePercentLabel">Среднее выполнение: —</p>
+        </div>
+        <div id="shiftHistory">
+          <div class="loading-state">Загрузка...</div>
+        </div>
+      </section>
+
+      <!-- PRODUCTION FLOW -->
+      <section class="production-section">
+        <div class="section-header">
+          <h2>Производственный процесс</h2>
+          <p>Основные этапы производства</p>
+        </div>
+
+        <div class="production-flow" id="productionFlow"></div>
+
+        <div class="production-actions">
+          <button type="button" class="primary-button" id="openProductionMap">
+            Открыть производственную карту →
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div id="stageModal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-window production-details-modal">
+    <button type="button" class="modal-close" id="closeStageModal">×</button>
+    <div class="modal-icon" id="modalStageIcon">▤</div>
+    <h2 id="modalStageTitle">Производственный участок</h2>
+    <p id="modalStageDescription">Информация об участке.</p>
+
+    <div class="production-detail-status">
+      <span>Состояние</span>
+      <strong id="modalStageStatus">—</strong>
+    </div>
+
+    <div class="production-detail-card">
+      <div class="production-detail-header">
+        <span>Здоровье оборудования</span>
+        <strong id="modalStageHealth">—</strong>
+      </div>
+      <div class="production-progress-bar">
+        <div id="modalStageHealthBar" class="production-progress-value" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <div class="production-detail-card">
+      <div class="production-detail-header">
+        <span>Эксплуатация</span>
+        <strong id="modalStageReadiness">—</strong>
+      </div>
+      <div class="production-progress-bar">
+        <div id="modalStageReadinessBar" class="production-progress-value" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <div class="production-detail-card" style="grid-column: 1 / -1;">
+      <span class="production-detail-label">Оборудование этапа</span>
+
+      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
+        <span class="production-detail-label">Части оборудования</span>
+        <div id="modalStagePartsList" style="margin-top: 10px; max-height: 220px; overflow-y: auto;">—</div>
+      </div>
+
+      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
+        <span class="production-detail-label">Документы</span>
+        <div id="modalStageDocumentsList" style="margin-top: 10px; max-height: 220px; overflow-y: auto;">—</div>
+      </div>
+
+      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
+        <span class="production-detail-label">Активные простои</span>
+        <div id="modalStageDowntimeList" style="margin-top: 10px; max-height: 180px; overflow-y: auto;">—</div>
+      </div>
+    </div>
+
+    <button type="button" id="modalMaintenanceButton" class="btn ok btn-block" style="display: none; margin-top: 16px;">
+      Отметить обслуживание выполненным
+    </button>
+  </div>
+</div>
+
+<div id="productionMapModal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-window production-map-window">
+    <button type="button" class="modal-close" id="closeProductionMap">×</button>
+    <h2>Производственная карта</h2>
+    <p>Последовательность основных этапов производства.</p>
+
+    <div class="production-map">
+      <div class="map-stage"><span>01</span><strong>Масса</strong></div>
+      <div class="map-arrow">→</div>
+      <div class="map-stage"><span>02</span><strong>Формовка</strong></div>
+      <div class="map-arrow">→</div>
+      <div class="map-stage"><span>03</span><strong>Сушка</strong></div>
+      <div class="map-arrow">→</div>
+      <div class="map-stage"><span>04</span><strong>Печь</strong></div>
+      <div class="map-arrow">→</div>
+      <div class="map-stage"><span>05</span><strong>Упаковка</strong></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script src="/static/production.js?v=32"></script>
+<script>initLayout();</script>
+
+</body>
+</html>

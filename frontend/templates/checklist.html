@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Обход смены — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.check-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px;transition:border-color .2s;}
+.check-item.checked-ok{border-color:var(--ok);background:rgba(34,197,94,.04);}
+.check-item.checked-warn{border-color:var(--warn);background:rgba(245,158,11,.04);}
+.check-item.checked-bad{border-color:var(--danger);background:rgba(239,68,68,.04);}
+.check-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+.check-name{font-size:14px;font-weight:600;}
+.check-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.check-btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;flex:1;text-align:center;}
+.check-btn:hover{filter:brightness(1.1);}
+.check-btn.ok{background:rgba(34,197,94,.15);color:var(--ok);border-color:var(--ok);}
+.check-btn.warn{background:rgba(245,158,11,.15);color:var(--warn);border-color:var(--warn);}
+.check-btn.bad{background:rgba(239,68,68,.15);color:var(--danger);border-color:var(--danger);}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:16px;}
+.progress-fill{height:100%;background:var(--ok);border-radius:3px;transition:width .3s;}
+.zone-head{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+
+/* фото */
+.photo-area{margin-top:10px;}
+.photo-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.photo-thumb{width:72px;height:72px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:pointer;}
+.photo-thumb.duplicate{border-color:var(--danger);opacity:.5;}
+.photo-box{position:relative;width:72px;height:72px;}
+.photo-box.uploading .photo-thumb{opacity:.35;}
+.photo-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-dim);}
+.photo-spin::after{content:"";width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:ph-spin .7s linear infinite;}
+@keyframes ph-spin{to{transform:rotate(360deg)}}
+.photo-err{position:absolute;inset:0;background:rgba(239,68,68,.85);color:#fff;border-radius:8px;font-size:9px;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;}
+.photo-x{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--danger);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+.add-photo-btn{width:72px;height:72px;border-radius:8px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);font-size:24px;background:var(--surface-2);transition:border-color .15s;}
+.add-photo-btn:hover{border-color:var(--accent);}
+.photo-label{font-size:11px;color:var(--text-dim);margin-bottom:4px;}
+.dup-warn{font-size:11px;color:var(--danger);margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Обход смены</div>
+        <div class="topbar-sub" id="checkDate"></div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn primary" id="submitBtn" onclick="submitChecklist()" disabled>Завершить обход</button>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:600">Прогресс обхода</span>
+        <span id="progressLabel" style="font-size:13px;color:var(--text-dim)">0 / 0</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+      <div id="checklistContent"><div class="empty">Загрузка...</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+const MAX_SIDE=1600, JPEG_Q=0.75;
+
+let allEquipment=[];
+let checks={};      // {id: 'ok'|'warn'|'bad'}
+let notes={};       // {id: string}
+// {id: [{localId, preview, state:'uploading'|'done'|'error'|'duplicate', photoId, error}]}
+let photos={};
+let savedOk=false;
+let startedAt=new Date().toISOString().slice(0,19).replace('T',' ');
+let seq=0;
+
+document.getElementById('checkDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+
+// ── сжатие на клиенте: на заводском wifi это разница между
+//    «отправилось» и «рабочий подождал минуту и ушёл» ──────
+function compress(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let {width:w,height:h}=img;
+      const k=Math.min(1,MAX_SIDE/Math.max(w,h));
+      w=Math.round(w*k); h=Math.round(h*k);
+      const cv=document.createElement('canvas');
+      cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      // toBlob с jpeg заодно срезает EXIF (в нём GPS и модель телефона)
+      cv.toBlob(b=>b?resolve(b):reject(new Error('Не удалось обработать снимок')),'image/jpeg',JPEG_Q);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Файл не читается как изображение'));};
+    img.src=url;
+  });
+}
+
+async function loadEquipment(){
+  const r=await ACAI.get('/api/equipment');
+  allEquipment=(r.equipment||r||[]).filter(e=>e.level!=='component');
+  render();
+}
+
+function render(){
+  const byZone={};
+  for(const e of allEquipment){
+    const z=e.location||e.stage||'Другое';
+    if(!byZone[z])byZone[z]=[];byZone[z].push(e);
+  }
+  const sorted=[...ZONES.filter(z=>byZone[z]),...Object.keys(byZone).filter(z=>!ZONES.includes(z))];
+
+  document.getElementById('checklistContent').innerHTML=sorted.map(zone=>`
+    <div class="zone-head">${zone}</div>
+    ${byZone[zone].map(e=>{
+      const c=checks[e.id];
+      const needPhoto=c==='warn'||c==='bad';
+      const eqPhotos=photos[e.id]||[];
+      const hasDup=eqPhotos.some(p=>p.state==='duplicate');
+
+      return`<div class="check-item ${c?'checked-'+c:''}" id="ci-${e.id}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div>
+            <div class="check-name">${e.name}</div>
+            <div style="font-size:11px;color:var(--text-dim)">${e.type||'—'} · <strong>${e.status}</strong></div>
+          </div>
+          ${c?`<span class="badge ${c==='ok'?'ok':c==='warn'?'warn':'danger'}" style="flex-shrink:0">${c==='ok'?'✓ Норма':c==='warn'?'! Внимание':'✕ Проблема'}</span>`:''}
+        </div>
+        <div class="check-btns">
+          <button class="check-btn ${c==='ok'?'ok':''}" onclick="setCheck(${e.id},'ok')">✓ Норма</button>
+          <button class="check-btn ${c==='warn'?'warn':''}" onclick="setCheck(${e.id},'warn')">! Внимание</button>
+          <button class="check-btn ${c==='bad'?'bad':''}" onclick="setCheck(${e.id},'bad')">✕ Проблема</button>
+        </div>
+
+        ${needPhoto?`
+          <div class="photo-area">
+            <div class="photo-label">📷 Прикрепите фото проблемы (обязательно для подтверждения)</div>
+            <div class="photo-preview" id="photos-${e.id}">
+              ${eqPhotos.map(p=>`
+                <div class="photo-box ${p.state==='uploading'?'uploading':''}">
+                  <img src="${p.preview}" class="photo-thumb ${p.state==='duplicate'?'duplicate':''}"
+                       onclick="viewPhoto('${p.preview}')"
+                       title="${p.state==='duplicate'?'⚠ Дубликат фото':p.state==='error'?p.error:'Загружено'}">
+                  ${p.state==='uploading'?`<div class="photo-spin"></div>`:''}
+                  ${p.state==='error'?`<div class="photo-err">${p.error||'Ошибка'}</div>`:''}
+                  ${p.state==='duplicate'?`<div style="position:absolute;bottom:2px;left:2px;right:2px;background:rgba(239,68,68,.85);color:#fff;font-size:9px;text-align:center;border-radius:4px">Дубликат!</div>`:''}
+                  <button class="photo-x" onclick="removePhoto(${e.id},'${p.localId}')">✕</button>
+                </div>`).join('')}
+              <label class="add-photo-btn" title="Добавить фото">
+                📷
+                <input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(${e.id},this)">
+              </label>
+            </div>
+            ${hasDup?`<div class="dup-warn">⚠ Это фото уже есть в системе — сделайте новый снимок прямо сейчас</div>`:''}
+          </div>
+          <div style="margin-top:8px">
+            <input class="input" id="note-${e.id}" placeholder="Опишите что заметили..." value="${notes[e.id]||''}" oninput="notes[${e.id}]=this.value" style="font-size:12px">
+          </div>
+        `:''}
+      </div>`;
+    }).join('')}`).join('');
+
+  updateProgress();
+}
+
+function setCheck(id,status){
+  checks[id]=status;
+  // сняли проблемный статус — убираем черновики фото и с сервера тоже
+  if(status==='ok'){
+    for(const p of (photos[id]||[])) dropOnServer(p);
+    delete photos[id]; delete notes[id];
+  }
+  render();
+}
+
+// ── фото уезжает на сервер сразу при съёмке, а не при отправке ──
+async function addPhoto(eqId, input){
+  const file=input.files[0];
+  input.value='';
+  if(!file)return;
+
+  const localId='p'+(++seq);
+  if(!photos[eqId])photos[eqId]=[];
+  const entry={localId,preview:'',state:'uploading',photoId:null,error:null};
+  photos[eqId].push(entry);
+  render();
+
+  try{
+    const blob=await compress(file);
+    entry.preview=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(blob);});
+    render();
+
+    const fd=new FormData();
+    fd.append('file',blob,'photo.jpg');
+    fd.append('equipment_id',eqId);
+
+    // FormData нельзя слать через ACAI.post — там жёстко Content-Type: application/json
+    const r=await fetch('/api/checklist/photo',{method:'POST',credentials:'include',body:fd});
+    if(r.status===401){window.location.href='/login';return;}
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.detail||('Ошибка '+r.status));
+
+    entry.photoId=j.id;
+    if(j.duplicate){
+      entry.state='duplicate';
+      ACAI.toast(j.message||'Это фото уже загружали','danger');
+    }else{
+      entry.state='done';
+    }
+  }catch(err){
+    entry.state='error';
+    entry.error=(err.message||'Ошибка').slice(0,40);
+    ACAI.toast('Фото не загрузилось: '+entry.error,'danger');
+  }
+  render();
+}
+
+function dropOnServer(p){
+  if(p&&p.photoId&&p.state==='done'){
+    fetch('/api/checklist/photo/'+p.photoId,{method:'DELETE',credentials:'include'}).catch(()=>{});
+  }
+}
+
+function removePhoto(eqId,localId){
+  const arr=photos[eqId]||[];
+  const i=arr.findIndex(p=>p.localId===localId);
+  if(i>=0){ dropOnServer(arr[i]); arr.splice(i,1); }
+  render();
+}
+
+function viewPhoto(src){
+  ACAI.showModal(`
+    <img src="${src}" style="width:100%;border-radius:8px;max-height:70vh;object-fit:contain">
+    <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>
+  `);
+}
+
+function goodPhotos(eqId){
+  return (photos[eqId]||[]).filter(p=>p.state==='done');
+}
+
+function updateProgress(){
+  const total=allEquipment.length;
+  const done=Object.keys(checks).length;
+  // засчитываем только реально загруженные: дубликат и ошибка не считаются
+  const problemsWithoutPhoto=allEquipment.filter(e=>(checks[e.id]==='warn'||checks[e.id]==='bad')&&goodPhotos(e.id).length===0);
+  const uploading=allEquipment.some(e=>(photos[e.id]||[]).some(p=>p.state==='uploading'));
+
+  document.getElementById('progressLabel').textContent=`${done} / ${total}`;
+  document.getElementById('progressFill').style.width=`${total?Math.round(done/total*100):0}%`;
+
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=!(done>=total&&problemsWithoutPhoto.length===0&&!uploading);
+  btn.title=uploading?'Дождитесь загрузки фото'
+    :problemsWithoutPhoto.length?`Нужны фото для: ${problemsWithoutPhoto.map(e=>e.name).join(', ')}`:'';
+}
+
+async function submitChecklist(){
+  const problems=allEquipment.filter(e=>checks[e.id]==='bad'||checks[e.id]==='warn');
+  const summary={
+    total:allEquipment.length,
+    ok:Object.values(checks).filter(v=>v==='ok').length,
+    warn:Object.values(checks).filter(v=>v==='warn').length,
+    bad:Object.values(checks).filter(v=>v==='bad').length
+  };
+
+  ACAI.showModal(`
+    <h3>Итог обхода смены</h3>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+      <div style="background:rgba(34,197,94,.1);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--ok)">${summary.ok}</div>
+        <div style="font-size:11px;color:var(--text-dim)">Норма</div>
+      </div>
+      <div style="background:rgba(245,158,11,.1);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--warn)">${summary.warn}</div>
+        <div style="font-size:11px;color:var(--text-dim)">Внимание</div>
+      </div>
+      <div style="background:rgba(239,68,68,.1);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--danger)">${summary.bad}</div>
+        <div style="font-size:11px;color:var(--text-dim)">Проблемы</div>
+      </div>
+    </div>
+    ${problems.length?`
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">ЗАФИКСИРОВАННЫЕ ПРОБЛЕМЫ:</div>
+      ${problems.map(e=>{
+        const ps=goodPhotos(e.id);
+        return`<div style="padding:8px 10px;background:var(--surface-2);border-radius:8px;margin-bottom:6px;border-left:3px solid ${checks[e.id]==='bad'?'var(--danger)':'var(--warn)'}">
+          <div style="font-size:13px;font-weight:600">${e.name}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${notes[e.id]||'Без комментария'}</div>
+          ${ps.length?`<div style="display:flex;gap:4px;margin-top:6px">${ps.map(p=>`<img src="${p.preview}" style="width:48px;height:48px;border-radius:6px;object-fit:cover">`).join('')}</div>`:''}
+        </div>`;
+      }).join('')}
+    `:'<div style="color:var(--ok);text-align:center;padding:12px;font-weight:600">✓ Все в норме!</div>'}
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" id="confirmBtn" onclick="confirmChecklist()">✓ Сохранить обход</button>
+    </div>
+  `);
+}
+
+async function confirmChecklist(){
+  const btn=document.getElementById('confirmBtn');
+  if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}
+  try{
+    // 1) сначала фиксируем сам обход вместе с привязкой фото —
+    //    если упадёт, рабочий увидит ошибку и не уйдёт со страницы
+    const items=allEquipment.filter(e=>checks[e.id]).map(e=>({
+      equipment_id:e.id,
+      status:checks[e.id],
+      note:notes[e.id]||'',
+      photo_ids:goodPhotos(e.id).map(p=>p.photoId)
+    }));
+    const saved=await ACAI.post('/api/checklist/round',{started_at:startedAt,items});
+
+    // 2) статусы оборудования
+    for(const e of allEquipment){
+      const c=checks[e.id];if(!c)continue;
+      const newStatus=c==='ok'?'Работает':c==='warn'?'Внимание':'Ошибка';
+      if(newStatus!==e.status){
+        await ACAI.post(`/api/equipment/${e.id}/set-status`,{status:newStatus}).catch(()=>{});
+      }
+    }
+
+    // 3) по каждой проблеме — ОДНО обращение, и к нему цепляем фото.
+    //    Раньше заводились и обращение, и задача: инженер видел одну
+    //    поломку в двух местах и не понимал, где её закрывать.
+    let cases=0;
+    for(const pr of (saved.problems||[])){
+      const note=pr.note||(pr.status==='bad'?'Обнаружено при обходе смены':'Замечание при обходе смены');
+      try{
+        const d=await ACAI.post('/diagnose',{equipment_id:pr.equipment_id,question:note});
+        if(d&&d.case_id){
+          cases++;
+          await ACAI.post('/api/checklist/link-case',{
+            round_id:saved.round_id, equipment_id:pr.equipment_id, case_id:d.case_id
+          }).catch(()=>{});
+        }
+      }catch{}
+    }
+
+    savedOk=true;   // обход записан — предупреждать об уходе больше не о чем
+    const casesMsg=cases?` · обращений: ${cases}`:'';
+    ACAI.toast(`Обход №${saved.round_id} сохранён ✓${casesMsg}`,'ok');
+    ACAI.closeModal();
+    setTimeout(()=>window.location.href='/',1500);
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='✓ Сохранить обход';}
+    ACAI.toast('Не сохранилось: '+(e.message||''),'danger');
+  }
+}
+
+// случайно закрытая вкладка = потерянный обход
+window.addEventListener('beforeunload',ev=>{
+  if(!savedOk&&Object.keys(checks).length){ev.preventDefault();ev.returnValue='';}
+});
+
+initLayout();loadEquipment();
+</script>
+</body>
+</html>

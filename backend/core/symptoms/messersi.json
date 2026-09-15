@@ -1,0 +1,36 @@
+{
+    "machine": "messersi",
+    "comment": "Симптомы упаковочной машины. Дополняют общий common.json и имеют приоритет при равном совпадении. В каждом симптоме слово 'пленка' присутствует намеренно: без него 'плёнка рвётся' и 'плёнка криво' набирали по одному совпадению и побеждал тот, кто выше в списке.",
+    "symptoms": [
+        {
+            "id": "film_alignment",
+            "name": "Пленка криво надевается",
+            "search": "film alignment stretch film wrapping adjustment",
+            "keywords": ["пленка", "криво", "косо", "перекос", "наматывается", "стретч", "сползает"]
+        },
+        {
+            "id": "film_break",
+            "name": "Пленка рвется",
+            "search": "stretch film break tension roller",
+            "keywords": ["пленка", "рвется", "рвётся", "разрыв", "лопается", "порвалась", "обрыв"]
+        },
+        {
+            "id": "film_feed",
+            "name": "Пленка не подается",
+            "search": "film feed roll change carriage stretch unit",
+            "keywords": ["пленка", "не подается", "не подаётся", "не тянет", "закончилась", "рулон", "каретка"]
+        },
+        {
+            "id": "machine_not_start",
+            "name": "Не запускается",
+            "search": "machine not start packing line power",
+            "keywords": ["не запускается", "не стартует", "не включается"]
+        },
+        {
+            "id": "pallet_position",
+            "name": "Поддон встает неправильно",
+            "search": "pallet position centering turntable sensor",
+            "keywords": ["поддон", "паллета", "палета", "не по центру", "смещен", "смещён", "стол вращения"]
+        }
+    ]
+}

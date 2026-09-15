@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACAI — Astana Ceramic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.sensor-strip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.ss-item{display:flex;align-items:center;gap:6px;}
+.ss-label{font-size:11px;color:var(--text-dim);}
+.ss-val{font-family:var(--mono);font-size:13px;font-weight:700;}
+.ss-bar{width:48px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.ss-fill{height:100%;border-radius:2px;transition:width .5s;}
+.ss-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+
+/* КАРТА */
+.prod-map-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden;}
+.prod-map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
+.prod-map-header h2{font-size:13px;font-weight:600;}
+.prod-map-body{padding:16px 20px;overflow-x:auto;}
+
+/* ЗОНЫ */
+.prod-flow{display:flex;align-items:flex-end;gap:0;min-width:900px;}
+.prod-zone{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:12px 8px 14px;border-radius:14px;cursor:pointer;
+  transition:transform .2s,box-shadow .2s;
+  position:relative;
+}
+.prod-zone:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.4);}
+.prod-zone.ok{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);}
+.prod-zone.warn{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);}
+.prod-zone.danger{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.3);}
+
+.zone-3d{width:100%;height:120px;display:flex;align-items:center;justify-content:center;}
+.zone-name{font-size:12px;font-weight:700;text-align:center;}
+.zone-pct{font-family:var(--mono);font-size:15px;font-weight:700;}
+.zone-bar{width:80%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.zone-bar-fill{height:100%;border-radius:2px;transition:width 1s;}
+.zone-status{font-size:10px;font-weight:600;}
+.zone-pulse{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;}
+.zone-pulse.ok{background:var(--ok);}
+.zone-pulse.warn{background:var(--warn);animation:zpulse 1.5s infinite;}
+.zone-pulse.danger{background:var(--danger);animation:zpulse 1s infinite;}
+@keyframes zpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
+
+.prod-arrow{display:flex;align-items:center;padding:0 4px;padding-bottom:40px;}
+.prod-arrow svg{flex-shrink:0;}
+
+/* НИЖНЯЯ СЕТКА */
+.bottom-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;}
+.case-row{padding:9px 10px;border-radius:8px;background:var(--surface-2);border-left:3px solid var(--border);margin-bottom:5px;cursor:pointer;}
+.case-row.esc{border-left-color:var(--danger);}
+.case-row.draft{border-left-color:var(--warn);}
+.case-row.open{border-left-color:var(--accent);}
+.prob-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.prob-row:last-child{border-bottom:none;}
+
+/* НЕДЕЛЯ */
+.week-strip{display:flex;gap:6px;}
+.week-day{flex:1;text-align:center;padding:8px 4px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);transition:all .15s;position:relative;}
+.week-day:hover{border-color:var(--accent);}
+.week-day.today{background:var(--accent);border-color:var(--accent);}
+.week-day.has-task::after{content:'';position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--warn);}
+.week-day.today.has-task::after{background:#fff;}
+.wd-name{font-size:10px;color:var(--text-dim);margin-bottom:3px;}
+.wd-num{font-size:15px;font-weight:700;}
+.today .wd-name,.today .wd-num{color:#fff;}
+.dev-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;background:var(--surface-2);margin-bottom:4px;font-size:12px;}
+.dev-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.cal-full{margin-top:10px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.cal-dn{font-size:10px;color:var(--text-dim);text-align:center;padding:3px;font-weight:600;}
+.cal-d{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;transition:background .15s;position:relative;}
+.cal-d:hover{background:var(--border);}
+.cal-d.today{background:var(--accent);color:#fff;font-weight:700;}
+.cal-d.has-task::after{content:'';position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:var(--warn);}
+.cal-d.today.has-task::after{background:#fff;}
+.cal-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;transition:color .15s;}
+.cal-toggle:hover{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Производство</div>
+        <div class="topbar-sub" id="topbarDate"></div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="metrics" id="metrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:14px">
+        <div class="metric"><div class="metric-label">Загрузка...</div><div class="metric-value" style="color:var(--text-dim)">—</div></div>
+      </div>
+
+      <div class="sensor-strip" id="sensorStrip">
+        <span style="font-size:11px;color:var(--text-dim)">⚙️ Массаподготовка · WebHMI</span>
+        <span style="font-size:11px;color:var(--text-dim)">Откройте вкладку WebHMI</span>
+      </div>
+
+      <!-- ПРОИЗВОДСТВЕННАЯ КАРТА -->
+      <div class="prod-map-wrap">
+        <div class="prod-map-header">
+          <h2>Производственная цепочка — Astana Ceramic</h2>
+          <span id="mapTime" style="font-size:11px;color:var(--text-dim)"></span>
+        </div>
+        <div class="prod-map-body">
+          <div class="prod-flow" id="prodFlow"></div>
+        </div>
+      </div>
+
+      <div class="bottom-grid">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="card">
+            <div class="card-head">
+              <h2>Требует решения</h2>
+              <span id="openCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">0</span>
+            </div>
+            <div class="card-body" id="caseList" style="padding:10px 12px"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Частые неисправности</h2></div>
+            <div class="card-body" id="problemList" style="padding:10px 16px"></div>
+          </div>
+          <!-- Простой цеха директор должен видеть сразу, не заходя в аналитику -->
+          <div class="card">
+            <div class="card-head">
+              <h2>Простои сегодня</h2>
+              <span id="downtimeTotal" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">—</span>
+            </div>
+            <div class="card-body" id="downtimeList" style="padding:10px 12px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Календарь</h2>
+            <div class="cal-toggle" onclick="toggleCal()">
+              <span>📅</span><span id="calToggleText">Развернуть</span>
+            </div>
+          </div>
+          <div class="card-body" style="padding:10px 14px">
+            <div id="weekView">
+              <div class="week-strip" id="weekStrip"></div>
+              <div id="weekEvents" style="margin-top:8px"></div>
+            </div>
+            <div id="fullCal" style="display:none" class="cal-full">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <button onclick="prevMonth()" style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text);cursor:pointer;font-size:12px">‹</button>
+                <span id="calMonth" style="font-size:13px;font-weight:600"></span>
+                <button onclick="nextMonth()" style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text);cursor:pointer;font-size:12px">›</button>
+              </div>
+              <div class="cal-grid" id="calGrid"></div>
+              <div id="calDayEvents" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script>
+document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+
+// ── 3D SVG МОДЕЛИ ЦЕХОВ ────────────────────────────────────
+function svgMassa(color){
+  return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <!-- здание изометрия -->
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <!-- крыша акцент -->
+    <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".15"/>
+    <!-- дробилка -->
+    <rect x="42" y="55" width="16" height="18" rx="3" fill="#2a3550" stroke="${color}" stroke-width="1"/>
+    <rect x="45" y="58" width="10" height="4" rx="1" fill="${color}" opacity=".6"/>
+    <!-- бункер -->
+    <polygon points="48,48 72,48 68,56 52,56" fill="#243040" stroke="${color}" stroke-width="1"/>
+    <!-- конвейер анимированный -->
+    <line x1="20" y1="85" x2="100" y2="85" stroke="${color}" stroke-width="2" opacity=".3"/>
+    <rect x="20" y="83" width="8" height="4" rx="2" fill="${color}" opacity=".7">
+      <animateTransform attributeName="transform" type="translate" from="0,0" to="80,0" dur="2s" repeatCount="indefinite"/>
+    </rect>
+    <!-- труба -->
+    <rect x="72" y="30" width="6" height="20" rx="2" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="75" cy="30" rx="4" ry="2" fill="#2a3550" stroke="${color}" stroke-width="1"/>
+    <!-- пар -->
+    <circle cx="75" cy="24" r="3" fill="white" opacity=".2">
+      <animate attributeName="cy" from="24" to="18" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".2" to="0" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="78" cy="22" r="2" fill="white" opacity=".15">
+      <animate attributeName="cy" from="22" to="15" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".15" to="0" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </svg>`;
+}
+
+function svgFormovka(color){
+  return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".12"/>
+    <!-- пресс экструдер -->
+    <rect x="35" y="58" width="50" height="14" rx="3" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <rect x="38" y="61" width="44" height="8" rx="2" fill="#243050" stroke="${color}" stroke-width=".5"/>
+    <!-- форсунка -->
+    <rect x="82" y="63" width="8" height="4" rx="2" fill="${color}" opacity=".8"/>
+    <!-- кирпичики выходят -->
+    <rect x="91" y="64" width="6" height="4" rx="1" fill="${color}" opacity=".9">
+      <animateTransform attributeName="transform" type="translate" from="0,0" to="10,0" dur="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".9" to="0" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+    <!-- мотор -->
+    <circle cx="45" cy="65" r="5" fill="#1a2540" stroke="${color}" stroke-width="1"/>
+    <circle cx="45" cy="65" r="2" fill="${color}" opacity=".6">
+      <animateTransform attributeName="transform" type="rotate" from="0,45,65" to="360,45,65" dur="0.8s" repeatCount="indefinite"/>
+    </circle>
+    <!-- крыша -->
+    <rect x="50" y="40" width="8" height="20" rx="2" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+  </svg>`;
+}
+
+function svgSushka(color){
+  return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".1"/>
+    <!-- туннель сушилки -->
+    <rect x="25" y="62" width="70" height="20" rx="4" fill="#0d1520" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="25" cy="72" rx="6" ry="10" fill="#0a1018" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="95" cy="72" rx="6" ry="10" fill="#0a1018" stroke="${color}" stroke-width="1"/>
+    <!-- вагонетки -->
+    <rect x="30" y="70" width="12" height="8" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8">
+      <animateTransform attributeName="transform" type="translate" from="-10,0" to="60,0" dur="4s" repeatCount="indefinite"/>
+    </rect>
+    <!-- жаровые трубы -->
+    <rect x="38" y="55" width="4" height="10" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
+    <rect x="50" y="52" width="4" height="13" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
+    <rect x="62" y="55" width="4" height="10" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
+    <rect x="74" y="52" width="4" height="13" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
+    <!-- тепло волны -->
+    <path d="M40,50 Q45,44 50,50 Q55,44 60,50" stroke="${color}" stroke-width="1" fill="none" opacity=".5">
+      <animate attributeName="opacity" values=".5;.1;.5" dur="1.5s" repeatCount="indefinite"/>
+    </path>
+  </svg>`;
+}
+
+function svgObzhig(color){
+  return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a1510" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" fill="#100f08" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" fill="#141208" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".15"/>
+    <!-- туннельная печь -->
+    <rect x="22" y="63" width="76" height="22" rx="5" fill="#0d0a05" stroke="${color}" stroke-width="1.5"/>
+    <ellipse cx="22" cy="74" rx="7" ry="11" fill="#080604" stroke="${color}" stroke-width="1.5"/>
+    <ellipse cx="98" cy="74" rx="7" ry="11" fill="#080604" stroke="${color}" stroke-width="1.5"/>
+    <!-- огонь внутри -->
+    <ellipse cx="60" cy="74" rx="25" ry="8" fill="${color}" opacity=".2"/>
+    <path d="M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78" fill="${color}" opacity=".6">
+      <animate attributeName="d" values="M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78;M45,78 Q52,70 55,76 Q60,67 64,73 Q67,65 70,71 Q73,79 75,78;M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78" dur="0.5s" repeatCount="indefinite"/>
+    </path>
+    <!-- трубы дымовые -->
+    <rect x="30" y="38" width="8" height="26" rx="3" fill="#151008" stroke="${color}" stroke-width="1"/>
+    <rect x="82" y="38" width="8" height="26" rx="3" fill="#151008" stroke="${color}" stroke-width="1"/>
+    <!-- дым -->
+    <circle cx="34" cy="33" r="5" fill="#888" opacity=".15">
+      <animate attributeName="cy" from="33" to="20" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".15" to="0" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="r" from="3" to="8" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="86" cy="31" r="4" fill="#888" opacity=".12">
+      <animate attributeName="cy" from="31" to="18" dur="2.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".12" to="0" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <!-- свет из отверстий -->
+    <line x1="22" y1="74" x2="30" y2="74" stroke="${color}" stroke-width="2" opacity=".8"/>
+    <line x1="90" y1="74" x2="98" y2="74" stroke="${color}" stroke-width="2" opacity=".8"/>
+  </svg>`;
+}
+
+function svgUpakovka(color){
+  return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".1"/>
+    <!-- паллеты с кирпичом -->
+    <rect x="28" y="76" width="18" height="10" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8"/>
+    <rect x="30" y="68" width="14" height="9" rx="1" fill="#243040" stroke="${color}" stroke-width=".8"/>
+    <rect x="32" y="62" width="10" height="7" rx="1" fill="${color}" opacity=".4" stroke="${color}" stroke-width=".5"/>
+    <!-- вторая паллета -->
+    <rect x="55" y="74" width="18" height="10" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8"/>
+    <rect x="57" y="66" width="14" height="9" rx="1" fill="#243040" stroke="${color}" stroke-width=".8"/>
+    <rect x="59" y="60" width="10" height="7" rx="1" fill="${color}" opacity=".4" stroke="${color}" stroke-width=".5"/>
+    <!-- упаковочная машина -->
+    <rect x="42" y="55" width="16" height="22" rx="3" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <rect x="45" y="58" width="10" height="4" rx="1" fill="${color}" opacity=".5"/>
+    <!-- лента -->
+    <rect x="22" y="82" width="76" height="4" rx="2" fill="#243040" stroke="${color}" stroke-width=".5"/>
+    <rect x="22" y="83" width="10" height="2" rx="1" fill="${color}" opacity=".5">
+      <animateTransform attributeName="transform" type="translate" from="0,0" to="76,0" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from=".5" to="0" dur="1.5s" repeatCount="indefinite"/>
+    </rect>
+  </svg>`;
+}
+
+const ZONE_SVGS = {
+  'Массаподготовка': svgMassa,
+  'Формовка': svgFormovka,
+  'Сушка / Углесушка': svgSushka,
+  'Обжиг': svgObzhig,
+  'Упаковка': svgUpakovka,
+};
+
+const ZONES_ORDER = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+
+function getColor(cls){ return cls==='danger'?'#ef4444':cls==='warn'?'#f59e0b':'#22c55e'; }
+
+function renderProdMap(equipment, liveData){
+  const byZone={};
+  for(const e of equipment){
+    const z=e.location||e.stage||'Другое';
+    if(!byZone[z])byZone[z]={total:0,ok:0,warn:0,err:0};
+    byZone[z].total++;
+    if(e.status==='Работает')byZone[z].ok++;
+    else if(e.status==='Внимание')byZone[z].warn++;
+    else byZone[z].err++;
+  }
+
+  const flow=document.getElementById('prodFlow');
+  const parts=[];
+
+  ZONES_ORDER.forEach((zone,i)=>{
+    const s=byZone[zone]||{total:0,ok:0,warn:0,err:0};
+    const cls=s.err>0?'danger':s.warn>0?'warn':'ok';
+    const color=getColor(cls);
+    const pct=s.total?Math.round(s.ok/s.total*100):100;
+    const svgFn=ZONE_SVGS[zone];
+
+    // живые данные
+    let liveVal='';
+    if(zone==='Массаподготовка'&&liveData['pl024_1_загрузка_проц']){
+      const v=parseFloat(liveData['pl024_1_загрузка_проц'].value);
+      const c=v<60?'var(--warn)':'var(--ok)';
+      liveVal=`<span style="font-size:10px;color:var(--text-dim)">PL024 №1</span>
+        <span class="zone-pct" style="color:${c}">${v.toFixed(0)}%</span>`;
+    } else {
+      liveVal=`<span class="zone-pct" style="color:${color}">${pct}%</span>`;
+    }
+
+    if(i>0) parts.push(`<div class="prod-arrow">
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <defs><linearGradient id="ag${i}" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="${getColor(byZone[ZONES_ORDER[i-1]]?.err>0?'danger':byZone[ZONES_ORDER[i-1]]?.warn>0?'warn':'ok')}"/>
+          <stop offset="100%" stop-color="${color}"/>
+        </linearGradient></defs>
+        <path d="M4,12 H18 M14,8 L18,12 L14,16" stroke="url(#ag${i})" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>`);
+
+    parts.push(`<div class="prod-zone ${cls}" onclick="window.location='/equipment'" title="${zone}">
+      <div class="zone-pulse ${cls}"></div>
+      <div class="zone-3d">${svgFn?svgFn(color):''}</div>
+      <div class="zone-name">${zone}</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:100%">
+        ${liveVal}
+        <div class="zone-bar" style="width:80%">
+          <div class="zone-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div class="zone-status" style="color:${color}">
+          ${s.err>0?`⚠ ${s.err} ошибок`:s.warn>0?`! ${s.warn} внимание`:s.total>0?'✓ Норма':''}
+        </div>
+        <div style="font-size:10px;color:var(--text-dim)">${s.total} ед.</div>
+      </div>
+    </div>`);
+  });
+
+  flow.innerHTML=parts.join('');
+  document.getElementById('mapTime').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── СЕНСОРЫ ───────────────────────────────────────────────
+let _live={};
+async function fetchLive(){
+  try{_live=await ACAI.get('/api/sensors/live');}catch{}
+  renderSensors(_live);
+}
+function renderSensors(lv){
+  if(!Object.keys(lv).length)return;
+  const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц','kp10_загрузка_проц','авария_флаг'];
+  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+  const items=KEYS.filter(k=>lv[k]).map(k=>{
+    const v=parseFloat(lv[k].value);
+    const a=k==='авария_флаг';
+    const c=a?(v>0?'var(--danger)':'var(--ok)'):v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+    const p=k.includes('проц')&&!a?Math.min(v,100):0;
+    return `<div class="ss-item">
+      ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
+      <span class="ss-label">${LABELS[k]}</span>
+      <span class="ss-val" style="color:${c}">${a?(v>0?'⚠ АВАРИЯ':'✓'):v.toFixed(1)+'%'}</span>
+    </div>`;
+  });
+  const now=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('sensorStrip').innerHTML=
+    `<span style="font-size:11px;color:var(--text-dim);flex-shrink:0">⚙️ Массаподготовка</span>
+     <div class="ss-sep"></div>${items.join('<div class="ss-sep"></div>')}
+     <span style="margin-left:auto;font-size:10px;color:var(--text-dim);font-family:var(--mono)">${now}</span>`;
+}
+
+// ── ДАШБОРД ───────────────────────────────────────────────
+async function renderDashboard(){
+  let d;try{d=await ACAI.get('/dashboard');}catch{return;}
+  const eq=d.equipment||[];
+  const w=eq.filter(e=>e.status==='Работает').length;
+  const wa=eq.filter(e=>e.status==='Внимание').length;
+  const er=eq.filter(e=>e.status==='Ошибка').length;
+  document.getElementById('metrics').innerHTML=`
+    <div class="metric ok"><div class="metric-label">Работает</div><div class="metric-value ok">${w}</div><div class="metric-sub">из ${eq.length} ед.</div></div>
+    <div class="metric ${er>0?'danger':wa>0?'warn':'ok'}"><div class="metric-label">Проблемы</div><div class="metric-value ${er>0?'danger':wa>0?'warn':'ok'}">${er+wa}</div><div class="metric-sub">${er} ошибок · ${wa} внимание</div></div>
+    <div class="metric ${(d.open_cases||0)>0?'danger':'ok'}"><div class="metric-label">Обращений</div><div class="metric-value ${(d.open_cases||0)>0?'danger':'ok'}">${d.open_cases||0}</div><div class="metric-sub">всего ${d.total_cases||0}</div></div>
+    <div class="metric accent"><div class="metric-label">Закрыто</div><div class="metric-value accent">${d.closed_cases||0}</div><div class="metric-sub">сегодня</div></div>
+    <div class="metric ${(d.active_downtimes_count||0)>0?'warn':'ok'}"><div class="metric-label">Простоев</div><div class="metric-value ${(d.active_downtimes_count||0)>0?'warn':'ok'}">${d.active_downtimes_count||0}</div><div class="metric-sub">${d.total_downtime_today_minutes||0} мин</div></div>`;
+  renderProdMap(eq,_live);
+  const open=d.open_problem_cases||[];
+  document.getElementById('openCount').textContent=open.length;
+  document.getElementById('caseList').innerHTML=open.length
+    ?open.slice(0,4).map(c=>{const cls=c.status==='Требует специалиста'?'esc':c.status==='Черновик закрытия'?'draft':'open';const color=cls==='esc'?'var(--danger)':cls==='draft'?'var(--warn)':'var(--accent)';const badge=cls==='esc'?'Эскалация':cls==='draft'?'Черновик':'Открыто';return`<div class="case-row ${cls}" onclick="window.location='/cases'"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:12px;font-weight:600">${c.equipment_name||c.machine||'—'}</span><span style="font-size:10px;font-weight:700;color:${color}">${badge}</span></div><div style="font-size:11px;color:var(--text-dim)">${c.symptom||c.worker_question||'—'}</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">${ACAI.timeAgo(c.created_at)}</div></div>`;}).join('')
+    :'<div class="empty">Нет открытых обращений ✓</div>';
+  const probs=d.top_problems||[];const maxC=probs[0]?.count||1;
+  document.getElementById('problemList').innerHTML=probs.length
+    ?probs.slice(0,5).map((p,i)=>`<div class="prob-row"><span style="font-size:11px;color:var(--text-dim);width:16px;text-align:right;flex-shrink:0">${i+1}</span><span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.symptom||'—'}</span><div style="width:70px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0"><div style="width:${Math.round(p.count/maxC*100)}%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0;width:20px;text-align:right">${p.count}</span></div>`).join('')
+    :'<div class="empty">Нет данных</div>';
+
+  // ── простои (перенесено со старой страницы /production) ──
+  const dts=d.active_downtimes||[];
+  const totalMin=d.total_downtime_today_minutes||0;
+  document.getElementById('downtimeTotal').textContent=
+    totalMin>=60?`${Math.floor(totalMin/60)}ч ${totalMin%60}м`:`${totalMin}м`;
+  document.getElementById('downtimeList').innerHTML=dts.length
+    ?dts.map(dt=>`<div style="padding:8px 10px;border-radius:8px;margin-bottom:5px;background:var(--surface-2)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:600">${dt.equipment_name||dt.machine||'—'}</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--warn)">${dt.duration_minutes??0} мин</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim)">${dt.reason||'Причина не указана'}</div>
+      </div>`).join('')
+    :'<div class="empty">Простоев нет ✓</div>';
+}
+
+// ── КАЛЕНДАРЬ ─────────────────────────────────────────────
+let calDate=new Date();let allTasks=[];let calOpen=false;
+let selectedDate=new Date();
+
+async function loadTasks(){
+  try{const r=await ACAI.get('/api/tasks');allTasks=r.tasks||[];}catch{}
+  renderWeek();
+}
+
+function dayKey(d){return`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;}
+
+function renderWeek(){
+  const today=new Date();const days=[];
+  // центрируем вокруг выбранной даты — показываем 3 дня до и 3 после
+  for(let i=-3;i<=3;i++){const d=new Date(selectedDate);d.setDate(selectedDate.getDate()+i);days.push(d);}
+  const DN=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+  document.getElementById('weekStrip').innerHTML=days.map((d)=>{
+    const isToday=dayKey(d)===dayKey(today);
+    const isSel=dayKey(d)===dayKey(selectedDate);
+    const ht=allTasks.some(t=>{if(!t.due_at)return false;return dayKey(new Date(t.due_at))===dayKey(d);});
+    const ts=d.getTime();
+    let style='';
+    if(isSel) style='background:var(--accent);border-color:var(--accent);color:#fff';
+    return`<div class="week-day ${ht&&!isSel?'has-task':''}"
+      style="${style}"
+      onclick="selectDate(new Date(${ts}))">
+      <div class="wd-name" style="${isSel?'color:rgba(255,255,255,.7)':''}">${DN[d.getDay()]}</div>
+      <div class="wd-num">${d.getDate()}</div>
+      ${isToday&&!isSel?'<div style="width:4px;height:4px;border-radius:50%;background:#fff;margin:0 auto;margin-top:2px"></div>':''}
+    </div>`;
+  }).join('');
+  renderDayEvents();
+}
+
+function selectDate(d){
+  selectedDate=d;
+  if(calOpen){renderFullCal();}else{renderWeek();}
+  renderDayEvents();
+}
+
+function taskDueColor(t){
+  if(!t.due_at) return 'var(--text-dim)';
+  if(t.status==='done') return 'var(--ok)';
+  const diff=new Date(t.due_at).getTime()-Date.now();
+  if(diff<0) return 'var(--danger)';           // просрочено
+  if(diff<86400000) return 'var(--warn)';       // сегодня/завтра
+  if(diff<86400000*3) return '#f59e0b';         // скоро
+  return 'var(--ok)';                           // есть время
+}
+
+function renderDayEvents(){
+  const d=selectedDate;
+  const isToday=dayKey(d)===dayKey(new Date());
+  const dt=allTasks.filter(t=>{
+    if(!t.due_at) return isToday; // без даты показываем сегодня
+    return dayKey(new Date(t.due_at))===dayKey(d);
+  });
+  const P={'high':'var(--danger)','medium':'var(--warn)','low':'var(--ok)'};
+  const dateStr=d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  const addBtn=`<button onclick="openAddTask()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;margin-left:auto">+ Задача</button>`;
+  const header=`<div style="display:flex;align-items:center;margin-bottom:6px"><span style="font-size:11px;color:var(--text-dim)">${dateStr}</span>${addBtn}</div>`;
+
+  const eventsEl=calOpen?document.getElementById('calDayEvents'):document.getElementById('weekEvents');
+  if(!eventsEl)return;
+  eventsEl.innerHTML=header+(dt.length
+    ?dt.map(t=>{
+        const color=taskDueColor(t);
+        const diff=t.due_at?new Date(t.due_at).getTime()-Date.now():null;
+        const label=t.status==='done'?'Выполнена':diff===null?'':diff<0?'Просрочено':diff<86400000?'Сегодня':'';
+        return`<div class="dev-item" style="border-left:3px solid ${color}">
+          <div class="dev-dot" style="background:${color}"></div>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${t.title}</span>
+          ${label?`<span style="font-size:10px;color:${color};font-weight:600;flex-shrink:0">${label}</span>`:''}
+        </div>`;
+      }).join('')
+    :'<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:6px">Задач нет</div>');
+}
+
+function openAddTask(){
+  const dateStr=selectedDate.toISOString().slice(0,16);
+  ACAI.showModal(`
+    <h3>Новая задача</h3>
+    <div class="field"><label>Название *</label><input class="input" id="qt-title" placeholder="Что нужно сделать?"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>Приоритет</label>
+        <select class="input" id="qt-prio">
+          <option value="low">Низкий</option>
+          <option value="normal" selected>Нормальный</option>
+          <option value="high">Высокий</option>
+        </select>
+      </div>
+      <div class="field"><label>Тип</label>
+        <select class="input" id="qt-type">
+          <option value="maintenance">ТО</option>
+          <option value="repair">Ремонт</option>
+          <option value="inspection">Проверка</option>
+          <option value="ordinary" selected>Другое</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Видимость</label>
+      <select class="input" id="qt-vis">
+        <option value="everyone">Все пользователи</option>
+        <option value="role">Определённая роль</option>
+        <option value="assignees">Только мне</option>
+      </select>
+    </div>
+    <div class="field" id="qt-role-wrap" style="display:none"><label>Роль</label>
+      <select class="input" id="qt-role">
+        <option value="director">Директор</option>
+        <option value="chief_engineer">Гл. инженер</option>
+        <option value="engineer">Инженер</option>
+        <option value="shift_supervisor">Мастер смены</option>
+        <option value="chief_mechanic">Гл. механик</option>
+        <option value="mechanic">Механик</option>
+        <option value="worker">Рабочий</option>
+        <option value="technologist">Технолог</option>
+      </select>
+    </div>
+    <div class="field"><label>Срок</label><input class="input" id="qt-due" type="datetime-local" value="${dateStr}"></div>
+    <div class="field"><label>Описание</label><textarea class="input" id="qt-desc" rows="2"></textarea></div>
+    <div id="qt-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitTask()">Создать</button>
+    </div>
+  `);
+  document.getElementById('qt-vis').onchange=function(){
+    document.getElementById('qt-role-wrap').style.display=this.value==='role'?'block':'none';
+  };
+}
+
+async function submitTask(){
+  const title=document.getElementById('qt-title')?.value.trim();
+  if(!title){document.getElementById('qt-err').textContent='Введите название';return;}
+  const vis=document.getElementById('qt-vis')?.value;
+  const role=vis==='role'?document.getElementById('qt-role')?.value:null;
+  try{
+    await ACAI.post('/api/tasks',{
+      title,
+      description:document.getElementById('qt-desc')?.value.trim()||null,
+      priority:document.getElementById('qt-prio')?.value||'medium',
+      task_type:document.getElementById('qt-type')?.value||'other',
+      due_at:document.getElementById('qt-due')?.value||null,
+      visibility:vis==='assignees'?'assignees':vis==='role'?'role':'everyone',
+      visibility_role:role,
+    });
+    ACAI.toast('Задача создана','ok');
+    ACAI.closeModal();
+    await loadTasks();
+  }catch(e){document.getElementById('qt-err').textContent=e.message;}
+}
+
+function toggleCal(){
+  calOpen=!calOpen;
+  document.getElementById('weekView').style.display=calOpen?'none':'block';
+  document.getElementById('fullCal').style.display=calOpen?'block':'none';
+  document.getElementById('calToggleText').textContent=calOpen?'Свернуть':'Развернуть';
+  if(calOpen)renderFullCal();else renderWeek();
+}
+function renderFullCal(){
+  const year=calDate.getFullYear();const month=calDate.getMonth();const today=new Date();
+  document.getElementById('calMonth').textContent=new Date(year,month,1).toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const fd=new Date(year,month,1).getDay();const dim=new Date(year,month+1,0).getDate();const off=fd===0?6:fd-1;
+  const td=new Set();allTasks.forEach(t=>{if(!t.due_at)return;const d=new Date(t.due_at);if(d.getFullYear()===year&&d.getMonth()===month)td.add(d.getDate());});
+  const DN=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  let h=DN.map(d=>`<div class="cal-dn">${d}</div>`).join('');
+  for(let i=0;i<off;i++)h+='<div></div>';
+  for(let d=1;d<=dim;d++){
+    const it=d===today.getDate()&&month===today.getMonth()&&year===today.getFullYear();
+    const isSel=d===selectedDate.getDate()&&month===selectedDate.getMonth()&&year===selectedDate.getFullYear();
+    const ht=td.has(d);
+    const ts=new Date(year,month,d).getTime();
+    h+=`<div class="cal-d ${it?'today':''} ${ht?'has-task':''}" style="${isSel&&!it?'background:rgba(59,130,246,.2);':''}" onclick="selectDate(new Date(${ts}))">${d}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML=h;
+  renderDayEvents();
+}
+
+function prevMonth(){calDate.setMonth(calDate.getMonth()-1);renderFullCal();}
+function nextMonth(){calDate.setMonth(calDate.getMonth()+1);renderFullCal();}
+
+// ── ЗАПУСК ────────────────────────────────────────────────
+async function refresh(){await fetchLive();await renderDashboard();}
+initLayout();refresh();loadTasks();
+setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
+</script>
+
+<!-- ── ПОМОЩНИК РУКОВОДИТЕЛЯ ──
+     Отвечает по данным дашборда: что стоит, что просрочено, где
+     повторяется поломка. Обращений не создаёт и оборудование не трогает —
+     только читает и отвечает. Кружок справа внизу, чтобы не занимать
+     место на экране, пока не нужен. -->
+<button id="aiFab" type="button" title="Спросить о заводе"
+  style="display:none;position:fixed;right:20px;bottom:20px;z-index:65;
+         width:56px;height:56px;border-radius:50%;border:none;
+         background:var(--accent);color:#fff;font-size:24px;cursor:pointer;
+         box-shadow:0 10px 28px rgba(59,130,246,.45)">💬</button>
+
+<div id="aiPanel"
+  style="display:none;position:fixed;right:20px;bottom:88px;z-index:66;
+         width:380px;max-width:calc(100vw - 40px);max-height:70vh;
+         background:var(--surface);border:1px solid var(--border);
+         border-radius:14px;box-shadow:0 22px 54px rgba(0,0,0,.5);
+         flex-direction:column;overflow:hidden">
+
+  <div style="display:flex;align-items:center;gap:10px;padding:13px 15px;
+              border-bottom:1px solid var(--border)">
+    <span style="font-size:17px">💬</span>
+    <span style="flex:1">
+      <span style="display:block;font-size:13px;font-weight:700">Спросить о заводе</span>
+      <span style="display:block;font-size:11px;color:var(--text-dim)">
+        Отвечает по данным системы</span>
+    </span>
+    <button onclick="toggleAi(false)"
+      style="border:none;background:none;color:var(--text-dim);
+             font-size:18px;cursor:pointer;line-height:1">✕</button>
+  </div>
+
+  <div id="aiBody" style="flex:1;overflow-y:auto;padding:14px 15px;
+                          font-size:13px;line-height:1.6"></div>
+
+  <div style="padding:12px 15px;border-top:1px solid var(--border);
+              display:flex;gap:8px">
+    <input id="aiInput" class="input" placeholder="Что стоит сейчас?"
+      style="flex:1;font-size:14px;padding:10px 12px"
+      onkeydown="if(event.key==='Enter')askAi()">
+    <button class="btn primary" onclick="askAi()" id="aiSend">→</button>
+  </div>
+</div>
+
+<script>
+// Вопросы, с которых обычно начинают: нажать быстрее, чем печатать,
+// и сразу видно, что помощник умеет.
+const AI_HINTS = [
+  'Что требует моего решения?',
+  'Какое оборудование не в норме?',
+  'Что просрочено?',
+];
+
+function toggleAi(open){
+  const panel = document.getElementById('aiPanel');
+  const fab   = document.getElementById('aiFab');
+  panel.style.display = open ? 'flex' : 'none';
+  fab.style.display   = open ? 'none' : 'block';
+  if (open && !document.getElementById('aiBody').children.length) aiGreet();
+  if (open) document.getElementById('aiInput').focus();
+}
+
+function aiGreet(){
+  aiAdd('assistant',
+    'Отвечаю по данным системы: оборудование, обращения, простои, задачи. ' +
+    'Спросите своими словами.');
+  const body = document.getElementById('aiBody');
+  const hints = document.createElement('div');
+  hints.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:10px';
+  hints.innerHTML = AI_HINTS.map(h =>
+    `<button class="btn secondary sm" style="font-size:11px"
+       onclick="document.getElementById('aiInput').value='${h}';askAi()">${h}</button>`
+  ).join('');
+  body.appendChild(hints);
+}
+
+function aiAdd(who, text){
+  const body = document.getElementById('aiBody');
+  const row = document.createElement('div');
+  row.style.cssText = 'margin-bottom:12px';
+  row.innerHTML = who === 'user'
+    ? `<div style="text-align:right"><span style="display:inline-block;
+         background:var(--accent);color:#fff;padding:8px 12px;border-radius:12px;
+         max-width:85%;text-align:left">${text}</span></div>`
+    : `<div style="white-space:pre-wrap">${text}</div>`;
+  body.appendChild(row);
+  body.scrollTop = body.scrollHeight;
+  return row;
+}
+
+async function askAi(){
+  const input = document.getElementById('aiInput');
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.value = '';
+  aiAdd('user', question);
+
+  const waiting = aiAdd('assistant', 'Смотрю данные...');
+  document.getElementById('aiSend').disabled = true;
+
+  try{
+    const r = await ACAI.post('/management-ai', { message: question });
+    waiting.querySelector('div').textContent =
+      r.answer || 'Не удалось получить ответ.';
+  }catch(e){
+    waiting.querySelector('div').textContent =
+      'Не удалось получить ответ: ' + (e.message || 'ошибка связи');
+  }finally{
+    document.getElementById('aiSend').disabled = false;
+    document.getElementById('aiBody').scrollTop = 9e9;
+  }
+}
+
+// Показываем только тем, кому эндпоинт и так доступен: рабочему этот
+// помощник не нужен и права на него у него нет.
+(function(){
+  const allowed = ['admin','director','chief_engineer','engineer',
+                   'shift_supervisor','analyst','chief_mechanic','chief_electrician'];
+  const check = setInterval(() => {
+    const role = document.body.dataset.role;
+    if (!role) return;
+    clearInterval(check);
+    if (allowed.includes(role)) {
+      document.getElementById('aiFab').style.display = 'block';
+      document.getElementById('aiFab').onclick = () => toggleAi(true);
+    }
+  }, 200);
+})();
+</script>
+
+</body>
+</html>

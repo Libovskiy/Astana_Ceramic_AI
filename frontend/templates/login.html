@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Astana Ceramic — Вход</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/acai.css?v=9">
+    <style>
+        /* Вход был светлым от старой версии, а система тёмная: человек
+           логинился на белом экране и проваливался в тёмный, будто это
+           два разных сайта. Берём ту же палитру, что и везде. */
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+        }
+
+        .login-page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 360px;
+            padding: 32px 28px;
+            border-radius: var(--radius);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+        }
+
+        .login-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 26px;
+        }
+
+        .login-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 11px;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 700;
+            font-size: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .login-brand-name { font-size: 16px; font-weight: 700; line-height: 1.2; }
+        .login-brand-sub  { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+        .login-title { margin: 0 0 20px; font-size: 19px; font-weight: 600; }
+
+        .login-field { margin-bottom: 14px; }
+
+        .login-field label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        /* Поля крупные: с этого экрана заходят с телефона, часто в
+           перчатках. Шрифт 16px — иначе iOS зумит страницу при фокусе. */
+        .login-field input {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 16px;
+            font-family: var(--sans);
+            box-sizing: border-box;
+            transition: border-color .15s;
+        }
+
+        .login-field input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .login-field input::placeholder { color: var(--text-dim); }
+
+        .login-error {
+            min-height: 18px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: var(--danger);
+            line-height: 1.4;
+        }
+
+        .login-submit {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: var(--sans);
+            cursor: pointer;
+            transition: opacity .15s;
+        }
+
+        .login-submit:hover:not(:disabled) { opacity: .9; }
+        .login-submit:disabled { opacity: .5; cursor: default; }
+
+        .login-foot {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-page">
+
+    <div class="login-card">
+
+        <div class="login-brand">
+            <div class="login-logo">AC</div>
+            <div>
+                <div class="login-brand-name">Astana Ceramic</div>
+                <div class="login-brand-sub">ACAI v2</div>
+            </div>
+        </div>
+
+        <h1 class="login-title">Вход в систему</h1>
+
+        <form id="loginForm">
+
+            <div class="login-field">
+                <label for="username">Логин</label>
+                <input id="username" name="username" type="text"
+                       autocomplete="username" autocapitalize="off"
+                       autocorrect="off" spellcheck="false" required>
+            </div>
+
+            <div class="login-field">
+                <label for="password">Пароль</label>
+                <input id="password" name="password" type="password"
+                       autocomplete="current-password" required>
+            </div>
+
+            <div id="loginError" class="login-error"></div>
+
+            <button id="loginSubmit" class="login-submit" type="submit">
+                Войти
+            </button>
+
+        </form>
+
+        <div class="login-foot">Если забыли пароль — обратитесь к мастеру смены</div>
+
+    </div>
+
+</div>
+
+<script src="/static/login.js?v=1"></script>
+
+</body>
+</html>

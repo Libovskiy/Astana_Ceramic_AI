@@ -1,0 +1,27 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+logs/
+.env
+docs/
+knowledge_base/
+
+# фото обходов смены — не в репозиторий
+data/checklist_photos/
+
+# macOS
+.DS_Store
+*.savedSearch
+
+# локальные бэкапы/патчи, не для репозитория
+*.bak
+*.bak-*
+*.backup
+*.backup-*
+*.disabled
+backups/
+_cleanup_archive/

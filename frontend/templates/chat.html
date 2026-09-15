@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACAI — Обращения</title>
+    <link rel="stylesheet" href="/static/style.css?v=31">
+    <link rel="stylesheet" href="/static/chat.css?v=31">
+</head>
+<body>
+
+<div class="chat-app">
+
+    <!-- ============ ШАПКА ============ -->
+    <header class="chat-header">
+
+        <div class="chat-header-left">
+            <button type="button" id="chatBack" class="chat-back" title="Назад к списку">‹</button>
+            <div>
+                <div class="chat-title" id="chatTitle">Обращения</div>
+                <div class="chat-subtitle" id="chatSubtitle">ACAI</div>
+            </div>
+        </div>
+
+        <div class="chat-header-right">
+            <!-- Кнопка "Разделы" видна только тем, у кого есть другие
+                 разделы. Рабочему уходить некуда — у него весь ACAI
+                 это переписка, и лишний пункт меню только мешает. -->
+            <button type="button" id="chatSound" class="chat-action" title="Звук уведомлений">🔊</button>
+            <a href="/" id="chatHome" class="chat-action" style="display:none;" title="Другие разделы">Разделы</a>
+            <button type="button" id="chatCardButton" class="chat-action" style="display:none;"
+                    onclick="toggleCard()" title="История обращения">История</button>
+            <button type="button" id="chatResolve" class="chat-action chat-action-done" style="display:none;">
+                Решено
+            </button>
+            <button type="button" id="chatLogout" class="chat-action chat-action-danger" title="Выйти из системы">Выйти</button>
+        </div>
+
+    </header>
+
+    <!-- ============ СПИСОК ОБРАЩЕНИЙ ============ -->
+    <section class="chat-list" id="chatList">
+
+        <button type="button" class="chat-new" id="chatNew">
+            <span class="chat-new-icon">+</span>
+            Сообщить о проблеме
+        </button>
+
+        <div id="chatConversations">
+            <div class="chat-empty">Загрузка...</div>
+        </div>
+
+    </section>
+
+    <!-- ============ ПЕРЕПИСКА ============ -->
+    <section class="chat-thread" id="chatThread">
+
+        <div class="chat-card" id="chatCard" style="display:none;"></div>
+
+        <!-- Где сейчас обращение: зарегистрировано -> ACAI ->
+             специалист -> ремонт -> подтверждение -> закрыто -->
+        <div class="chat-stages" id="chatStages" style="display:none;"></div>
+
+        <!-- Что уже проверили. Видят специалисты, чтобы не
+             повторять работу друг за другом. -->
+        <div class="chat-checked" id="chatChecked" style="display:none;"></div>
+
+        <div class="chat-messages" id="chatMessages"></div>
+
+        <div class="chat-basis" id="chatBasis" style="display:none;"></div>
+
+        <!-- Действия: взять в работу, ремонт выполнен, черновик,
+             подтвердить. Набор зависит от роли и статуса, решает сервер. -->
+        <div class="chat-actions" id="chatActions" style="display:none;"></div>
+
+        <!-- "Станок работает?" — закрывает человек, не ИИ -->
+        <div class="chat-confirm" id="chatConfirm" style="display:none;"></div>
+
+        <div class="chat-composer" id="chatComposer">
+            <textarea
+                id="chatInput"
+                rows="1"
+                placeholder="Напишите сообщение..."
+            ></textarea>
+            <button type="button" id="chatSend" class="chat-send" title="Отправить">➤</button>
+        </div>
+
+    </section>
+
+    <!-- ============ НОВОЕ ОБРАЩЕНИЕ ============ -->
+    <section class="chat-new-form" id="chatNewForm">
+
+        <div class="chat-new-step">
+            <div class="chat-new-label">На каком станке проблема?</div>
+            <div id="chatEquipmentList" class="chat-equipment-list">
+                <div class="chat-empty">Загрузка...</div>
+            </div>
+        </div>
+
+        <div class="chat-new-step">
+            <div class="chat-new-label">Что случилось?</div>
+            <textarea
+                id="chatNewText"
+                rows="3"
+                placeholder="Например: плёнка рвётся при обмотке, подшипник греется и стучит"
+            ></textarea>
+        </div>
+
+        <button type="button" id="chatNewSubmit" class="chat-submit">Отправить</button>
+
+        <div id="chatNewError" class="chat-new-error"></div>
+
+    </section>
+
+</div>
+
+<script src="/static/notify.js?v=31"></script>
+<script src="/static/chat.js?v=31"></script>
+
+</body>
+</html>

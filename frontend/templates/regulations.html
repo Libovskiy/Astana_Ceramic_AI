@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Регламенты — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.reg-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:16px; margin-bottom:10px;
+  cursor:pointer; transition:border-color .15s;
+  display:flex; align-items:center; gap:14px;
+}
+.reg-card:hover { border-color:var(--accent); }
+.reg-icon { font-size:28px; flex-shrink:0; }
+.reg-body { flex:1; min-width:0; }
+.reg-name { font-size:14px; font-weight:600; margin-bottom:3px; }
+.reg-meta { font-size:12px; color:var(--text-dim); }
+.reg-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+.pending-banner {
+  background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.2);
+  border-radius:10px; padding:12px 16px; margin-bottom:16px;
+  display:flex; align-items:center; gap:10px;
+  font-size:13px; color:var(--warn);
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Регламенты</div>
+        <div class="topbar-sub">Производственные стандарты и нормы</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn primary" id="createRegBtn" style="display:none" onclick="openCreateReg()">+ Регламент</button>
+        <input class="input" id="searchReg" placeholder="🔍 Поиск..." style="width:200px">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page">
+      <div id="pendingBanner" style="display:none" class="pending-banner">
+        ⚠️ <span id="pendingText"></span>
+      </div>
+      <div id="regList"><div class="empty">Загрузка...</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="_overlay">
+  <div class="modal" id="_modal" style="width:640px;max-width:95vw"></div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script>
+// В ACAI есть get и post, но не put — а правка этапа идёт через PUT.
+const apiPut = async (path, body) => {
+  const r = await fetch(path, {
+    method:'PUT', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if (r.status === 401) { window.location.href='/login'; throw new Error('401'); }
+  if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j.detail || r.status); }
+  return r.json();
+};
+
+let allRegs = [];
+let permissions = {};
+let currentUser = null;
+
+async function load() {
+  const r = await ACAI.get('/api/regulations');
+  allRegs = r.regulations || [];
+  permissions = r.permissions || {};
+  const pending = r.pending_ack || [];
+
+  if (pending.length) {
+    document.getElementById('pendingBanner').style.display = 'flex';
+    document.getElementById('pendingText').textContent =
+      `У вас ${pending.length} регламент${pending.length>1?'а':''} требует подтверждения прочтения`;
+  }
+
+  // Сервер отдаёт права ключами действий: regulation.create, regulation.edit.
+  // Скрипт искал can_create — такого ключа нет, поэтому кнопка «+ Регламент»
+  // не показывалась никому, и завести регламент было нельзя.
+  if (permissions['regulation.create']) {
+    document.getElementById('createRegBtn').style.display = 'block';
+  }
+
+  render();
+}
+
+function render() {
+  const q = document.getElementById('searchReg')?.value.toLowerCase() || '';
+  // Архивные прячем: они уже не действуют, а в списке создают впечатление,
+  // что убрать регламент не получилось.
+  let items = window._showArchived ? allRegs : allRegs.filter(r => r.status !== 'archived');
+  if (q) items = items.filter(r =>
+    (r.name||'').toLowerCase().includes(q) ||
+    (r.product_type||'').toLowerCase().includes(q)
+  );
+
+  const archived = allRegs.filter(r => r.status === 'archived').length;
+  const toggle = archived ? `
+    <div style="margin-top:14px;text-align:center">
+      <button class="btn secondary sm" onclick="window._showArchived=!window._showArchived;render()">
+        ${window._showArchived ? 'Скрыть архив' : `Показать архив (${archived})`}
+      </button>
+    </div>` : '';
+
+  document.getElementById('regList').innerHTML = items.length
+    ? items.map(reg => {
+        // Сервер отдаёт status и stages_count. Раньше читались is_active и
+        // stages.length — таких полей нет, поэтому активный регламент всегда
+        // показывался черновиком, а этапы — нулём.
+        const isActive = reg.status === 'active' || reg.is_active === true;
+        const stagesCount = reg.stages_count ?? (reg.stages?.length || 0);
+        const created = reg.created_at ? ACAI.shortDate(reg.created_at) : '—';
+
+        return `<div class="reg-card" onclick="openReg(${reg.id})">
+          <div class="reg-icon">${isActive ? '📗' : '📔'}</div>
+          <div class="reg-body">
+            <div class="reg-name">${reg.name}</div>
+            <div class="reg-meta">
+              ${reg.product_type ? `${reg.product_type} · ` : ''}
+              ${stagesCount} этапов · создан ${created}
+              ${reg.created_by ? ` · ${reg.created_by}` : ''}
+            </div>
+          </div>
+          <div class="reg-right">
+            ${reg.needs_ack ? '<span class="badge warn">Прочитать</span>' : ''}
+            <span class="badge ${isActive?'ok':'neutral'}">${
+              reg.status==='archived' ? 'Архив' : isActive ? 'Активен' : 'Черновик'}</span>
+          </div>
+        </div>`;
+      }).join('') + toggle
+    : '<div class="empty">Регламентов нет</div>' + toggle;
+}
+
+async function openReg(id) {
+  const r = await ACAI.get(`/api/regulations/${id}`);
+  const reg = r.regulation || r;
+  const stages = reg.stages || [];
+  const canEdit = permissions['regulation.edit'];
+  const needsAck = reg.needs_ack;
+  // Менять состав можно только в черновике: активный регламент правится
+  // через новую версию, иначе нормы поплывут задним числом.
+  const isActive = reg.status === 'active' || reg.is_active === true;
+  const isDraft = !isActive;
+  window._regIsActive = isActive;   // формам нужно знать, спрашивать ли причину
+  window._regId = id;
+  window._regStages = stages;
+
+  const stagesHtml = stages.map((s,i) => `
+    <div style="padding:12px;background:var(--surface-2);border-radius:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:600">
+          ${i+1}. ${s.name||s.title||'Этап'}
+          ${(() => {
+            const params = s.parameters||[];
+            if (!params.length) return '';
+            const empty = params.filter(x => normText(x) === '—').length;
+            // Технологу важно видеть, сколько норм ещё не внесено:
+            // без этого «—» теряются в длинном списке.
+            return `<span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:6px">
+              ${params.length} парам.${empty?` · ${empty} без нормы`:''}</span>`;
+          })()}
+        </span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${s.duration_minutes ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">${s.duration_minutes} мин</span>` : ''}
+          ${canEdit ? `
+            <button class="btn secondary sm" onclick="openParamForm(${id},${s.id})">+ Параметр</button>
+            <button class="btn secondary sm" title="Переименовать"
+              onclick='openStageForm(${id}, ${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+            <button class="btn secondary sm" title="Удалить этап"
+              onclick="deleteStage(${id},${s.id})">🗑</button>` : ''}
+        </span>
+      </div>
+      ${s.description ? `<div style="font-size:12px;color:var(--text-dim)">${s.description}</div>` : ''}
+      ${(s.parameters||[]).length ? `
+        <div style="margin-top:10px">
+          ${s.parameters.map(p => {
+            // Строкой, а не плашкой вподбор: при двадцати параметрах с
+            // длинными названиями плашки сливаются в нечитаемую кашу.
+            // Название слева, норма справа — глаз идёт по одной колонке.
+            const filled = normText(p) !== '—';
+            return `
+            <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;
+                        border-bottom:1px solid var(--border)">
+              <span style="flex:1;font-size:12px;line-height:1.35;min-width:0">
+                ${p.name}
+                ${p.is_critical?`<span style="color:var(--danger);font-size:10px;
+                   border:1px solid var(--danger);border-radius:3px;padding:0 4px;
+                   margin-left:6px;white-space:nowrap">важно</span>`:''}
+                ${p.equipment_name?`<span style="display:block;font-size:10px;color:var(--accent)">
+                   ⚙ ${p.equipment_name}</span>`:''}
+              </span>
+              <span style="font-family:var(--mono);font-size:13px;font-weight:700;
+                           white-space:nowrap;color:${filled?'var(--text)':'var(--text-dim)'}">
+                ${normText(p)}
+              </span>
+              ${canEdit?`<span style="display:flex;gap:8px;flex-shrink:0">
+                <span style="cursor:pointer;color:var(--text-dim)" title="Изменить норму"
+                 onclick='openParamForm(${id}, ${p.stage_id}, ${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</span>
+                <span style="cursor:pointer;color:var(--text-dim)" title="Удалить параметр"
+                 onclick="deleteParam(${id},${p.id})">✕</span>
+              </span>`:''}
+            </div>`;
+          }).join('')}
+        </div>` : ''}
+    </div>
+  `).join('') || '<div class="empty">Этапы не заполнены</div>';
+
+  ACAI.showModal(`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="font-size:24px">${isActive?'📗':'📔'}</span>
+      <div style="flex:1">
+        <h3 style="margin:0">${reg.name}</h3>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
+          ${reg.product_type||''} · ${reg.created_by||'—'}
+        </div>
+      </div>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="badge ${isActive?'ok':'neutral'}">${isActive?'Активен':'Черновик'}</span>
+        ${canEdit?`
+          <button class="btn secondary sm" title="Переименовать"
+            onclick='openRegEdit(${id}, ${JSON.stringify({name:reg.name,product_type:reg.product_type,description:reg.description||''}).replace(/'/g,"&#39;")}, ${isActive})'>✎</button>
+          <button class="btn secondary sm" title="В архив"
+            onclick="archiveReg(${id})">🗄</button>`:''}
+      </span>
+    </div>
+
+    ${reg.description ? `
+      <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.6">
+        ${reg.description}
+      </div>` : ''}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span style="font-size:12px;font-weight:600;color:var(--text-dim)">ЭТАПЫ ПРОИЗВОДСТВА</span>
+      ${canEdit ? `<button class="btn secondary sm" onclick="openStageForm(${id})">+ Этап</button>` : ''}
+    </div>
+    ${stagesHtml}
+
+    ${canEdit&&isActive ? `
+      <div style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.5">
+        Регламент действует. Любая правка создаст новую версию — система спросит причину,
+        а прежняя версия останется в истории.
+      </div>` : ''}
+
+    <div class="modal-foot">
+      ${canEdit&&isDraft&&stages.length ? `<button class="btn ok" onclick="activateReg(${id})">✓ Ввести в действие</button>` : ''}
+      ${needsAck ? `<button class="btn ok" onclick="ackReg(${id})">✓ Подтвердить прочтение</button>` : ''}
+      <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+    </div>
+  `);
+}
+
+async function ackReg(id) {
+  await ACAI.post(`/api/regulations/${id}/ack`, {});
+  ACAI.toast('Прочтение подтверждено', 'ok');
+  ACAI.closeModal();
+  await load();
+}
+
+// Норма человеческим текстом. В базе лежат min/max/target по отдельности,
+// а тип нормы решает, что из них показывать: «18–22 %», «не менее 40 МПа».
+function normText(p){
+  const u = p.unit ? ' ' + p.unit : '';
+  const has = v => v !== null && v !== undefined && v !== '';
+  const t = p.param_type || 'range';
+
+  if (t === 'boolean') return p.requirement_text || 'да';
+  if (t === 'text')    return p.requirement_text || p.text_rule || '—';
+  if (t === 'min')     return has(p.min_value) ? `не менее ${p.min_value}${u}` : '—';
+  if (t === 'max')     return has(p.max_value) ? `не более ${p.max_value}${u}` : '—';
+
+  if (t === 'target' || has(p.target_value)) {
+    if (has(p.target_value)) {
+      const tol = has(p.tolerance_abs) ? ` ±${p.tolerance_abs}` : '';
+      return `${p.target_value}${tol}${u}`;
+    }
+  }
+  if (has(p.min_value) && has(p.max_value)) return `${p.min_value}–${p.max_value}${u}`;
+  if (has(p.min_value)) return `от ${p.min_value}${u}`;
+  if (has(p.max_value)) return `до ${p.max_value}${u}`;
+  return p.requirement_text || '—';
+}
+
+// ── карточка регламента ──────────────────────────────────
+// Название и описание — подпись на папке, а не норма: их правка новой
+// версии не требует. Вид продукции у действующего менять нельзя, по нему
+// цех находит свои нормы.
+function openRegEdit(regId, reg, isActive){
+  ACAI.showModal(`
+    <h3>Изменить регламент</h3>
+    <div class="field"><label>Название *</label>
+      <input class="input" id="rg-name" value="${(reg.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Вид продукции</label>
+      <input class="input" id="rg-type" value="${(reg.product_type||'').replace(/"/g,'&quot;')}" ${isActive?'disabled':''}>
+      ${isActive?`<div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        У действующего регламента вид продукции менять нельзя.</div>`:''}</div>
+    <div class="field"><label>Описание</label>
+      <textarea class="input" id="rg-desc" rows="3">${reg.description||''}</textarea></div>
+    <div id="rg-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
+      <button class="btn primary" onclick="submitRegEdit(${regId},${isActive})">Сохранить</button>
+    </div>
+  `);
+}
+
+async function submitRegEdit(regId, isActive){
+  const err=document.getElementById('rg-err');
+  const name=document.getElementById('rg-name')?.value.trim();
+  if(!name){err.textContent='Введите название';return;}
+  const body={name, description:document.getElementById('rg-desc')?.value||''};
+  if(!isActive) body.product_type=document.getElementById('rg-type')?.value.trim();
+  try{
+    await apiPut(`/api/regulations/${regId}`, body);
+    ACAI.toast('Сохранено','ok');
+    await load(); await openReg(regId);
+  }catch(e){ err.textContent=e.message||'Ошибка'; }
+}
+
+async function archiveReg(regId){
+  ACAI.showModal(`
+    <h3>Убрать регламент</h3>
+    <div style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px">
+      Пустой черновик будет удалён. Регламент, по которому уже работали,
+      уйдёт в архив: замеры и подтверждения об ознакомлении останутся.
+    </div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
+      <button class="btn danger" onclick="doArchiveReg(${regId})">Убрать</button>
+    </div>
+  `);
+}
+
+async function doArchiveReg(regId){
+  try{
+    const r=await fetch(`/api/regulations/${regId}`,{method:'DELETE',credentials:'include'});
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||'Ошибка');}
+    const j=await r.json();
+    ACAI.toast(j.mode==='deleted'?'Черновик удалён':'Убран в архив','ok');
+    ACAI.closeModal();
+    await load();
+  }catch(e){ ACAI.toast(e.message||'Ошибка','danger'); }
+}
+
+// ── этапы ────────────────────────────────────────────────
+// Причину спрашиваем только у действующего регламента: правка создаст
+// новую версию, и без объяснения «почему» история станет бесполезной.
+function reasonField(){
+  return window._regIsActive ? `
+    <div class="field"><label>Причина изменения *</label>
+      <input class="input" id="x-reason" placeholder="Например: сменился поставщик глины">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Будет создана новая версия регламента. Причина попадёт в историю.
+      </div>
+    </div>` : '';
+}
+function reasonValue(){
+  return window._regIsActive ? (document.getElementById('x-reason')?.value.trim()||'') : null;
+}
+
+function openStageForm(regId, stage){
+  const st = stage || null;
+  ACAI.showModal(`
+    <h3>${st?'Изменить этап':'Новый этап'}</h3>
+    <div class="field"><label>Название *</label>
+      <input class="input" id="st-name" value="${st?(st.name||''):''}" placeholder="Массаподготовка, Формовка, Обжиг..."></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field"><label>Порядок</label>
+        <input class="input" id="st-order" type="number" value="${st?(st.sort_order??100):100}"></div>
+      <div class="field"><label>Код (необязательно)</label>
+        <input class="input" id="st-key" value="${st?(st.stage_key||''):''}" placeholder="mass, forming"></div>
+    </div>
+    <div class="field"><label>Описание</label><textarea class="input" id="st-desc" rows="2">${st?(st.description||''):''}</textarea></div>
+    ${reasonField()}
+    <div id="st-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
+      <button class="btn primary" onclick="submitStage(${regId}${st?','+st.id:''})">${st?'Сохранить':'Добавить'}</button>
+    </div>
+  `);
+}
+
+async function submitStage(regId, stageId){
+  const err=document.getElementById('st-err');
+  const name=document.getElementById('st-name')?.value.trim();
+  if(!name){err.textContent='Введите название';return;}
+  const reason=reasonValue();
+  if(window._regIsActive && !reason){err.textContent='Укажите причину изменения';return;}
+
+  const body={
+    name,
+    stage_key:document.getElementById('st-key')?.value.trim()||null,
+    sort_order:parseInt(document.getElementById('st-order')?.value||'100'),
+    description:document.getElementById('st-desc')?.value.trim()||null,
+    reason
+  };
+  try{
+    if(stageId) await apiPut(`/api/regulations/${regId}/stages/${stageId}`, body);
+    else        await ACAI.post(`/api/regulations/${regId}/stages`, body);
+    ACAI.toast(stageId?'Этап изменён':'Этап добавлен','ok');
+    await load();          // статус и версия могли поменяться
+    await openReg(regId);
+  }catch(e){err.textContent=e.message||'Ошибка';}
+}
+
+// ── удаление ─────────────────────────────────────────────
+function askReasonThen(title, text, fn){
+  ACAI.showModal(`
+    <h3>${title}</h3>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px;line-height:1.5">${text}</div>
+    <div class="field"><label>Причина${window._regIsActive?' *':''}</label>
+      <input class="input" id="d-reason" placeholder="Зачем убираем"></div>
+    <div id="d-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(window._regId)">Отмена</button>
+      <button class="btn danger" id="d-go">Удалить</button>
+    </div>
+  `);
+  document.getElementById('d-go').onclick=async()=>{
+    const reason=document.getElementById('d-reason')?.value.trim()||'';
+    if(window._regIsActive && !reason){document.getElementById('d-err').textContent='Укажите причину';return;}
+    try{ await fn(reason); }catch(e){ document.getElementById('d-err').textContent=e.message||'Ошибка'; }
+  };
+}
+
+async function deleteStage(regId, stageId){
+  window._regId=regId;
+  askReasonThen('Удалить этап','Этап уйдёт в архив вместе со своими параметрами.', async(reason)=>{
+    const r=await fetch(`/api/regulations/${regId}/stages/${stageId}?reason=${encodeURIComponent(reason)}`,
+      {method:'DELETE',credentials:'include'});
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||'Ошибка');}
+    ACAI.toast('Этап удалён','ok');
+    await load(); await openReg(regId);
+  });
+}
+
+async function deleteParam(regId, paramId){
+  window._regId=regId;
+  askReasonThen('Удалить параметр','Параметр уйдёт в архив. Замеры по нему останутся в истории.', async(reason)=>{
+    const r=await fetch(`/api/regulations/${regId}/parameters/${paramId}?reason=${encodeURIComponent(reason)}`,
+      {method:'DELETE',credentials:'include'});
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||'Ошибка');}
+    ACAI.toast('Параметр удалён','ok');
+    await load(); await openReg(regId);
+  });
+}
+
+// ── параметры ────────────────────────────────────────────
+async function openParamForm(regId, stageId, param){
+  const pr = param || null;
+  let equipment=[];
+  try{ const r=await ACAI.get('/api/equipment'); equipment=(r.equipment||r||[]).filter(e=>e.level!=='component'); }catch{}
+
+  ACAI.showModal(`
+    <h3>${pr?'Изменить норму':'Новый параметр'}</h3>
+    ${pr?`<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      Сейчас: <span style="font-family:var(--mono)">${normText(pr)}</span>
+    </div>`:''}
+    <div class="field"><label>Название *</label>
+      <input class="input" id="pp-name" value="${pr?(pr.name||'').replace(/"/g,'&quot;'):''}" placeholder="Влажность массы, Температура обжига..."></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field"><label>Единица</label>
+        <input class="input" id="pp-unit" value="${pr?(pr.unit||''):''}" placeholder="%, °C, мм"></div>
+      <div class="field"><label>Тип нормы</label>
+        <select class="input" id="pp-type" onchange="toggleNormFields()">
+          ${[['range','Диапазон (от и до)'],['min','Не меньше'],['max','Не больше'],
+             ['target','Цель с допуском'],['boolean','Да / нет'],['text','Текстовое требование']]
+            .map(([v,t])=>`<option value="${v}" ${pr&&(pr.param_type||'range')===v?'selected':''}>${t}</option>`).join('')}
+        </select></div>
+    </div>
+
+    <div id="pp-nums" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="field"><label>Мин</label><input class="input" id="pp-min" type="number" step="any" value="${pr&&pr.min_value!=null?pr.min_value:''}"></div>
+      <div class="field"><label>Макс</label><input class="input" id="pp-max" type="number" step="any" value="${pr&&pr.max_value!=null?pr.max_value:''}"></div>
+      <div class="field"><label>Цель</label><input class="input" id="pp-target" type="number" step="any" value="${pr&&pr.target_value!=null?pr.target_value:''}"></div>
+    </div>
+    <div id="pp-textwrap" class="field" style="display:none">
+      <label>Требование</label>
+      <input class="input" id="pp-req" value="${pr?(pr.requirement_text||'').replace(/"/g,'&quot;'):''}" placeholder="Без трещин и сколов">
+    </div>
+
+    <div class="field"><label>Оборудование (чей это параметр)</label>
+      <select class="input" id="pp-eq">
+        <option value="">— весь этап —</option>
+        ${equipment.map(e=>`<option value="${e.id}" ${pr&&pr.equipment_id===e.id?'selected':''}>${e.name}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Выберите станок — и рабочий увидит этот параметр в своей карточке, а не весь список.
+      </div>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer">
+      <input type="checkbox" id="pp-crit" ${pr&&pr.is_critical?'checked':''} style="width:16px;height:16px"> Критический параметр
+    </label>
+
+    ${reasonField()}
+    <div id="pp-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
+      <button class="btn primary" onclick="submitParam(${regId},${stageId}${pr?','+pr.id:''})">${pr?'Сохранить':'Добавить'}</button>
+    </div>
+  `);
+  toggleNormFields();
+}
+
+function toggleNormFields(){
+  const t=document.getElementById('pp-type')?.value;
+  const nums=document.getElementById('pp-nums');
+  const txt=document.getElementById('pp-textwrap');
+  if(!nums||!txt)return;
+  const numeric=['range','min','max','target'].includes(t);
+  nums.style.display=numeric?'grid':'none';
+  txt.style.display=(t==='text')?'block':'none';
+}
+
+async function submitParam(regId, stageId, paramId){
+  const name=document.getElementById('pp-name')?.value.trim();
+  if(!name){document.getElementById('pp-err').textContent='Введите название';return;}
+  const reason=reasonValue();
+  if(window._regIsActive && !reason){document.getElementById('pp-err').textContent='Укажите причину изменения';return;}
+  const num=id=>{const v=document.getElementById(id)?.value;return v===''||v==null?null:parseFloat(v);};
+  const eq=document.getElementById('pp-eq')?.value;
+  const fields={
+    name,
+    unit:document.getElementById('pp-unit')?.value.trim()||null,
+    param_type:document.getElementById('pp-type')?.value||'range',
+    min_value:num('pp-min'), max_value:num('pp-max'), target_value:num('pp-target'),
+    requirement_text:document.getElementById('pp-req')?.value.trim()||null,
+    is_critical:document.getElementById('pp-crit')?.checked?1:0
+  };
+
+  try{
+    if(paramId){
+      // Правка идёт через /update: сервер сам заведёт новую версию,
+      // сопоставит старый параметр с новым и запишет «было → стало».
+      await ACAI.post(`/api/regulations/${regId}/update`,{
+        updates:[{parameter_id:paramId, ...fields}],
+        reason: reason || 'Уточнение нормы'
+      });
+      ACAI.toast('Норма изменена','ok');
+    }else{
+      await ACAI.post(`/api/regulations/${regId}/parameters`,{data:{
+        stage_id:stageId,
+        equipment_id:eq?parseInt(eq):null,
+        ...fields,
+        norm_source:'regulation',
+        _reason:reason      // сервер по нему решает, заводить ли новую версию
+      }});
+      ACAI.toast('Параметр добавлен','ok');
+    }
+    await load();
+    await openReg(regId);
+  }catch(e){document.getElementById('pp-err').textContent=e.message||'Ошибка';}
+}
+
+// ── ввод в действие ──────────────────────────────────────
+async function activateReg(regId){
+  ACAI.showModal(`
+    <h3>Ввести регламент в действие</h3>
+    <div style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px">
+      Черновик станет рабочим: параметры увидят рабочие на своих станках,
+      а руководителям уйдёт требование ознакомиться. Прежний активный
+      регламент на этот вид продукции уйдёт в архив.
+    </div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
+      <button class="btn ok" onclick="doActivate(${regId})">✓ Ввести в действие</button>
+    </div>
+  `);
+}
+
+async function doActivate(regId){
+  try{
+    await ACAI.post(`/api/regulations/${regId}/activate`,{});
+    ACAI.toast('Регламент введён в действие','ok');
+    ACAI.closeModal();
+    await load();
+  }catch(e){ ACAI.toast(e.message||'Ошибка','danger'); }
+}
+
+function openCreateReg() {
+  ACAI.showModal(`
+    <h3>Новый регламент</h3>
+    <div class="field"><label>Название *</label><input class="input" id="reg-name" placeholder="Например: Обжиг кирпича тип А"></div>
+    <div class="field"><label>Тип продукции</label><input class="input" id="reg-type" placeholder="Кирпич М150, Блок и тд"></div>
+    <div class="field"><label>Описание</label><textarea class="input" id="reg-desc" rows="3"></textarea></div>
+    <div id="reg-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitCreate()">Создать</button>
+    </div>
+  `);
+}
+
+async function submitCreate() {
+  const name = document.getElementById('reg-name')?.value.trim();
+  if (!name) { document.getElementById('reg-err').textContent = 'Введите название'; return; }
+  try {
+    await ACAI.post('/api/regulations', {
+      name,
+      product_type: document.getElementById('reg-type')?.value.trim() || null,
+      description: document.getElementById('reg-desc')?.value.trim() || null,
+    });
+    ACAI.toast('Регламент создан');
+    ACAI.closeModal();
+    await load();
+  } catch(e) {
+    document.getElementById('reg-err').textContent = e.message;
+  }
+}
+
+document.getElementById('searchReg').addEventListener('input', render);
+
+async function init() {
+  const ctx = await initLayout();
+  currentUser = ctx?.user;
+  await load();
+}
+init();
+</script>
+</body>
+</html>

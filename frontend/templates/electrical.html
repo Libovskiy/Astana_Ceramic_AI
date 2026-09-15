@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACAI — Электрика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<link rel="stylesheet" href="/static/equipment-page.css?v=1">
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Электрика</div>
+        <div class="topbar-sub">Электрическое оборудование — обращения, обслуживание, история</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page">
+
+      <div id="workQueueSummary" style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;"></div>
+
+      <section class="dashboard-card">
+        <div class="card-header">
+          <h2>Очередь работ</h2>
+          <p>Открытые обращения по вашей части — от самых срочных</p>
+        </div>
+        <div id="workQueue">
+          <div class="loading-state">Загрузка...</div>
+        </div>
+      </section>
+
+      <section class="diagnostic-toolbar" style="flex-wrap: wrap;">
+        <select id="stageFilter">
+          <option value="">Все этапы</option>
+          <option value="mass">Массаподготовка</option>
+          <option value="forming">Формовка</option>
+          <option value="drying">Сушка</option>
+          <option value="kiln">Печь</option>
+          <option value="packaging">Упаковка</option>
+        </select>
+        <select id="statusFilter">
+          <option value="">Все статусы</option>
+          <option value="Работает">Работает</option>
+          <option value="Внимание">Внимание</option>
+          <option value="Ошибка">Ошибка</option>
+        </select>
+        <input id="nameFilter" type="text" placeholder="Поиск по названию..." style="flex: 2;">
+      </section>
+
+      <section class="dashboard-summary">
+        <div class="summary-card">
+          <div class="summary-icon">▣</div>
+          <div><span>Всего оборудования</span><strong id="totalCount">—</strong></div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">✓</div>
+          <div><span>Работает</span><strong id="workingCount">—</strong></div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">!</div>
+          <div><span>Внимание</span><strong id="warningCount">—</strong></div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon">!</div>
+          <div><span>Ошибка</span><strong id="errorCount">—</strong></div>
+        </div>
+      </section>
+
+      <section class="dashboard-card">
+        <div class="card-header">
+          <h2>Список оборудования</h2>
+          <p>Кликните "История" для полного журнала по станку</p>
+        </div>
+        <div id="equipmentList">
+          <div class="loading-state">Загрузка оборудования...</div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>window.DISCIPLINE_LOCK = "electrical";</script>
+<script src="/static/equipment.js?v=32"></script>
+<script>initLayout().then(ctx => { window.currentUser = ctx?.user; });</script>
+
+</body>
+</html>

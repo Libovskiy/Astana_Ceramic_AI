@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Аналитика — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=9">
+<style>
+.period-tabs{display:flex;gap:6px;margin-bottom:18px;}
+.period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
+.period-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.chart-wrap{background:var(--surface-2);border-radius:10px;padding:12px;overflow-x:auto;}
+.chart-label{font-size:10px;color:var(--text-dim);font-family:var(--mono);}
+.top-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;background:var(--surface-2);margin-bottom:5px;}
+.top-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;width:80px;flex-shrink:0;}
+.top-fill{height:100%;border-radius:2px;}
+.downtime-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--surface-2);margin-bottom:5px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Аналитика</div>
+        <div class="topbar-sub">Производительность, простои, повторяющиеся проблемы</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+
+      <div class="period-tabs">
+        <button class="period-tab active" data-period="today">Сегодня</button>
+        <button class="period-tab" data-period="week">7 дней</button>
+        <button class="period-tab" data-period="month">30 дней</button>
+      </div>
+
+      <!-- МЕТРИКИ -->
+      <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="keyMetrics">
+        <div class="metric"><div class="metric-label">Загрузка...</div></div>
+      </div>
+
+      <!-- ГРАФИКИ -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-head"><h2>Загрузка WebHMI — 24ч</h2></div>
+          <div class="card-body" style="padding:10px 14px">
+            <div class="chart-wrap" id="sensorChart">
+              <div class="empty">Загрузка...</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Простои по дням</h2></div>
+          <div class="card-body" style="padding:10px 14px">
+            <div class="chart-wrap" id="downtimeChart">
+              <div class="empty">Загрузка...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- НИЖНЯЯ СЕТКА -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-head"><h2>Топ неисправностей</h2></div>
+          <div class="card-body" id="topProblems" style="padding:10px 14px"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Простои по оборудованию</h2></div>
+          <div class="card-body" id="downtimeList" style="padding:10px 14px"></div>
+        </div>
+      </div>
+
+      <!-- ТЕКУЩИЕ ПОКАЗАТЕЛИ -->
+      <div class="card">
+        <div class="card-head"><h2>Показатели WebHMI — сейчас</h2><span id="sensorTime" style="font-size:11px;color:var(--text-dim)">—</span></div>
+        <div class="card-body" id="sensorNow" style="padding:10px 14px"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script>
+let currentPeriod='today';
+
+document.querySelectorAll('.period-tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.period-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');currentPeriod=btn.dataset.period;loadAnalytics();
+  });
+});
+
+// ── SVG ЛИНЕЙНЫЙ ГРАФИК ───────────────────────────────────
+function lineChart(data, color='#3b82f6', w=400, h=80){
+  if(!data.length)return'<div class="empty">Нет данных</div>';
+  const vals=data.map(d=>d.v);
+  const max=Math.max(...vals)||1;const min=Math.min(...vals);
+  const range=max-min||1;
+  const px=(v,i)=>Math.round(i/(data.length-1)*(w-20))+10;
+  const py=(v)=>Math.round((1-(v-min)/range)*(h-20))+10;
+  const pts=data.map((d,i)=>`${px(d.v,i)},${py(d.v)}`).join(' ');
+  const area=`${px(0,0)},${h} `+data.map((d,i)=>`${px(d.v,i)},${py(d.v)}`).join(' ')+` ${px(0,data.length-1)},${h}`;
+  // подписи по оси X
+  const xLabels=[0,Math.floor(data.length/2),data.length-1].map(i=>{
+    if(!data[i])return'';
+    const t=data[i].t;
+    return`<text x="${px(0,i)}" y="${h+14}" text-anchor="middle" class="chart-label">${t}</text>`;
+  }).join('');
+  return`<svg viewBox="0 0 ${w} ${h+20}" style="width:100%;display:block">
+    <polygon points="${area}" fill="${color}" opacity=".1"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+    <text x="4" y="16" class="chart-label">${max.toFixed(0)}%</text>
+    <text x="4" y="${h}" class="chart-label">${min.toFixed(0)}%</text>
+    ${xLabels}
+  </svg>`;
+}
+
+function barChart(data, color='#f59e0b', w=400, h=80){
+  if(!data.length)return'<div class="empty">Нет данных</div>';
+  const vals=data.map(d=>d.v);const max=Math.max(...vals)||1;
+  const bw=Math.floor((w-20)/data.length)-2;
+  const bars=data.map((d,i)=>{
+    const bh=Math.round((d.v/max)*(h-20));
+    const x=10+i*(bw+2);const y=h-bh;
+    return`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="2" fill="${color}" opacity=".8"/>
+      <text x="${x+bw/2}" y="${h+14}" text-anchor="middle" class="chart-label">${d.t}</text>`;
+  }).join('');
+  return`<svg viewBox="0 0 ${w} ${h+20}" style="width:100%;display:block">
+    ${bars}
+    <text x="4" y="16" class="chart-label">${max}м</text>
+  </svg>`;
+}
+
+// ── ЗАГРУЗКА ─────────────────────────────────────────────
+async function loadAnalytics(){
+  const [summary,dash,live]=await Promise.allSettled([
+    ACAI.get(`/api/reports/summary?period=${currentPeriod}`),
+    ACAI.get('/dashboard'),
+    ACAI.get('/api/sensors/live'),
+  ]);
+  const s=summary.value;const d=dash.value;const lv=live.value||{};
+  if(s?.success)renderMetrics(s);
+  if(d){renderTopProblems(d);renderDowntimeList(s?.downtime);}
+  renderSensorsNow(lv);
+  loadSensorHistory();
+  loadDowntimeChart();
+}
+
+function renderMetrics(s){
+  const perf=s.performance||{};const dt=s.downtime||{};const loss=s.biggest_loss||{};
+  const pp=perf.plan_completion_pct;
+  const pc=pp==null?'var(--text-dim)':pp>=90?'var(--ok)':pp>=70?'var(--warn)':'var(--danger)';
+  const tm=dt.total_minutes||0;const tc=tm>=60?`${Math.floor(tm/60)}ч ${tm%60}м`:`${tm}м`;
+  document.getElementById('keyMetrics').innerHTML=`
+    <div class="metric ${pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
+      <div class="metric-label">Выполнение плана</div>
+      <div class="metric-value" style="color:${pc}">${pp!=null?pp+'%':'—'}</div>
+    </div>
+    <div class="metric ${tm>0?'warn':'ok'}">
+      <div class="metric-label">Суммарный простой</div>
+      <div class="metric-value ${tm>0?'warn':'ok'}">${tc||'0м'}</div>
+      <div class="metric-sub">${dt.incidents_count||0} инцидентов</div>
+    </div>
+    <div class="metric ${loss.total_minutes>0?'warn':'ok'}">
+      <div class="metric-label">Макс. простой</div>
+      <div class="metric-value ${loss.total_minutes>0?'warn':'ok'}">${loss.total_minutes?loss.total_minutes+'м':'—'}</div>
+      <div class="metric-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loss.equipment_name||'Нет данных'}</div>
+    </div>
+    <div class="metric accent">
+      <div class="metric-label">Дисциплина</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--warn)">${dt.by_discipline?.mechanical||0}м</div>
+          <div style="font-size:10px;color:var(--text-dim)">Механика</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:700;color:var(--accent)">${dt.by_discipline?.electrical||0}м</div>
+          <div style="font-size:10px;color:var(--text-dim)">Электрика</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderTopProblems(d){
+  const probs=d.top_problems||[];const max=probs[0]?.count||1;
+  const colors=['var(--danger)','var(--danger)','var(--warn)','var(--warn)','var(--accent)'];
+  document.getElementById('topProblems').innerHTML=probs.length
+    ?probs.slice(0,8).map((p,i)=>`<div class="top-item">
+        <span style="font-size:11px;color:var(--text-dim);width:18px;text-align:right;flex-shrink:0">${i+1}</span>
+        <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.symptom||'—'}</span>
+        <div class="top-bar"><div class="top-fill" style="width:${Math.round(p.count/max*100)}%;background:${colors[i]||'var(--accent)'}"></div></div>
+        <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);width:24px;text-align:right">${p.count}</span>
+      </div>`).join('')
+    :'<div class="empty">Нет данных</div>';
+}
+
+function renderDowntimeList(dt){
+  const items=(dt?.by_equipment)||[];
+  document.getElementById('downtimeList').innerHTML=items.length
+    ?items.slice(0,8).map(item=>`<div class="downtime-item">
+        <span class="dot-status ${item.total_minutes>120?'danger':'warn'}"></span>
+        <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.equipment_name||'—'}</span>
+        <span style="font-size:11px;color:var(--text-dim)">${item.incidents_count||0}×</span>
+        <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--warn)">${item.total_minutes>=60?Math.floor(item.total_minutes/60)+'ч '+item.total_minutes%60+'м':item.total_minutes+'м'}</span>
+      </div>`).join('')
+    :'<div class="empty">Простоев не было ✓</div>';
+}
+
+async function loadSensorHistory(){
+  try{
+    const r=await ACAI.get('/api/sensors/history?sensor_name=pl024_1_загрузка_проц&hours=24');
+    if(!r||!r.length){document.getElementById('sensorChart').innerHTML='<div class="empty">Нет данных — откройте WebHMI</div>';return;}
+    // берём каждые 30 точек
+    const step=Math.max(1,Math.floor(r.length/30));
+    const data=r.filter((_,i)=>i%step===0).reverse().map(d=>({
+      v:parseFloat(d.value),
+      t:new Date(String(d.recorded_at).replace(' ','T')).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})
+    }));
+    document.getElementById('sensorChart').innerHTML=lineChart(data,'#22c55e');
+  }catch{document.getElementById('sensorChart').innerHTML='<div class="empty">Нет данных</div>';}
+}
+
+async function loadDowntimeChart(){
+  // строим на основе dashboard данных по дням недели
+  try{
+    const r=await ACAI.get('/api/production/history');
+    const rows=(r.rows||r.history||[]).slice(0,7).reverse();
+    if(!rows.length){document.getElementById('downtimeChart').innerHTML='<div class="empty">Нет данных</div>';return;}
+    const data=rows.map(row=>({
+      v:row.total_downtime_minutes||0,
+      t:row.log_date?row.log_date.slice(5):'—'
+    }));
+    document.getElementById('downtimeChart').innerHTML=barChart(data,'#f59e0b');
+  }catch{
+    document.getElementById('downtimeChart').innerHTML='<div class="empty">Нет данных</div>';
+  }
+}
+
+function renderSensorsNow(lv){
+  const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц','kp10_загрузка_проц','авария_флаг'];
+  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+  const available=KEYS.filter(k=>lv[k]);
+  if(!available.length){document.getElementById('sensorNow').innerHTML='<div class="empty">Откройте вкладку WebHMI для данных</div>';return;}
+  const updated=Object.values(lv)[0]?.updated_at;
+  if(updated)document.getElementById('sensorTime').textContent=new Date(updated).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('sensorNow').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">`+
+    available.map(k=>{
+      const v=parseFloat(lv[k].value);const isAlarm=k==='авария_флаг';
+      const color=isAlarm?(v>0?'var(--danger)':'var(--ok)'):v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+      const pct=k.includes('проц')&&!isAlarm?Math.min(v,100):0;
+      return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">${LABELS[k]}</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${isAlarm?(v>0?'⚠ АВАРИЯ':'✓ Норма'):v.toFixed(1)+'%'}</div>
+        ${pct?`<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${color};border-radius:2px"></div></div>`:''}
+      </div>`;
+    }).join('')+`</div>`;
+}
+
+initLayout();loadAnalytics();
+setInterval(()=>ACAI.get('/api/sensors/live').then(renderSensorsNow).catch(()=>{}),5000);
+</script>
+</body>
+</html>
