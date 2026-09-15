@@ -207,14 +207,48 @@ def _detect_by_keywords(machine, question):
 # ТОЧКА ВХОДА
 # =========================================================
 
+# Короткий кэш "тот же станок + тот же текст жалобы, недавно" —
+# двойной клик "Отправить", повтор из-за плохого интернета на
+# заводе и т.п. не должны второй раз платить токенами за то же
+# самое обращение. Не про экономию на РАЗНЫХ обращениях — каждое
+# новое сообщение всё равно должно дойти до ИИ, иначе поиск по
+# документации будет искать не по тому запросу.
+_SYMPTOM_CACHE_TTL_SECONDS = 180
+_SYMPTOM_CACHE_MAX_SIZE = 200
+_symptom_result_cache = {}  # (machine, equipment_id, normalized_question) -> (result, expires_at)
+
+
+def _symptom_cache_key(machine, question, equipment_id):
+    return (
+        (machine or "").strip().lower(),
+        equipment_id,
+        _normalize(question.strip()),
+    )
+
+
 def detect_symptom(machine: str, question: str, equipment_id=None):
 
     if not question or not question.strip():
         return None
 
+    import time
+    now = time.monotonic()
+    key = _symptom_cache_key(machine, question, equipment_id)
+
+    cached = _symptom_result_cache.get(key)
+    if cached and cached[1] > now:
+        return cached[0]
+
     symptom = _detect_by_ai(machine, question, equipment_id)
 
-    if symptom:
-        return symptom
+    if not symptom:
+        symptom = _detect_by_keywords(machine, question)
 
-    return _detect_by_keywords(machine, question)
+    if len(_symptom_result_cache) >= _SYMPTOM_CACHE_MAX_SIZE:
+        # простое вытеснение самой старой записи, без доп. библиотек
+        oldest_key = min(_symptom_result_cache, key=lambda k: _symptom_result_cache[k][1])
+        _symptom_result_cache.pop(oldest_key, None)
+
+    _symptom_result_cache[key] = (symptom, now + _SYMPTOM_CACHE_TTL_SECONDS)
+
+    return symptom
