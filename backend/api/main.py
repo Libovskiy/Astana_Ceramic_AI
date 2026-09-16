@@ -1894,9 +1894,47 @@ def end_downtime_route(
     }
 
 
+# Роли, которым открыт «Журнал обращений» (/cases). Совпадают со
+# списком этой страницы в PAGE_ROLES — механик и электрик тоже видят
+# журнал, они по нему и работают.
+CASES_OVERVIEW_ROLES = (
+    "director", "chief_engineer", "engineer", "shift_supervisor",
+    "chief_mechanic", "mechanic", "chief_electrician", "electrician",
+)
+
+
+@app.get("/api/cases/overview")
+def cases_overview(user: dict = Depends(require_roles(*CASES_OVERVIEW_ROLES))):
+    """
+    Данные для страницы «Журнал обращений».
+
+    Раньше страница брала их из /dashboard — а он закрыт для механика
+    и электрика, потому что там сводка по всему заводу. В итоге
+    журнал, который стоит у них в меню, вечно висел на «Загрузка…».
+
+    Здесь отдаём только то, что нужно самому журналу: обращения,
+    список оборудования для фильтра и среднее время решения. Сводки
+    по заводу тут нет, поэтому список ролей шире.
+    """
+
+    data = get_dashboard_data()
+
+    return {
+        "success": True,
+        "recent_cases": data.get("recent_cases", []),
+        "equipment": data.get("equipment", []),
+        "average_resolution_minutes": data.get("average_resolution_minutes"),
+    }
+
+
 WORK_QUEUE_ROLES = (
     "chief_mechanic", "mechanic", "chief_electrician", "electrician",
-    "chief_engineer", "admin"
+    "chief_engineer", "admin",
+    # Директору страницы «Механика» и «Электрика» открыты, и очередь
+    # работ — их главный блок. Без него страница грузилась с дырой и
+    # отказом в консоли. Данных тут меньше, чем в журнале обращений,
+    # который он и так видит.
+    "director",
 )
 
 

@@ -94,7 +94,9 @@ function reactionLabel(created_at){
 }
 
 async function load(){
-  const d=await ACAI.get('/dashboard');
+  // Свой источник, а не /dashboard: тот закрыт для механика и
+  // электрика (там сводка по заводу), и журнал у них не открывался.
+  const d=await ACAI.get('/api/cases/overview');
   allCases=d.recent_cases||[];
   const eq=d.equipment||[];
 
