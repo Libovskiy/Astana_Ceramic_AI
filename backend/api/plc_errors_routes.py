@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from backend.services.auth_service import get_user_by_session
 from backend.services.plc_error_service import (
-    LINES,
     VIEW_ROLES,
     EDIT_ROLES,
     list_errors,
@@ -19,6 +18,11 @@ from backend.services.plc_error_service import (
     create_error,
     update_error,
     archive_error,
+    list_lines,
+    line_names,
+    create_line,
+    rename_line,
+    archive_line,
 )
 
 router = APIRouter(prefix="/api/plc-errors", tags=["plc-errors"])
@@ -50,9 +54,48 @@ class ErrorUpdate(BaseModel):
     solution: str = ""
 
 
+class LinePayload(BaseModel):
+    name: str
+
+
 @router.get("/lines")
 def get_lines(user: dict = Depends(current_user)):
-    return {"success": True, "lines": LINES}
+    return {
+        "success": True,
+        "lines": line_names(),
+        "lines_full": list_lines(include_counts=True),
+        "can_edit": user["role"] in EDIT_ROLES,
+    }
+
+
+@router.post("/lines")
+def post_line(payload: LinePayload, user: dict = Depends(current_user)):
+    require_editor(user)
+    try:
+        line = create_line(payload.name, user["username"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"success": True, "line": line}
+
+
+@router.put("/lines/{line_id}")
+def put_line(line_id: int, payload: LinePayload, user: dict = Depends(current_user)):
+    require_editor(user)
+    try:
+        rename_line(line_id, payload.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"success": True}
+
+
+@router.delete("/lines/{line_id}")
+def delete_line(line_id: int, user: dict = Depends(current_user)):
+    require_editor(user)
+    try:
+        archive_line(line_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"success": True}
 
 
 @router.get("")
@@ -64,8 +107,8 @@ def get_errors(line: str | None = None, user: dict = Depends(current_user)):
 def post_error(payload: ErrorCreate, user: dict = Depends(current_user)):
     require_editor(user)
 
-    if payload.line not in LINES:
-        raise HTTPException(status_code=400, detail="Неизвестная линия.")
+    if payload.line not in line_names():
+        raise HTTPException(status_code=400, detail="Неизвестный раздел.")
     if not payload.code.strip() or not payload.title.strip():
         raise HTTPException(status_code=400, detail="Код и название обязательны.")
 

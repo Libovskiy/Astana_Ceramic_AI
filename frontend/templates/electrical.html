@@ -51,6 +51,11 @@
           <div class="collapse-tools" onclick="event.stopPropagation()">
             <select id="plcLineSelect" class="select" onchange="loadPlcErrors()"></select>
             <input id="plcSearch" class="input" type="search" placeholder="Поиск: код или текст…" oninput="renderPlcErrors()">
+            <span id="plcLineTools" style="display:none;gap:6px">
+              <button class="btn secondary sm" onclick="openPlcLineForm()" title="Добавить раздел">+ Раздел</button>
+              <button class="btn secondary sm" onclick="openPlcLineForm(true)" title="Переименовать текущий раздел">✎</button>
+              <button class="btn danger sm" onclick="deletePlcLine()" title="Убрать текущий раздел">✕</button>
+            </span>
             <button class="btn primary sm" id="plcAddBtn" style="display:none" onclick="openPlcErrorForm()">+ Код</button>
           </div>
         </div>

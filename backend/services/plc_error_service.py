@@ -22,9 +22,14 @@ from datetime import datetime
 from backend.config import DB_NAME
 
 VIEW_ROLES = {"electrician", "chief_electrician", "chief_engineer", "director", "admin"}
+# Гл. электрик (он же гл. энергетик на заводе) и гл. инженер ведут базу сами.
 EDIT_ROLES = {"chief_electrician", "chief_engineer", "admin"}
 
-LINES = ["Высадка и упаковка", "Резка и садка"]
+# Разделы, с которых база начиналась: два перечня аварий из руководств
+# Beralmar. Дальше разделы заводит гл. электрик/гл. инженер сам —
+# печь, сушка, электроснабжение и т.д., поэтому список живёт в базе,
+# а не в коде. Эти два создаются при первом запуске, если таблица пуста.
+DEFAULT_LINES = ["Высадка и упаковка", "Резка и садка"]
 
 # Код вида A1 / A001 / E45 / F0.03 — буква(ы), затем цифры,
 # возможно с точкой-десятичной частью.
@@ -88,6 +93,134 @@ def init_plc_error_table() -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_plc_error_line_code "
         "ON plc_error_codes(line, code)"
     )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS plc_error_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            sort_order INTEGER NOT NULL DEFAULT 100,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_by TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    existing = conn.execute("SELECT COUNT(*) FROM plc_error_lines").fetchone()[0]
+    if not existing:
+        for order, name in enumerate(DEFAULT_LINES, start=1):
+            conn.execute(
+                """INSERT OR IGNORE INTO plc_error_lines (name, sort_order, created_by, created_at)
+                   VALUES (?, ?, 'руководство Beralmar', datetime('now'))""",
+                (name, order * 10),
+            )
+
+    conn.commit()
+    conn.close()
+
+
+# =========================================================
+# РАЗДЕЛЫ (линии/участки)
+# =========================================================
+
+def list_lines(include_counts: bool = False):
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT * FROM plc_error_lines WHERE is_active=1 ORDER BY sort_order, name"
+    ).fetchall()
+    lines = [dict(r) for r in rows]
+
+    if include_counts:
+        counts = {
+            r["line"]: r["n"]
+            for r in conn.execute(
+                "SELECT line, COUNT(*) n FROM plc_error_codes WHERE is_active=1 GROUP BY line"
+            ).fetchall()
+        }
+        for line in lines:
+            line["codes_count"] = counts.get(line["name"], 0)
+
+    conn.close()
+    return lines
+
+
+def line_names() -> list[str]:
+    return [line["name"] for line in list_lines()]
+
+
+def create_line(name: str, username: str):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Название раздела не может быть пустым")
+
+    conn = _conn()
+    try:
+        cur = conn.execute(
+            """INSERT INTO plc_error_lines (name, sort_order, created_by, created_at)
+               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM plc_error_lines), ?, datetime('now'))""",
+            (name, username),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise ValueError(f"Раздел «{name}» уже есть")
+
+    row = conn.execute("SELECT * FROM plc_error_lines WHERE id=?", (new_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def rename_line(line_id: int, new_name: str):
+    """
+    Переименование тянет за собой коды: в plc_error_codes раздел хранится
+    названием, а не ссылкой — иначе при переименовании коды «потеряли бы»
+    свой раздел. Обе таблицы правим одной транзакцией.
+    """
+    new_name = (new_name or "").strip()
+    if not new_name:
+        raise ValueError("Название раздела не может быть пустым")
+
+    conn = _conn()
+    row = conn.execute("SELECT name FROM plc_error_lines WHERE id=?", (line_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise ValueError("Раздел не найден")
+
+    old_name = row["name"]
+    if old_name == new_name:
+        conn.close()
+        return
+
+    try:
+        conn.execute("UPDATE plc_error_lines SET name=? WHERE id=?", (new_name, line_id))
+        conn.execute("UPDATE plc_error_codes SET line=? WHERE line=?", (new_name, old_name))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        conn.close()
+        raise ValueError(f"Раздел «{new_name}» уже есть")
+    conn.close()
+
+
+def archive_line(line_id: int):
+    """
+    Раздел с кодами не убираем: иначе коды остаются в базе, но пропадают
+    из интерфейса — их не найти и не починить. Сначала чистим коды.
+    """
+    conn = _conn()
+    row = conn.execute("SELECT name FROM plc_error_lines WHERE id=?", (line_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise ValueError("Раздел не найден")
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM plc_error_codes WHERE is_active=1 AND line=?", (row["name"],)
+    ).fetchone()[0]
+
+    if count:
+        conn.close()
+        raise ValueError(f"В разделе ещё {count} кодов — сначала уберите или перенесите их")
+
+    conn.execute("UPDATE plc_error_lines SET is_active=0 WHERE id=?", (line_id,))
     conn.commit()
     conn.close()
 

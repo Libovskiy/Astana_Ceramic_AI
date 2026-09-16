@@ -14,6 +14,7 @@ const PLC_EDIT_ROLES = ["chief_electrician", "chief_engineer", "admin"];
 let _plcCurrentUser = null;
 let _plcCurrentLine = null;
 let _plcErrors = [];
+let _plcLines = [];   // [{id, name, codes_count}] — разделы ведёт гл. электрик/гл. инженер
 
 /**
  * Сворачивание секции. Общее для кодов ошибок и для оборудования —
@@ -36,23 +37,106 @@ async function initPlcErrors(user) {
   if (!card) return;
 
   try {
-    const r = await ACAI.get("/api/plc-errors/lines");
-    const lines = r.lines || [];
-
-    const select = document.getElementById("plcLineSelect");
-    select.innerHTML = lines.map(l => `<option value="${escapePlcHtml(l)}">${escapePlcHtml(l)}</option>`).join("");
-    _plcCurrentLine = lines[0] || null;
+    await loadPlcLines();
 
     card.style.display = "block";
 
     if (PLC_EDIT_ROLES.includes(user?.role)) {
       document.getElementById("plcAddBtn").style.display = "block";
+      const tools = document.getElementById("plcLineTools");
+      if (tools) tools.style.display = "inline-flex";
     }
 
     await loadPlcErrors();
   } catch (e) {
     // 403 — роль не видит эту секцию вообще, карточку просто не показываем.
     card.style.display = "none";
+  }
+}
+
+async function loadPlcLines(keepLine) {
+  const r = await ACAI.get("/api/plc-errors/lines");
+  _plcLines = r.lines_full || (r.lines || []).map(n => ({ name: n }));
+
+  const select = document.getElementById("plcLineSelect");
+  const wanted = keepLine || _plcCurrentLine;
+
+  select.innerHTML = _plcLines.map(l => {
+    const count = l.codes_count != null ? ` (${l.codes_count})` : "";
+    return `<option value="${escapePlcAttr(l.name)}">${escapePlcHtml(l.name + count)}</option>`;
+  }).join("");
+
+  if (wanted && _plcLines.some(l => l.name === wanted)) {
+    select.value = wanted;
+    _plcCurrentLine = wanted;
+  } else {
+    _plcCurrentLine = _plcLines[0]?.name || null;
+  }
+}
+
+function currentLineObject() {
+  return _plcLines.find(l => l.name === _plcCurrentLine) || null;
+}
+
+function openPlcLineForm(rename) {
+  const line = rename ? currentLineObject() : null;
+
+  if (rename && !line) {
+    ACAI.toast("Сначала выберите раздел", "warn");
+    return;
+  }
+
+  ACAI.showModal(`
+    <h3>${rename ? "Переименовать раздел" : "Новый раздел"}</h3>
+    <div class="field">
+      <label>Название${rename ? "" : " (например: Печь, Сушка, Электроснабжение)"}</label>
+      <input class="input" id="pl-name" value="${rename ? escapePlcAttr(line.name) : ""}" placeholder="Название раздела">
+    </div>
+    <div id="pl-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitPlcLineForm(${rename ? line.id : "null"})">${rename ? "Сохранить" : "Добавить"}</button>
+    </div>
+  `);
+}
+
+async function submitPlcLineForm(lineId) {
+  const name = document.getElementById("pl-name")?.value.trim();
+  const errEl = document.getElementById("pl-err");
+
+  if (!name) { errEl.textContent = "Введите название"; return; }
+
+  try {
+    if (lineId) {
+      await plcErrorRequest(`/api/plc-errors/lines/${lineId}`, "PUT", { name });
+      ACAI.toast("Раздел переименован ✓", "ok");
+    } else {
+      await plcErrorRequest("/api/plc-errors/lines", "POST", { name });
+      ACAI.toast("Раздел добавлен ✓", "ok");
+    }
+    ACAI.closeModal();
+    await loadPlcLines(name);
+    await loadPlcErrors();
+  } catch (e) {
+    errEl.textContent = e.message || "Ошибка";
+  }
+}
+
+async function deletePlcLine() {
+  const line = currentLineObject();
+  if (!line) return;
+
+  if (!confirm(`Убрать раздел «${line.name}»?`)) return;
+
+  try {
+    await plcErrorRequest(`/api/plc-errors/lines/${line.id}`, "DELETE");
+    ACAI.toast("Раздел убран", "ok");
+    _plcCurrentLine = null;
+    await loadPlcLines();
+    await loadPlcErrors();
+  } catch (e) {
+    // Самый частый случай — в разделе ещё есть коды, сервер объясняет словами.
+    ACAI.toast(e.message || "Не удалось убрать раздел", "danger");
   }
 }
 
@@ -142,10 +226,11 @@ function openPlcErrorForm(id) {
 
     ${existing ? "" : `
       <div class="field">
-        <label>Линия</label>
+        <label>Раздел</label>
         <select class="select" id="pe-line">
-          <option ${_plcCurrentLine === "Высадка и упаковка" ? "selected" : ""}>Высадка и упаковка</option>
-          <option ${_plcCurrentLine === "Резка и садка" ? "selected" : ""}>Резка и садка</option>
+          ${_plcLines.map(l => `
+            <option value="${escapePlcAttr(l.name)}" ${l.name === _plcCurrentLine ? "selected" : ""}>${escapePlcHtml(l.name)}</option>
+          `).join("")}
         </select>
       </div>
       <div class="field">
