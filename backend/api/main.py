@@ -181,6 +181,9 @@ app.include_router(equipment_health_router)
 from backend.api.plc_errors_routes import router as plc_errors_router
 app.include_router(plc_errors_router)
 
+from backend.api.shift_report_routes import router as shift_report_router
+app.include_router(shift_report_router)
+
 from backend.api.docs_files_routes import router as docs_files_router
 app.include_router(docs_files_router)
 
@@ -228,6 +231,9 @@ init_task_tables()
 
 from backend.services.plc_error_service import init_plc_error_table
 init_plc_error_table()
+
+from backend.services.shift_report_service import init_shift_report_tables
+init_shift_report_tables()
 
 from backend.services.equipment_state_service import (
     init_state_events

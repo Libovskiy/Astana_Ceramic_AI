@@ -28,6 +28,33 @@
 
     <div class="page">
 
+      <!-- СМЕННЫЙ ОТЧЁТ УПАКОВКИ: вагонетки → слои → брак → согласование -->
+      <section class="dashboard-card" id="shiftReportCard">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+          <div>
+            <h2>Сменный отчёт упаковки <span class="collapse-count" id="srStatus"></span></h2>
+            <p>По каждой вагонетке: время съёма слоёв, годные поддоны и брак. Время считается само</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="srDate" class="input">
+            <select id="srShift" class="select">
+              <option value="День">День</option>
+              <option value="Ночь">Ночь</option>
+            </select>
+            <select id="srBrigade" class="select" style="display:none"></select>
+            <button class="btn secondary sm" id="srOpenBtn" onclick="srOpen()">Открыть</button>
+          </div>
+        </div>
+
+        <div id="srReturned" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);color:var(--warn);border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:12px"></div>
+
+        <div class="metrics" id="srTotals" style="margin-bottom:14px"></div>
+
+        <div id="srCars"><div class="loading-state">Выберите дату и смену</div></div>
+
+        <div id="srActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"></div>
+      </section>
+
       <!-- SHIFT PRODUCTION LOG -->
       <section class="dashboard-card">
         <div class="card-header">
@@ -172,7 +199,8 @@
 <script src="/static/acai_layout.js?v=10"></script>
 <script src="/static/mobile_nav_v2.js?v=2"></script>
 <script src="/static/production.js?v=32"></script>
-<script>initLayout();</script>
+<script src="/static/shift-report.js?v=1"></script>
+<script>initLayout().then(() => initShiftReport());</script>
 
 </body>
 </html>
