@@ -88,6 +88,8 @@ def main():
 
     stage = service.add_stage(reg, "Сушка", stage_key="drying", sort_order=30)
 
+    stage = stage["stage_id"]   # add_stage возвращает словарь, нужен id этапа
+
     # =====================================================
     print("\nСценарий 2. Параметр 55-70 °C")
     # =====================================================
@@ -103,6 +105,7 @@ def main():
         "norm_source": "experience",
         "fact_source": "none",
     })
+    param = param["parameter_id"]   # add_parameter возвращает словарь, нужен id параметра
 
     service.activate(reg, "Технолог")
 
@@ -379,9 +382,27 @@ def main():
     print("\nДополнительно. Ознакомление")
     # =====================================================
 
-    service.acknowledge(new_reg, 2, {"id": 1, "username": "test", "full_name": "Тест", "role": "worker"})
+    # Рабочего просят ознакомиться только с теми регламентами, которые
+    # касаются ЕГО оборудования — иначе упаковщик подписывал бы нормы
+    # массоподготовки. Раньше тест этого не учитывал: станок рабочему
+    # не назначали, и подтверждение справедливо отклонялось.
+    worker = {"id": 1, "username": "test", "full_name": "Тест", "role": "worker"}
+    stranger = {"id": 2, "username": "other", "full_name": "Чужой", "role": "worker"}
 
-    pending = service.pending_ack({"id": 1})
+    check("рабочему без этого станка ознакомление не нужно",
+          not service.user_needs_ack(new_reg, stranger))
+
+    conn = sqlite3.connect(temp_db)
+    conn.execute("CREATE TABLE IF NOT EXISTS worker_equipment (user_id INTEGER NOT NULL, equipment_id INTEGER NOT NULL, PRIMARY KEY (user_id, equipment_id))")
+    conn.execute("INSERT OR IGNORE INTO worker_equipment (user_id, equipment_id) VALUES (1, ?)", (equipment_id,))
+    conn.commit(); conn.close()
+
+    check("рабочему с этим станком ознакомление нужно",
+          service.user_needs_ack(new_reg, worker))
+
+    service.acknowledge(new_reg, 2, worker)
+
+    pending = service.pending_ack(worker)
 
     check("после ознакомления регламент уходит из непрочитанных",
           not any(item["id"] == new_reg for item in pending),
@@ -396,6 +417,7 @@ def main():
     # проверки новых типов параметров заводим отдельный черновик.
     draft = service.create_regulation("ТЕСТ-Черновик", "Черновик для проверок", "Технолог")
     draft_stage = service.add_stage(draft, "Формовка", stage_key="forming", sort_order=20)
+    draft_stage = draft_stage["stage_id"]   # add_stage возвращает словарь, нужен id этапа
 
     req_param = service.add_parameter(draft, {
         "stage_id": draft_stage,
@@ -409,6 +431,7 @@ def main():
         "norm_source": "regulation",
         "fact_source": "manual",
     })
+    req_param = req_param["parameter_id"]   # add_parameter возвращает словарь
 
     conn = sqlite3.connect(temp_db)
     conn.row_factory = sqlite3.Row
@@ -450,6 +473,8 @@ def main():
 
     mass_stage = service.add_stage(draft, "Массоподготовка", stage_key="mass", sort_order=10)
 
+    mass_stage = mass_stage["stage_id"]   # add_stage возвращает словарь, нужен id этапа
+
     components = {}
 
     for key, title in [("gc", "ГЦ"), ("clay", "Глина"), ("sand", "Песок")]:
@@ -463,6 +488,7 @@ def main():
             "requirement_text": "ТРЕБУЕТ УТОЧНЕНИЯ",
             "fact_source": "manual",
         })
+        components[key] = components[key]["parameter_id"]   # add_parameter возвращает словарь
 
     mix = service.get_mix(draft)
 

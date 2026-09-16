@@ -13,7 +13,7 @@ CREATE TABLE regulation_stages(id INTEGER PRIMARY KEY,regulation_id INTEGER,stag
 CREATE TABLE regulation_parameters(id INTEGER PRIMARY KEY,regulation_id INTEGER,stage_id INTEGER,equipment_id INTEGER,name TEXT,unit TEXT,param_type TEXT,min_value REAL,max_value REAL,optimal_value REAL,target_value REAL,tolerance_abs REAL,tolerance_percent REAL,text_rule TEXT,requirement_text TEXT,requirement_value REAL,tolerance_text TEXT,param_group TEXT,component_key TEXT,norm_source TEXT,norm_reference TEXT,fact_source TEXT,plc_tag TEXT,is_critical INTEGER,check_interval TEXT,note TEXT,sort_order INTEGER,is_active INTEGER DEFAULT 1);
 CREATE TABLE regulation_changes(id INTEGER PRIMARY KEY,regulation_id INTEGER,version_from INTEGER,version_to INTEGER,reason TEXT,changed_by TEXT,changed_role TEXT,changes TEXT,created_at TEXT);
 CREATE TABLE measurements(id INTEGER PRIMARY KEY,parameter_id INTEGER,equipment_id INTEGER,regulation_id INTEGER,regulation_version INTEGER,norm_min REAL,norm_max REAL,norm_optimal REAL,norm_target REAL,norm_text TEXT,param_type TEXT,norm_requirement TEXT,norm_tolerance TEXT,norm_requirement_value REAL,value REAL,text_value TEXT,status TEXT,source TEXT,measured_by TEXT,measured_at TEXT,batch_ref TEXT,note TEXT);
-CREATE TABLE equipment(id INTEGER PRIMARY KEY,name TEXT);
+CREATE TABLE equipment(id INTEGER PRIMARY KEY,name TEXT,discipline TEXT DEFAULT 'both',is_active INTEGER NOT NULL DEFAULT 1);
 ''')
 c.execute("INSERT INTO regulations VALUES(1,'1.4','1.4 НФ',1,'active',NULL,NULL,'tech','2026-08-29',NULL,NULL,NULL)")
 c.execute("INSERT INTO regulation_stages VALUES(1,1,'mass_prep','Массоподготовка','',2,1)")
