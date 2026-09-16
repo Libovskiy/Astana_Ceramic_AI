@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/acai.css?v=14">
+<link rel="stylesheet" href="/static/acai.css?v=15">
 <style>
 .sensor-strip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .ss-item{display:flex;align-items:center;gap:6px;}
@@ -422,18 +422,27 @@ function renderSensors(lv){
     const a=k==='авария_флаг';
     const hz=k.endsWith('_гц');
 
+    // Загрузка вне 0-100% физически невозможна — так ведёт себя
+    // сбитый датчик (KP-10 шлёт и -189%, и +105%). Подменять такое
+    // нулём нельзя: сводка начнёт тихо врать, а датчик никто не
+    // починит. Показываем значение и помечаем как недостоверное.
+    const pctKey = k.includes('проц') && !a;
+    const bogus = pctKey && (!isFinite(v) || v < 0 || v > 100);
+
     // Частота — не процент: нулевая означает, что привод стоит,
     // и красить её как «низкую загрузку» неверно.
-    const c = a  ? (v>0?'var(--danger)':'var(--ok)')
+    const c = bogus ? 'var(--text-dim)'
+            : a  ? (v>0?'var(--danger)':'var(--ok)')
             : hz ? (v>0?'var(--ok)':'var(--text-dim)')
             : v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
 
-    const p=k.includes('проц')&&!a?Math.min(v,100):0;
+    const p=(pctKey && !bogus)?Math.min(v,100):0;
     const text = a  ? (v>0?'⚠ АВАРИЯ':'✓')
                : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
+               : bogus ? v.toFixed(1)+'% ⚠'
                : v.toFixed(1)+'%';
 
-    return `<div class="ss-item">
+    return `<div class="ss-item"${bogus?' title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно"':''}>
       ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
       <span class="ss-label">${LABELS[k]}</span>
       <span class="ss-val" style="color:${c}">${text}</span>

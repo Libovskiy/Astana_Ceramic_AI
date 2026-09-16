@@ -67,6 +67,12 @@ def get_performance_trend():
     return result
 
 
+# Дольше смены — почти наверняка забыли закрыть обращение, а не
+# оборудование правда стоит двенадцать часов подряд. Не прячем такие
+# простои и не обрезаем: помечаем, чтобы человек проверил.
+STALE_DOWNTIME_MINUTES = 12 * 60
+
+
 def get_downtime_by_period(days=7):
     """
     Простои за период — общая сумма + разбивка по дисциплине
@@ -105,15 +111,39 @@ def get_downtime_by_period(days=7):
     by_discipline = {"mechanical": 0, "electrical": 0, "other": 0}
     per_equipment = {}
     total_minutes = 0
+    closed_minutes = 0
+    open_minutes = 0
+    open_count = 0
+    stale = []
 
     for row in rows:
 
-        if row["duration_minutes"] is not None:
+        is_open = row["duration_minutes"] is None
+
+        if not is_open:
             minutes = row["duration_minutes"]
+            closed_minutes += minutes
         else:
-            # Ещё идёт — считаем прошедшее время "на лету"
+            # Ещё идёт — считаем прошедшее время "на лету".
+            #
+            # Простой закрывается только вместе с обращением, поэтому
+            # забытое обращение тикает бесконечно: открыли в пятницу
+            # вечером — в понедельник в отчёте трое суток простоя.
+            # Число само по себе не врёт (оборудование правда числится
+            # стоящим), но смешивать его с измеренными простоями
+            # нельзя: директор должен видеть, что это НЕЗАКРЫТАЯ
+            # запись, а не подтверждённый факт.
             started_at = datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S")
             minutes = max(round((now - started_at).total_seconds() / 60), 0)
+            open_minutes += minutes
+            open_count += 1
+
+            if minutes >= STALE_DOWNTIME_MINUTES:
+                stale.append({
+                    "equipment_name": row["equipment_name"] or f"Оборудование #{row['equipment_id']}",
+                    "started_at": row["started_at"],
+                    "minutes": minutes,
+                })
 
         total_minutes += minutes
 
@@ -150,8 +180,18 @@ def get_downtime_by_period(days=7):
 
     by_equipment.sort(key=lambda item: item["total_minutes"], reverse=True)
 
+    stale.sort(key=lambda item: item["minutes"], reverse=True)
+
     return {
         "total_minutes": total_minutes,
+        # Измеренные простои: начало и конец проставлены человеком.
+        "closed_minutes": closed_minutes,
+        # Ещё идут. Показывать отдельно, иначе незакрытая запись
+        # выглядит как подтверждённая потеря времени.
+        "open_minutes": open_minutes,
+        "open_count": open_count,
+        # Идут дольше смены — скорее всего, забыли закрыть обращение.
+        "stale": stale,
         # Инцидент — одна запись простоя, а не обращение: рядом с часами
         # должно стоять число случаев, из которых эти часы сложились.
         "incidents_count": len(rows),

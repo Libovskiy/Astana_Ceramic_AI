@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/acai.css?v=14">
+<link rel="stylesheet" href="/static/acai.css?v=15">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -45,6 +45,14 @@
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="keyMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
+
+      <!-- Простой закрывается только вместе с обращением. Забыли
+           закрыть в пятницу — в понедельник в отчёте трое суток
+           простоя. Предупреждаем до того, как цифра попадёт на
+           совещание. -->
+      <div id="staleDowntime" style="display:none;margin-bottom:16px;padding:12px 16px;
+           border-radius:12px;background:rgba(245,158,11,.1);
+           border:1px solid rgba(245,158,11,.35);font-size:13px"></div>
 
       <!-- ВЫПУСК И БРАК ПО СМЕННЫМ ОТЧЁТАМ — то, что обсуждают на совещании -->
       <div class="card" id="shiftAnalyticsCard" style="margin-bottom:16px;display:none">
@@ -173,7 +181,17 @@ function renderMetrics(s){
   const perf=s.performance||{};const dt=s.downtime||{};const loss=s.biggest_loss||{};
   const pp=perf.plan_completion_pct;
   const pc=pp==null?'var(--text-dim)':pp>=90?'var(--ok)':pp>=70?'var(--warn)':'var(--danger)';
-  const tm=dt.total_minutes||0;const tc=tm>=60?`${Math.floor(tm/60)}ч ${tm%60}м`:`${tm}м`;
+  const fmt=(m)=>{m=Math.round(m||0);return m>=60?`${Math.floor(m/60)}ч ${m%60}м`:`${m}м`;};
+  const tm=dt.total_minutes||0;const tc=fmt(tm);
+  // Незакрытые простои тикают прямо сейчас и в любой момент могут
+  // оказаться просто забытым обращением. Показываем их отдельно от
+  // измеренных, иначе цифра выглядит подтверждённой потерей времени.
+  const openMin=dt.open_minutes||0, openCnt=dt.open_count||0;
+  const closedMin=dt.closed_minutes||0;
+  const dtNote = openCnt>0
+    ? `измерено ${fmt(closedMin)} · ещё идёт ${fmt(openMin)}`
+    : `${dt.incidents_count||0} инцидентов`;
+    renderStaleDowntime(dt.stale || []);
   document.getElementById('keyMetrics').innerHTML=`
     <div class="metric ${pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
       <div class="metric-label">Выполнение плана</div>
@@ -182,7 +200,7 @@ function renderMetrics(s){
     <div class="metric ${tm>0?'warn':'ok'}">
       <div class="metric-label">Суммарный простой</div>
       <div class="metric-value ${tm>0?'warn':'ok'}">${tc||'0м'}</div>
-      <div class="metric-sub">${dt.incidents_count||0} инцидентов</div>
+      <div class="metric-sub">${dtNote}</div>
     </div>
     <div class="metric ${loss.total_minutes>0?'warn':'ok'}">
       <div class="metric-label">Макс. простой</div>
@@ -215,6 +233,45 @@ function renderTopProblems(d){
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);width:24px;text-align:right">${p.count}</span>
       </div>`).join('')
     :'<div class="empty">Нет данных</div>';
+}
+
+// Простои, которые идут дольше смены. Не прячем и не обрезаем их:
+// оборудование может правда стоять сутки. Но человек должен пойти и
+// проверить, а не узнать об этом из годового отчёта.
+// Пустые графики без объяснения бесполезны: непонятно, завод не
+// работал или смена не сдала отчёт. Показываем поимённо, что застряло
+// и чьего действия ждёт — тогда пустота превращается в задачу.
+function renderPending(list, count){
+  const el=document.getElementById('saPending');
+  if(!el) return;
+  if(!count){ el.innerHTML=''; return; }
+
+  const word = count===1 ? 'отчёт не дошёл' : (count<5 ? 'отчёта не дошли' : 'отчётов не дошло');
+  const rows = list.slice(0,6).map(item=>
+    `<div style="margin-top:3px">${ACAI.shortDate(item.report_date)} · ${item.shift} ·
+     бригада ${item.brigade} — <span style="color:var(--text-dim)">${item.waiting_for}</span></div>`
+  ).join('');
+  const more = list.length>6 ? `<div style="margin-top:3px;color:var(--text-dim)">и ещё ${list.length-6}</div>` : '';
+
+  el.innerHTML = `<div style="text-align:right">
+    <div style="font-weight:600">${count} ${word} до сводки</div>${rows}${more}</div>`;
+}
+
+function renderStaleDowntime(list){
+  const box=document.getElementById('staleDowntime');
+  if(!box) return;
+  if(!list.length){ box.style.display='none'; return; }
+  const rows=list.slice(0,5).map(item=>{
+    const h=Math.floor(item.minutes/60), m=item.minutes%60;
+    return `<li style="margin-top:4px"><strong>${item.equipment_name}</strong> — идёт ${h}ч ${m}м,
+            с ${ACAI.shortDate(item.started_at)} ${ACAI.shortTime(item.started_at)}</li>`;
+  }).join('');
+  box.innerHTML = `<div style="font-weight:600;color:var(--warn);margin-bottom:4px">
+      ⚠ Простой идёт дольше смены — вероятно, забыли закрыть обращение</div>
+    <ul style="margin:0;padding-left:18px;color:var(--text-dim)">${rows}</ul>
+    <div style="margin-top:6px;color:var(--text-dim)">
+      Пока обращение открыто, эти минуты продолжают капать в отчёт.</div>`;
+  box.style.display='';
 }
 
 function renderDowntimeList(dt){
@@ -269,11 +326,29 @@ function renderSensorsNow(lv){
   document.getElementById('sensorNow').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">`+
     available.map(k=>{
       const v=parseFloat(lv[k].value);const isAlarm=k==='авария_флаг';
-      const color=isAlarm?(v>0?'var(--danger)':'var(--ok)'):v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
-      const pct=k.includes('проц')&&!isAlarm?Math.min(v,100):0;
-      return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px">
+
+      // Загрузка вне 0-100% физически невозможна. KP-10, например,
+      // присылает и -189%, и +105%. Не прячем и не обрезаем: если
+      // подменить такое значение нулём, датчик никто не починит, а
+      // сводка будет тихо врать. Показываем как есть, но помечаем —
+      // это сигнал электрику, а не показатель работы цеха.
+      const isPct=k.includes('проц')&&!isAlarm;
+      const bogus=isPct&&(!isFinite(v)||v<0||v>100);
+
+      const color=bogus?'var(--text-dim)'
+                 :isAlarm?(v>0?'var(--danger)':'var(--ok)')
+                 :v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+      const pct=(isPct&&!bogus)?Math.min(v,100):0;
+
+      const shown=isAlarm?(v>0?'⚠ АВАРИЯ':'✓ Норма')
+                 :bogus?v.toFixed(1)+'% ⚠'
+                 :v.toFixed(1)+'%';
+
+      return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px"
+             ${bogus?'title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно. В расчёты не берётся."':''}>
         <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">${LABELS[k]}</div>
-        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${isAlarm?(v>0?'⚠ АВАРИЯ':'✓ Норма'):v.toFixed(1)+'%'}</div>
+        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${shown}</div>
+        ${bogus?`<div style="font-size:10px;color:var(--warn);margin-top:4px">датчик врёт</div>`:''}
         ${pct?`<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${color};border-radius:2px"></div></div>`:''}
       </div>`;
     }).join('')+`</div>`;
@@ -305,8 +380,7 @@ async function loadShiftAnalytics(){
   card.style.display='block';
   const t=a.totals||{};
 
-  document.getElementById('saPending').textContent =
-    t.pending_reports ? `${t.pending_reports} отчётов ещё не подтверждены — в сводку не вошли` : '';
+  renderPending(t.pending_list || [], t.pending_reports || 0);
 
   document.getElementById('saTotals').innerHTML=`
     ${saMetric('Вагонеток',t.cars_count||0)}

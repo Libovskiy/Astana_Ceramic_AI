@@ -573,7 +573,21 @@ def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
     conn = _conn()
     rows = [dict(r) for r in conn.execute(query, params).fetchall()]
 
-    pending_query = "SELECT COUNT(*) FROM shift_reports WHERE status != ?"
+    # Что не дошло до сводки и на ком застряло.
+    #
+    # Раньше отдавалось просто число «не подтверждено». Директор видел
+    # на совещании пустые графики и не понимал: завод не работал или
+    # смена не сдала отчёт. Теперь видно конкретно — какая бригада,
+    # за какое число и чьего действия ждёт.
+    #
+    # Кто должен был работать в смену, система не знает: графика смен
+    # в ней нет. Поэтому показываем не «кто не вышел», а то, что
+    # достоверно известно — заведённые отчёты, застрявшие по дороге.
+    pending_query = """
+        SELECT report_date, shift, brigade, status
+        FROM shift_reports
+        WHERE status != ?
+    """
     pending_params: list = [STATUS_APPROVED]
     if date_from:
         pending_query += " AND report_date >= ?"
@@ -581,7 +595,21 @@ def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
     if date_to:
         pending_query += " AND report_date <= ?"
         pending_params.append(date_to)
-    pending = conn.execute(pending_query, pending_params).fetchone()[0]
+    pending_query += " ORDER BY report_date DESC, shift"
+
+    WAITING_FOR = {
+        STATUS_DRAFT: "оператор не сдал",
+        STATUS_SUBMITTED: "ждёт проверки начальника смены",
+        STATUS_CHECKED: "ждёт подтверждения гл. инженера",
+        STATUS_RETURNED: "возвращён на доработку",
+    }
+
+    pending_rows = [dict(r) for r in conn.execute(pending_query, pending_params).fetchall()]
+
+    for item in pending_rows:
+        item["waiting_for"] = WAITING_FOR.get(item["status"], STATUS_LABELS.get(item["status"], item["status"]))
+
+    pending = len(pending_rows)
     conn.close()
 
     cars = [r for r in rows if r.get("layer1_at") or r.get("pallets_good") or r.get("pallets_defect")]
@@ -628,6 +656,7 @@ def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
     totals = summarize(enriched, norms)
     totals["reports_count"] = len({r["id"] for r in rows})
     totals["pending_reports"] = pending
+    totals["pending_list"] = pending_rows
 
     return {
         "totals": totals,
