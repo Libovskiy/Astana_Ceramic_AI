@@ -431,7 +431,7 @@ function renderSensorsNow(lv){
 
       const color=bogus?'var(--text-dim)'
                  :isAlarm?(v>0?'var(--danger)':'var(--ok)')
-                 :v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+                 :v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
       const pct=(isPct&&!bogus)?Math.min(v,100):0;
 
       const shown=isAlarm?(v>0?'⚠ АВАРИЯ':'✓ Норма')

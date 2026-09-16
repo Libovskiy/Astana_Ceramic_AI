@@ -344,35 +344,47 @@ function renderProdMap(equipment, liveData){
 
   const flow=document.getElementById('prodFlow');
   const parts=[];
+  let prevColor=null;
 
   ZONES_ORDER.forEach((zone,i)=>{
     const s=byZone[zone]||{total:0,ok:0,warn:0,err:0};
-    const cls=s.err>0?'danger':s.warn>0?'warn':'ok';
-    const color=getColor(cls);
-    const pct=s.total?Math.round(s.ok/s.total*100):100;
+    let pct=s.total?Math.round(s.ok/s.total*100):100;
     const svgFn=ZONE_SVGS[zone];
 
-    // живые данные
-    let liveVal='';
+    // Живая загрузка с панели важнее доли исправного оборудования:
+    // если она есть и достоверна (0–100), по ней и показываем.
+    let liveLabel='';
     if(zone==='Массаподготовка'&&liveData['pl024_1_загрузка_проц']){
       const v=parseFloat(liveData['pl024_1_загрузка_проц'].value);
-      const c=v<60?'var(--warn)':'var(--ok)';
-      liveVal=`<span style="font-size:10px;color:var(--text-dim)">PL024 №1</span>
-        <span class="zone-pct" style="color:${c}">${v.toFixed(0)}%</span>`;
-    } else {
-      liveVal=`<span class="zone-pct" style="color:${color}">${pct}%</span>`;
+      if(isFinite(v)&&v>=0&&v<=100){ pct=Math.round(v); liveLabel='PL024 №1'; }
     }
+
+    // Цвет — по показанному проценту, а не по тому, есть ли где-то
+    // «Внимание». Раньше 46% горели жёлтым, потому что в зоне не было
+    // ошибок. Для производства ниже 50% — это уже авария.
+    //   < 50  красный
+    //   < 80  жёлтый
+    //   >= 80 зелёный
+    let cls=pct<50?'danger':pct<80?'warn':'ok';
+    // Оборудование с ошибкой всё равно делает зону красной, даже если
+    // процент ещё высокий — иначе поломку не заметят.
+    if(s.err>0) cls='danger';
+    const color=getColor(cls);
+
+    const liveVal=`${liveLabel?`<span style="font-size:10px;color:var(--text-dim)">${liveLabel}</span>`:''}
+      <span class="zone-pct" style="color:${color}">${pct}%</span>`;
 
     if(i>0) parts.push(`<div class="prod-arrow">
       <svg width="24" height="24" viewBox="0 0 24 24">
         <defs><linearGradient id="ag${i}" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="${getColor(byZone[ZONES_ORDER[i-1]]?.err>0?'danger':byZone[ZONES_ORDER[i-1]]?.warn>0?'warn':'ok')}"/>
+          <stop offset="0%" stop-color="${prevColor||color}"/>
           <stop offset="100%" stop-color="${color}"/>
         </linearGradient></defs>
         <path d="M4,12 H18 M14,8 L18,12 L14,16" stroke="url(#ag${i})" stroke-width="2" fill="none" stroke-linecap="round"/>
       </svg>
     </div>`);
 
+    prevColor=color;
     parts.push(`<div class="prod-zone ${cls}" onclick="window.location='/equipment'" title="${zone}">
       <div class="zone-pulse ${cls}"></div>
       <div class="zone-3d">${svgFn?svgFn(color):''}</div>
@@ -383,7 +395,7 @@ function renderProdMap(equipment, liveData){
           <div class="zone-bar-fill" style="width:${pct}%;background:${color}"></div>
         </div>
         <div class="zone-status" style="color:${color}">
-          ${s.err>0?`⚠ ${s.err} ошибок`:s.warn>0?`! ${s.warn} внимание`:s.total>0?'✓ Норма':''}
+          ${s.err>0?`⚠ ${s.err} ошибок`:cls==='danger'?'⚠ Низкая загрузка':s.warn>0?`! ${s.warn} внимание`:cls==='warn'?'! Ниже нормы':s.total>0?'✓ Норма':''}
         </div>
         <div style="font-size:10px;color:var(--text-dim)">${s.total} ед.</div>
       </div>
@@ -433,7 +445,7 @@ function renderSensors(lv){
     const c = bogus ? 'var(--text-dim)'
             : a  ? (v>0?'var(--danger)':'var(--ok)')
             : hz ? (v>0?'var(--ok)':'var(--text-dim)')
-            : v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+            : v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
 
     const p=(pctKey && !bogus)?Math.min(v,100):0;
     const text = a  ? (v>0?'⚠ АВАРИЯ':'✓')
