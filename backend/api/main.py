@@ -342,7 +342,6 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     "/instructions": "*",
     "/regulations": "*",
     "/my-regulation": "*",
-    "/mobile": "*",
     # Переписка между людьми открыта всем: договориться о подмене или
     # позвать электрика нужно любому, независимо от должности.
     "/messenger": "*",
@@ -1226,11 +1225,6 @@ def analytics_page(request: Request):
         request=request,
         name="analytics.html"
     )
-
-@app.get("/mobile")
-def mobile_page(request: Request):
-    return templates.TemplateResponse(request=request, name="mobile.html")
-
 
 @app.get("/messenger")
 def messenger_page(request: Request):
