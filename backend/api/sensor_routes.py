@@ -1,7 +1,10 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, ConfigDict
@@ -11,6 +14,40 @@ from backend import models
 from backend.services.auth_service import get_user_by_session
 
 router = APIRouter(prefix="/api/sensors", tags=["sensors"])
+
+
+# ── Ключ приёма показаний ────────────────────────────────
+# Без проверки в историю производства мог писать кто угодно из сети,
+# а по этим данным считаются простои и исправность оборудования.
+# Расширение уже присылает заголовок X-Sensor-Key — просто сверяем.
+
+def _expected_sensor_key() -> str:
+    key = (os.environ.get("SENSOR_PUSH_KEY") or "").strip()
+
+    if not key:
+        env_file = Path(__file__).resolve().parents[2] / ".env"
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if line.startswith("SENSOR_PUSH_KEY="):
+                    key = line.split("=", 1)[1].strip()
+                    break
+
+    return key
+
+
+def require_sensor_key(x_sensor_key: Optional[str] = Header(None)):
+    expected = _expected_sensor_key()
+
+    if not expected:
+        # Ключ не настроен — не запираем дверь, которую не на что
+        # закрыть, иначе сбор данных встанет молча.
+        return True
+
+    if x_sensor_key != expected:
+        raise HTTPException(status_code=403, detail="Неверный ключ датчиков.")
+
+    return True
+
 
 # ── Живой кэш в памяти (не пишется в БД) ─────────────────
 # Обновляется каждую секунду расширением Chrome.
@@ -40,12 +77,12 @@ class ReadingOut(BaseModel):
 # ── Живые данные (кэш в памяти, без авторизации) ─────────
 
 @router.post("/live")
-def live_push(payload: PushPayload):
+def live_push(payload: PushPayload, _ok: bool = Depends(require_sensor_key)):
     """
     Принимает данные каждую секунду от Chrome-расширения.
     Хранит только в памяти — не пишет в БД.
     """
-    ts = datetime.utcnow().isoformat()
+    ts = datetime.now().isoformat()   # время местное, не UTC
     for name, value in payload.readings.items():
         _live_cache[str(name)] = {"value": str(value), "updated_at": ts}
     return {"ok": True}
@@ -60,11 +97,12 @@ def live_get(user: dict = Depends(current_user)):
 # ── Исторические данные (пишутся в БД каждые 30 сек) ─────
 
 @router.post("/push")
-def push_readings(payload: PushPayload, db: Session = Depends(get_db)):
+def push_readings(payload: PushPayload, db: Session = Depends(get_db),
+                  _ok: bool = Depends(require_sensor_key)):
     """Принимает данные от Chrome-расширения и пишет в БД."""
     if not payload.readings:
         return {"ok": True, "saved": 0}
-    ts = datetime.utcnow()
+    ts = datetime.now()   # время местное, не UTC
     count = 0
     for name, value in payload.readings.items():
         db.add(models.SensorReading(
@@ -101,7 +139,7 @@ def sensor_history(
     db: Session = Depends(get_db),
     user: dict = Depends(current_user),
 ):
-    since = datetime.utcnow() - timedelta(hours=hours)
+    since = datetime.now() - timedelta(hours=hours)   # время местное, не UTC
     return (
         db.query(models.SensorReading)
         .filter(

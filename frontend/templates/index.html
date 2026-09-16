@@ -168,7 +168,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=10"></script>
+<script src="/static/acai_layout.js?v=11"></script>
 <script src="/static/mobile_nav_v2.js?v=2"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -403,17 +403,40 @@ async function fetchLive(){
 }
 function renderSensors(lv){
   if(!Object.keys(lv).length)return;
-  const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц','kp10_загрузка_проц','авария_флаг'];
-  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+  // Загрузки, авария и частоты приводов. Частоты раньше собирались,
+  // но на экран не выводились — их просто не было в этом списке.
+  const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц',
+              'kp10_загрузка_проц','авария_флаг',
+              'питатель_1_гц','питатель_2_гц',
+              'конвейер_1_гц','конвейер_2_гц','конвейер_3_гц','конвейер_4_гц',
+              'конвейер_5_гц','конвейер_6_гц','конвейер_7_гц'];
+  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2',
+                'питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10',
+                'авария_флаг':'Авария',
+                'питатель_1_гц':'Питатель 1','питатель_2_гц':'Питатель 2',
+                'конвейер_1_гц':'Конв. 1','конвейер_2_гц':'Конв. 2','конвейер_3_гц':'Конв. 3',
+                'конвейер_4_гц':'Конв. 4','конвейер_5_гц':'Конв. 5','конвейер_6_гц':'Конв. 6',
+                'конвейер_7_гц':'Конв. 7'};
   const items=KEYS.filter(k=>lv[k]).map(k=>{
     const v=parseFloat(lv[k].value);
     const a=k==='авария_флаг';
-    const c=a?(v>0?'var(--danger)':'var(--ok)'):v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+    const hz=k.endsWith('_гц');
+
+    // Частота — не процент: нулевая означает, что привод стоит,
+    // и красить её как «низкую загрузку» неверно.
+    const c = a  ? (v>0?'var(--danger)':'var(--ok)')
+            : hz ? (v>0?'var(--ok)':'var(--text-dim)')
+            : v<40?'var(--danger)':v<60?'var(--warn)':'var(--ok)';
+
     const p=k.includes('проц')&&!a?Math.min(v,100):0;
+    const text = a  ? (v>0?'⚠ АВАРИЯ':'✓')
+               : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
+               : v.toFixed(1)+'%';
+
     return `<div class="ss-item">
       ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
       <span class="ss-label">${LABELS[k]}</span>
-      <span class="ss-val" style="color:${c}">${a?(v>0?'⚠ АВАРИЯ':'✓'):v.toFixed(1)+'%'}</span>
+      <span class="ss-val" style="color:${c}">${text}</span>
     </div>`;
   });
   const now=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -778,6 +801,61 @@ async function askAi(){
       document.getElementById('aiFab').onclick = () => toggleAi(true);
     }
   }, 200);
+})();
+</script>
+
+
+<script>
+// Состояние сбора показаний.
+// Данные идут через расширение в браузере: закрыл вкладку с панелью,
+// уснул мак — сбор молча встал, и никто не узнает. Директор посмотрит
+// на вчерашние цифры и решит, что система врёт. Показываем правду.
+(async function(){
+  const BOX_ID = 'sensorState';
+
+  async function check(){
+    let box = document.getElementById(BOX_ID);
+
+    let last = null;
+    try{
+      const r = await ACAI.get('/api/sensors/latest');
+      const items = r.readings || r || [];
+      for (const item of (Array.isArray(items) ? items : Object.values(items))) {
+        const at = item.recorded_at || item.updated_at;
+        if (at && (!last || at > last)) last = at;
+      }
+    }catch{ return; }
+
+    if (!last) return;
+
+    const minutes = Math.round((Date.now() - new Date(last.replace(' ', 'T')).getTime()) / 60000);
+    // Показания идут раз в минуту. Полчаса тишины — сбор встал.
+    const stale = minutes > 30;
+
+    if (!box) {
+      box = document.createElement('div');
+      box.id = BOX_ID;
+      box.style.cssText = 'padding:10px 14px;border-radius:10px;margin-bottom:14px;font-size:12px';
+      const page = document.querySelector('.page');
+      if (page) page.insertBefore(box, page.firstChild);
+      else return;
+    }
+
+    box.style.display = stale ? 'block' : 'none';
+    if (!stale) return;
+
+    const hours = Math.floor(minutes / 60);
+    const when = hours ? `${hours} ч ${minutes % 60} мин назад` : `${minutes} мин назад`;
+
+    box.style.background = 'rgba(245,158,11,.1)';
+    box.style.border = '1px solid rgba(245,158,11,.35)';
+    box.style.color = 'var(--warn)';
+    box.innerHTML = `⚠ Показатели оборудования не обновляются: последние данные ${when}.
+      <span style="color:var(--text-dim)">Проверьте, открыта ли вкладка WebHMI в браузере на сервере.</span>`;
+  }
+
+  await check();
+  setInterval(check, 60000);
 })();
 </script>
 
