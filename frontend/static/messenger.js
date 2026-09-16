@@ -111,7 +111,25 @@ async function pullMessages(first) {
   try {
     const query = lastMessageId ? `after_id=${lastMessageId}` : 'limit=50';
     data = await ACAI.get(`/api/messenger/conversations/${current.id}/messages?${query}`);
-  } catch {
+  } catch (e) {
+    // Переписки больше нет или человека убрали из группы. Раньше
+    // страница молча долбилась в неё каждые 3 секунды до закрытия
+    // вкладки — в логе оставались сотни ошибок, а человек видел
+    // застывший экран и не понимал, почему нет новых сообщений.
+    const gone = String(e.message || '') === '400' || String(e.message || '') === '403';
+
+    if (gone) {
+      stopThreadPolling();
+      current = null;
+      $('mgHead').style.display = 'none';
+      $('mgComposer').style.display = 'none';
+      $('mgMessages').innerHTML =
+        '<div class="mg-empty">Эта переписка больше недоступна.<br>Возможно, вас убрали из группы.</div>';
+      showList();
+      loadList(true);
+    }
+
+    // Обычный обрыв связи — молча пробуем в следующий раз.
     return;
   }
 
