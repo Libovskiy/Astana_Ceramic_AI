@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Переписка — ACAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/acai.css?v=14">
+<link rel="stylesheet" href="/static/messenger.css?v=2">
+</head>
+<body data-screen="list">
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Переписка</div>
+        <div class="topbar-sub">Личные сообщения и группы</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="mg-wrap">
+
+      <!-- ── Список переписок ── -->
+      <section class="mg-list" id="mgList">
+        <div class="mg-list-head">
+          <input class="input" id="mgSearch" placeholder="🔍 Поиск" oninput="renderList()">
+          <button class="btn primary sm" onclick="openNew()" title="Написать">✎</button>
+        </div>
+        <div class="mg-items" id="mgItems">
+          <div class="mg-empty">Загрузка…</div>
+        </div>
+      </section>
+
+      <!-- ── Переписка ── -->
+      <section class="mg-thread" id="mgThread">
+
+        <div class="mg-thread-head" id="mgHead" style="display:none">
+          <button class="mg-back" onclick="showList()" title="К списку">‹</button>
+          <div class="mg-avatar" id="mgHeadAvatar"></div>
+          <div style="flex:1;min-width:0">
+            <div class="mg-thread-title" id="mgHeadTitle"></div>
+            <div class="mg-thread-sub" id="mgHeadSub"></div>
+          </div>
+          <button class="btn secondary sm" id="mgGroupBtn"
+                  onclick="openGroupSettings()" style="display:none">Участники</button>
+        </div>
+
+        <div class="mg-messages" id="mgMessages">
+          <div class="mg-empty">Выберите переписку слева или нажмите ✎, чтобы написать</div>
+        </div>
+
+        <div class="mg-composer" id="mgComposer" style="display:none">
+          <textarea id="mgInput" rows="1" placeholder="Сообщение…"></textarea>
+          <button class="mg-send" onclick="send()" title="Отправить">➤</button>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:460px;max-width:95vw"></div></div>
+
+<script src="/static/acai_layout.js?v=13"></script>
+<script src="/static/mobile_nav_v2.js?v=3"></script>
+<script src="/static/messenger.js?v=2"></script>
+</body>
+</html>

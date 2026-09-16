@@ -190,6 +190,9 @@ app.include_router(shift_report_router)
 from backend.api.task_status_routes import router as task_status_router
 app.include_router(task_status_router)
 
+from backend.api.team_chat_routes import router as team_chat_router
+app.include_router(team_chat_router)
+
 from backend.api.docs_files_routes import router as docs_files_router
 app.include_router(docs_files_router)
 
@@ -240,6 +243,9 @@ init_plc_error_table()
 
 from backend.services.shift_report_service import init_shift_report_tables
 init_shift_report_tables()
+
+from backend.services.team_chat_service import init_team_chat
+init_team_chat()
 
 from backend.services.equipment_state_service import (
     init_state_events
@@ -337,6 +343,9 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     "/regulations": "*",
     "/my-regulation": "*",
     "/mobile": "*",
+    # Переписка между людьми открыта всем: договориться о подмене или
+    # позвать электрика нужно любому, независимо от должности.
+    "/messenger": "*",
     "/knowledge": ("director", "chief_engineer", "engineer",
                    "chief_mechanic", "chief_electrician"),
     # lab_technician раньше отсутствовал: логин уводил лаборанта на /lab,
@@ -926,6 +935,11 @@ def me(user: dict = Depends(get_current_user)):
     return {
         "success": True,
         "user": {
+            # id нужен переписке: по нему страница отличает свои
+            # сообщения от чужих и находит собеседника в диалоге.
+            # Без него всё выглядело чужим, а в шапке личного
+            # диалога стояла должность самого себя.
+            "id": user["id"],
             "username": user["username"],
             "full_name": user["full_name"],
             "role": user["role"]
@@ -1216,6 +1230,13 @@ def analytics_page(request: Request):
 @app.get("/mobile")
 def mobile_page(request: Request):
     return templates.TemplateResponse(request=request, name="mobile.html")
+
+
+@app.get("/messenger")
+def messenger_page(request: Request):
+    """Переписка между людьми — не путать с /chat, там обращения о поломках."""
+    return templates.TemplateResponse(request=request, name="messenger.html")
+
 
 @app.get("/cases")
 def cases_page(request: Request):

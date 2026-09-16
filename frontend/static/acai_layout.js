@@ -183,6 +183,9 @@ const NAV_ITEMS = [
   // частое, зачем сюда заходят с цеха. Ведёт на /chat (мессенджер), а не
   // на /cases: /cases — управленческий список, он ниже, в Аналитике.
   { icon: '💬', label: 'Обращения',     href: '/chat',         roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
+  // Переписка между людьми — отдельно от «Обращений»: там разговор о
+  // поломке со статусом и станком, здесь просто общение.
+  { icon: '✉️', label: 'Переписка',     href: '/messenger',    roles: '*' },
   { icon: '🔧', label: 'Диагностика',   href: '/diagnostics',  roles: ['worker','shift_supervisor','engineer','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician'] },
   { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🔩', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic'] },
@@ -211,19 +214,33 @@ const NAV_ITEMS = [
   { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin'] },
 ];
 
-function renderSidebar(user, openCases = 0) {
+function renderSidebar(user, openCases = 0, unreadMessages = 0) {
   const role = user?.role || '';
   const current = window.location.pathname;
 
-  const items = NAV_ITEMS.map(item => {
+  // Заголовок раздела показываем, только если под ним есть хоть один
+  // доступный пункт. Иначе у рабочего висели пустые «Аналитика»,
+  // «База знаний» и «Система» — выглядело как сломанное меню.
+  const visible = NAV_ITEMS.filter(item => {
+    if (item.section) return true;
+    return item.roles === '*' || item.roles.includes(role);
+  }).filter((item, index, arr) => {
+    if (!item.section) return true;
+    const next = arr[index + 1];
+    return next && !next.section;
+  });
+
+  const items = visible.map(item => {
     if (item.section) {
       return `<div class="sidebar-section">${item.section}</div>`;
     }
-    // проверяем доступ
-    if (item.roles !== '*' && !item.roles.includes(role)) return '';
     const active = current === item.href || current.startsWith(item.href + '/') ? 'active' : '';
-    const badge = item.href === '/cases' && openCases > 0
-      ? `<span class="ni-badge">${openCases}</span>` : '';
+    let badge = '';
+    if (item.href === '/cases' && openCases > 0) {
+      badge = `<span class="ni-badge">${openCases}</span>`;
+    } else if (item.href === '/messenger' && unreadMessages > 0) {
+      badge = `<span class="ni-badge">${unreadMessages}</span>`;
+    }
     return `<a href="${item.href}" class="nav-item ${active}">
       <span class="ni-icon">${item.icon}</span>
       ${item.label}${badge}
@@ -259,7 +276,7 @@ function renderSidebar(user, openCases = 0) {
       <div class="user-card">
         <div class="user-avatar" style="background:${avatarColor}">${initials}</div>
         <div>
-          <div class="user-name">${user?.full_name || '—'}</div>
+          <div class="user-name" title="${(user?.full_name || '').replace(/"/g,'&quot;')}">${user?.full_name || '—'}</div>
           <div class="user-role">${roleLabel}</div>
         </div>
         <button class="logout-btn" onclick="logout()" title="Выйти">↪</button>
@@ -306,8 +323,17 @@ async function initLayout() {
   const openCases = dashData?.open_cases || 0;
 
   // рендерим сайдбар
+  // Непрочитанные сообщения — значок рядом с «Перепиской». Запрос
+  // дешёвый (один COUNT) и не должен ронять отрисовку меню, если
+  // переписка почему-то недоступна.
+  let unreadMessages = 0;
+  try {
+    const u = await ACAI.get('/api/messenger/unread');
+    unreadMessages = u?.unread || 0;
+  } catch {}
+
   const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.innerHTML = renderSidebar(user, openCases);
+  if (sidebar) sidebar.innerHTML = renderSidebar(user, openCases, unreadMessages);
 
   // Роль в разметку: нижняя панель на телефоне подбирает по ней
   // четыре частых раздела — рабочему обход, директору сводку.
