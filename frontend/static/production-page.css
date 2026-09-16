@@ -193,3 +193,23 @@
     width: 100%;
   }
 }
+
+/* Строка выбора отчёта в режиме просмотра: директор и аналитик
+   отчёты не заводят, а открывают готовые. */
+.sr-pick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+.sr-pick:hover { border-color: var(--accent); }

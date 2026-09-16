@@ -13,6 +13,7 @@
 
 let _srMeta = null;
 let _srReport = null;
+let _srViewerOnly = false;
 
 async function initShiftReport() {
   const card = document.getElementById("shiftReportCard");
@@ -38,10 +39,80 @@ async function initShiftReport() {
       .map(b => `<option value="${b}">Бригада ${b}</option>`).join("");
   }
 
+  // Кто только смотрит (директор, аналитик, гл. механик) — тому
+  // нечего «открывать»: заводить отчёт он не должен и не может.
+  // Раньше страница всё равно дёргала создание и встречала его
+  // красным «Нет прав: вести сменный отчёт» во весь экран.
+  // Теперь он видит список готовых отчётов и открывает нужный.
+  _srViewerOnly = !_srMeta.can_fill && !_srMeta.can_check && !_srMeta.can_approve;
+
+  if (_srViewerOnly) {
+    document.getElementById("srOpenBtn").textContent = "Показать";
+    await srLoadList();
+    return;
+  }
+
   await srOpen();
 }
 
+
+// Список сданных отчётов — для тех, кто их только читает.
+async function srLoadList() {
+  const box = document.getElementById("srCars");
+  const date = document.getElementById("srDate").value;
+
+  box.innerHTML = '<div class="loading-state">Загрузка…</div>';
+  document.getElementById("srTotals").innerHTML = "";
+  document.getElementById("srActions").innerHTML = "";
+
+  let reports = [];
+
+  try {
+    const r = await ACAI.get("/api/shift-report/list?limit=50");
+    reports = r.reports || [];
+  } catch (e) {
+    box.innerHTML = `<div class="empty-state">Не удалось загрузить список отчётов</div>`;
+    return;
+  }
+
+  const shift = document.getElementById("srShift").value;
+  const filtered = reports.filter(r => (!date || r.report_date === date) && r.shift === shift);
+  const shown = filtered.length ? filtered : reports.slice(0, 10);
+
+  if (!shown.length) {
+    box.innerHTML = '<div class="empty-state">Сменных отчётов пока нет</div>';
+    return;
+  }
+
+  const title = filtered.length
+    ? "Отчёты за выбранную смену"
+    : "За выбранную смену отчётов нет. Последние сданные:";
+
+  box.innerHTML = `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${title}</div>
+    ${shown.map(r => `
+      <button class="sr-pick" onclick="srShow(${r.id})">
+        <span style="flex:1">${srEscape(r.report_date)} · ${srEscape(r.shift)} · бригада ${srEscape(r.brigade || "—")}</span>
+        <span style="color:var(--text-dim);font-size:12px">${srEscape(_srMeta.status_labels?.[r.status] || r.status)}</span>
+      </button>`).join("")}`;
+}
+
+
+// Открыть конкретный отчёт на просмотр (без создания).
+async function srShow(reportId) {
+  try {
+    const r = await ACAI.get(`/api/shift-report/${reportId}`);
+    _srReport = r.report;
+    srRender();
+  } catch (e) {
+    document.getElementById("srCars").innerHTML =
+      `<div class="empty-state error-state">${srEscape(e.message || "Не удалось открыть отчёт")}</div>`;
+  }
+}
+
 async function srOpen() {
+  if (_srViewerOnly) return srLoadList();
+
   const report_date = document.getElementById("srDate").value;
   const shift = document.getElementById("srShift").value;
   const brigadeSelect = document.getElementById("srBrigade");
@@ -91,7 +162,11 @@ function srRender() {
   `;
 
   const cars = report.cars || [];
-  document.getElementById("srCars").innerHTML = `
+
+  // Пустая таблица из десяти заголовков над одной строкой «вагонеток
+  // нет» занимала всю ширину экрана и выглядела как сломанная. Пока
+  // вагонеток нет — показываем только подсказку, что делать.
+  const table = cars.length ? `
     <div style="overflow-x:auto">
       <table class="table">
         <thead><tr>
@@ -103,12 +178,17 @@ function srRender() {
           <th>Причина</th>
           ${editable ? "<th></th>" : ""}
         </tr></thead>
-        <tbody>
-          ${cars.length ? cars.map(c => srCarRow(c, editable)).join("") : `
-            <tr><td colspan="${editable ? 11 : 10}" class="empty-state">Вагонеток пока нет</td></tr>`}
-        </tbody>
+        <tbody>${cars.map(c => srCarRow(c, editable)).join("")}</tbody>
       </table>
-    </div>
+    </div>` : `
+    <div class="empty-state" style="padding:22px 16px">
+      ${editable
+        ? "Вагонеток пока нет — нажмите «+ Вагонетка» и внесите первую"
+        : "В этом отчёте вагонеток нет"}
+    </div>`;
+
+  document.getElementById("srCars").innerHTML = `
+    ${table}
     ${editable ? `<button class="btn primary sm" style="margin-top:12px" onclick="srCarForm()">+ Вагонетка</button>` : ""}
   `;
 

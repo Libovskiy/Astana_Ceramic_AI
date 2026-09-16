@@ -2368,6 +2368,33 @@ PRODUCTION_LOG_ROLES = ("shift_supervisor", "chief_engineer", "director", "admin
 PRODUCTION_PLAN_ROLES = ("chief_engineer", "director", "admin")
 
 
+@app.get("/api/production/meta")
+def production_meta(user: dict = Depends(get_current_user)):
+    """
+    Что этой должности доступно на странице «Производство».
+
+    Раньше страница показывала всем всё подряд и ловила отказы:
+    рабочий видел «Не удалось загрузить историю» — как будто система
+    сломалась, хотя ему просто не положено. Теперь она спрашивает
+    заранее и не рисует то, чем человек всё равно не воспользуется.
+
+    Списки ролей берутся отсюда же, из одного места с проверками —
+    чтобы не разъехались, как это уже было с меню и страницами.
+    """
+
+    role = user["role"]
+    is_admin = role == "admin"
+
+    return {
+        "success": True,
+        "role": role,
+        "can_read_plan": is_admin or role in DASHBOARD_ALLOWED_ROLES,
+        "can_edit_plan": is_admin or role in PRODUCTION_PLAN_ROLES,
+        "can_log_output": is_admin or role in PRODUCTION_LOG_ROLES,
+    }
+
+
+
 @app.get("/api/production/plan")
 def get_production_plan_route(
     user: dict = Depends(require_roles(*DASHBOARD_ALLOWED_ROLES))

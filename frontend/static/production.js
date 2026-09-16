@@ -9,41 +9,61 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
-    // Сначала привязываем форму ввода производства — если что-то
-    // ниже (карта этапов, старая логика с дашборда) упадёт с
-    // ошибкой, кнопка "Сохранить" должна остаться рабочей в любом
-    // случае, а не зависеть от порядка выполнения.
-    initShiftLogForm();
-    loadMonthlyPlan();
-    loadShiftHistory();
+    // Сначала спрашиваем, что этой должности вообще доступно, и
+    // рисуем только это. Раньше страница показывала всем всё подряд:
+    // рабочий видел «Не удалось загрузить историю» — как будто
+    // система сломалась, хотя ему просто не положено.
+    applyPermissions();
 
-    try {
-        loadEquipment();
-    } catch (error) {
-        console.error("ACAI loadEquipment error:", error);
-    }
-
-    try {
-        initProductionStages();
-        openStageFromQueryParam();
-    } catch (error) {
-        console.error("ACAI initProductionStages error:", error);
-    }
-
-    try {
-        initProductionMap();
-    } catch (error) {
-        console.error("ACAI initProductionMap error:", error);
-    }
-
-    try {
-        loadProductionData();
-    } catch (error) {
-        console.error("ACAI loadProductionData error:", error);
-    }
+    // Карта производственной цепочки, плитки этапов и их модальное
+    // окно убраны со страницы вместе с секцией «Производственный
+    // процесс». Код под них остался ниже и ни на что не влияет:
+    // элементов, которые он ищет (#productionFlow, #productionMap,
+    // .stage-link), в разметке больше нет.
+    //
+    // Вызовы убраны, потому что они не были безобидными: цепочка
+    // запрашивала /dashboard на каждое открытие страницы — у рабочего
+    // это стабильный отказ 403, а в консоли висела ошибка
+    // «#productionFlow not found».
 
 });
 
+
+
+/* =========================================================
+   ЧТО ПОКАЗЫВАТЬ ЭТОЙ ДОЛЖНОСТИ
+   ========================================================= */
+
+async function applyPermissions() {
+
+    let meta;
+
+    try {
+        meta = await ACAI.get("/api/production/meta");
+    } catch (error) {
+        // Сервер не ответил — показываем то, что не требует прав.
+        // Лучше урезанная страница, чем пустая.
+        console.error("ACAI production meta:", error);
+        return;
+    }
+
+    const outputCard = document.getElementById("outputLogCard");
+    const historyCard = document.getElementById("historyCard");
+
+    // «Учёт выпуска» — форма записи. Показывать её тому, чью запись
+    // сервер отклонит, значит расставлять ловушки.
+    if (meta.can_log_output && outputCard) {
+        outputCard.style.display = "";
+        initShiftLogForm();
+    }
+
+    // План и история — чтение. Рабочему закрыты.
+    if (meta.can_read_plan) {
+        if (historyCard) historyCard.style.display = "";
+        loadMonthlyPlan();
+        loadShiftHistory();
+    }
+}
 
 /* =========================================================
    SHIFT PRODUCTION LOG (ввод поддонов)
