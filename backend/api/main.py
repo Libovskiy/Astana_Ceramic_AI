@@ -351,7 +351,7 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     # а ссылки на /lab у него в меню не было.
     "/lab": ("director", "chief_engineer", "analyst", "technologist", "lab_technician"),
     "/parts": ("director", "chief_engineer", "chief_mechanic",
-               "chief_electrician", "mechanic", "engineer"),
+               "chief_electrician", "mechanic", "engineer", "electrician"),
     "/technolog": ("director", "chief_engineer", "technologist"),
     "/audit": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
     "/settings": (),  # только admin
@@ -1235,6 +1235,12 @@ def messenger_page(request: Request):
 @app.get("/cases")
 def cases_page(request: Request):
     return templates.TemplateResponse(request=request, name="cases.html")
+
+# Кто работает со складом. Совпадает со списком страницы /parts в
+# PAGE_ROLES. Электрик раньше отсутствовал, хотя меняет те же
+# контакторы и датчики, что механик — подшипники.
+PARTS_ROLES = ("director", "chief_engineer", "engineer", "chief_mechanic",
+               "mechanic", "chief_electrician", "electrician")
 
 @app.get("/parts")
 def parts_page(request: Request):
@@ -3690,65 +3696,7 @@ def delete_technolog_param(param_id: int, user: dict = Depends(require_roles("ad
 
 
 # ── Склад запчастей ───────────────────────────────────────
-@app.get("/parts")
-def parts_page(request: Request):
-    return templates.TemplateResponse(request=request, name="parts.html")
 
-@app.get("/api/parts")
-def get_parts(user: dict = Depends(get_current_user)):
-    import sqlite3 as _sq
-    conn = _sq.connect(DB_NAME, timeout=10); conn.row_factory = _sq.Row
-    conn.execute("""CREATE TABLE IF NOT EXISTS parts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL, part_number TEXT, category TEXT DEFAULT 'other',
-        equipment_id INTEGER, equipment_name TEXT,
-        unit TEXT DEFAULT 'шт', quantity REAL DEFAULT 0,
-        min_quantity REAL DEFAULT 1,
-        last_used_at TEXT, created_by TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS parts_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, part_id INTEGER,
-        quantity_change REAL, direction TEXT,
-        changed_by TEXT, changed_at TEXT DEFAULT CURRENT_TIMESTAMP, note TEXT)""")
-    conn.commit()
-    rows = conn.execute("""SELECT p.*, e.name as eq_name FROM parts p
-        LEFT JOIN equipment e ON e.id=p.equipment_id ORDER BY p.quantity<=p.min_quantity DESC, p.name""").fetchall()
-    conn.close()
-    parts=[dict(r) for r in rows]
-    for p in parts:
-        p['equipment_name']=p.pop('eq_name',None) or p.get('equipment_name')
-    return {"success": True, "parts": parts}
-
-@app.post("/api/parts")
-def create_part(request: dict, user: dict = Depends(require_roles("admin","director","chief_engineer","chief_mechanic","chief_electrician"))):
-    import sqlite3 as _sq
-    from datetime import datetime as _dt
-    conn = _sq.connect(DB_NAME, timeout=10)
-    cur = conn.execute("""INSERT INTO parts (name,part_number,category,equipment_id,unit,quantity,min_quantity,created_by,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)""",
-        (request["name"], request.get("part_number"), request.get("category","other"),
-         request.get("equipment_id"), request.get("unit","шт"),
-         request.get("quantity",0), request.get("min_quantity",1),
-         user["full_name"] or user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit(); conn.close()
-    return {"success": True, "id": cur.lastrowid}
-
-@app.post("/api/parts/{part_id}/move")
-def move_part(part_id: int, request: dict, user: dict = Depends(get_current_user)):
-    import sqlite3 as _sq
-    from datetime import datetime as _dt
-    conn = _sq.connect(DB_NAME, timeout=10); conn.row_factory = _sq.Row
-    part = conn.execute("SELECT * FROM parts WHERE id=?", (part_id,)).fetchone()
-    if not part: conn.close(); return {"success": False, "message": "Не найдено"}
-    qty_change = float(request.get("quantity", 0))
-    new_qty = max(0, float(part["quantity"]) + qty_change)
-    now = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn.execute("UPDATE parts SET quantity=?,last_used_at=? WHERE id=?", (new_qty, now, part_id))
-    conn.execute("INSERT INTO parts_log (part_id,quantity_change,direction,changed_by,changed_at) VALUES (?,?,?,?,?)",
-        (part_id, abs(qty_change), "in" if qty_change>0 else "out",
-         user["full_name"] or user["username"], now))
-    conn.commit(); conn.close()
-    return {"success": True, "new_quantity": new_qty}
 
 
 @app.get("/parts")
@@ -3791,7 +3739,9 @@ def create_part(request: dict, user: dict = Depends(require_roles("admin","direc
     return {"success": True, "id": cur.lastrowid}
 
 @app.post("/api/parts/{part_id}/move")
-def move_part(part_id: int, request: dict, user: dict = Depends(get_current_user)):
+def move_part(part_id: int, request: dict, user: dict = Depends(require_roles(*PARTS_ROLES))):
+    # Раньше хватало просто войти в систему: рабочий, которому страница
+    # склада закрыта, мог через API списать или приходовать что угодно.
     import sqlite3 as _sq
     from datetime import datetime as _dt
     conn = _sq.connect(DB_NAME, timeout=10); conn.row_factory = _sq.Row

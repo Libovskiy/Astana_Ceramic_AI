@@ -226,7 +226,7 @@ const NAV_ITEMS = [
   { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','engineer','chief_mechanic','chief_electrician'] },
   { section: 'Производство' },
   { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
-  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','engineer'] },
+  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','engineer'] },
   { icon: '🧱', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
   { section: 'Система' },
   { icon: '📜', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician'] },
