@@ -25,6 +25,16 @@ def _to_json(value):
         return str(value)
 
 
+# Действия, которые в журнал не пишутся: они говорят о присутствии
+# людей, а не об изменениях в заводе. Успешный вход виден по сессиям,
+# а выход не значит ничего.
+NOT_WORTH_LOGGING = {
+    "login_success",
+    "logout",
+    "logout_all_devices",
+}
+
+
 def log_action(
     username: str = None,
     role: str = None,
@@ -55,6 +65,16 @@ def log_action(
     в SQLite глушатся (см. except в конце), запись через SQLAlchemy (db=...)
     добавляется в текущую сессию — коммитит её вызывающий код.
     """
+    # Журнал — это летопись того, ЧТО сделали с заводом, а не кто
+    # когда заходил. Вход и выход писались 133 раза из 362 записей:
+    # больше трети журнала занимало «пришёл-ушёл», и за этим не было
+    # видно, кто на самом деле поменял регламент или загрузил документ.
+    #
+    # Неудачные попытки входа ОСТАЮТСЯ: это не хроника присутствия, а
+    # признак подбора пароля, и терять его нельзя.
+    if action in NOT_WORTH_LOGGING:
+        return
+
     # target="equipment:123" -> entity_type="equipment", entity_id=123,
     # если сами entity_type/entity_id не переданы явно.
     if target and not target_type:
@@ -91,7 +111,11 @@ def log_action(
                 username, role, action, target, details, created_at,
                 entity_type, entity_id, before_json, after_json, reason
             )
-            VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)
+            -- 'localtime' обязателен: datetime('now') в SQLite отдаёт
+            -- время по Гринвичу, а завод в UTC+5. Без него человек
+            -- входил в систему и видел в журнале, что это было пять
+            -- часов назад.
+            VALUES (?, ?, ?, ?, ?, datetime('now','localtime'), ?, ?, ?, ?, ?)
             """,
             (
                 username, role, action, resolved_target, _to_json(details),
@@ -140,7 +164,7 @@ def init_audit_table(db=None) -> None:
                 action TEXT NOT NULL,
                 target TEXT,
                 details TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
                 entity_type TEXT,
                 entity_id INTEGER,
                 before_json TEXT,
@@ -172,10 +196,59 @@ def get_audit_log(limit: int = 100, action: str = None, role: str = None, search
         query += " ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
         rows = conn.execute(query, params).fetchall()
+        entries = [dict(r) for r in rows]
+        _name_targets(conn, entries)
         conn.close()
-        return [dict(r) for r in rows]
+        return entries
     except Exception:
         return []
+
+
+# Как называется то, на что ссылается запись. Читать «equipment:287»
+# человек не должен — ему нужно «Дезинтегратор PL 601».
+#
+# Имя подставляется при ЧТЕНИИ, а не при записи: станок могут
+# переименовать, и журнал должен показывать, как он называется
+# сейчас, а не как назывался год назад. Сама ссылка (тип и номер)
+# в базе остаётся — по ней всегда видно, о каком объекте речь,
+# даже если объект удалили.
+_TARGET_TABLES = {
+    "equipment": ("equipment", "name"),
+    "user": ("users", "full_name"),
+    "task": ("tasks", "title"),
+    "case": ("cases", "machine"),
+    "regulation": ("regulations", "name"),
+    "part": ("parts", "name"),
+}
+
+
+def _name_targets(conn, entries: list) -> None:
+
+    needed = {}
+
+    for item in entries:
+        kind, entity_id = item.get("entity_type"), item.get("entity_id")
+        if kind in _TARGET_TABLES and entity_id is not None:
+            needed.setdefault(kind, set()).add(entity_id)
+
+    names = {}
+
+    for kind, ids in needed.items():
+        table, column = _TARGET_TABLES[kind]
+        marks = ",".join("?" for _ in ids)
+        try:
+            for row in conn.execute(
+                f"SELECT id, {column} AS label FROM {table} WHERE id IN ({marks})",
+                list(ids)
+            ):
+                names[(kind, row["id"])] = row["label"]
+        except Exception:
+            # Таблицы может не быть — тогда просто останется ссылка.
+            continue
+
+    for item in entries:
+        label = names.get((item.get("entity_type"), item.get("entity_id")))
+        item["target_name"] = label
 
 
 def get_audit_log_by_target(target=None, entity_type: str = None, entity_id: int = None, db: Session = None):

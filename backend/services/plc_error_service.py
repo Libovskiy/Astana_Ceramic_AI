@@ -109,7 +109,7 @@ def init_plc_error_table() -> None:
         for order, name in enumerate(DEFAULT_LINES, start=1):
             conn.execute(
                 """INSERT OR IGNORE INTO plc_error_lines (name, sort_order, created_by, created_at)
-                   VALUES (?, ?, 'руководство Beralmar', datetime('now'))""",
+                   VALUES (?, ?, 'руководство Beralmar', datetime('now','localtime'))""",
                 (name, order * 10),
             )
 
@@ -155,7 +155,7 @@ def create_line(name: str, username: str):
     try:
         cur = conn.execute(
             """INSERT INTO plc_error_lines (name, sort_order, created_by, created_at)
-               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM plc_error_lines), ?, datetime('now'))""",
+               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM plc_error_lines), ?, datetime('now','localtime'))""",
             (name, username),
         )
         conn.commit()

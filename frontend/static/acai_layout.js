@@ -126,6 +126,25 @@ const ACAI = {
     return d ? d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '—';
   },
 
+  // МЕСТНОЕ время в том же виде, в каком его пишет сервер.
+  //
+  // new Date().toISOString() отдаёт время по Гринвичу, а у нас UTC+5.
+  // Из-за этого обход смены «длился» пять часов вместо пяти минут:
+  // начало писал браузер по Гринвичу, конец — сервер по-местному.
+  // А между полуночью и пятью утра toISOString даёт ещё и вчерашнюю
+  // дату — ночная смена заполняла отчёт за прошлый день.
+  localDate(date) {
+    const d = date || new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  },
+
+  localDateTime(date) {
+    const d = date || new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${ACAI.localDate(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  },
+
   shortDate(str) {
     const d = ACAI.parseTime(str);
     return d ? d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '—';

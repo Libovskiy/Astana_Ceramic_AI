@@ -28,7 +28,7 @@ async function initShiftReport() {
 
   // Дата по умолчанию — сегодня, смену не угадываем: ночная смена
   // заполняется и после полуночи, автоподстановка чаще мешает.
-  document.getElementById("srDate").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("srDate").value = ACAI.localDate();
 
   // Своя бригада подставляется сама; кто видит все (гл. инженер,
   // директор) — выбирает бригаду руками.

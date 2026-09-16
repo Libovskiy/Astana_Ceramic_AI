@@ -126,7 +126,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=14"></script>
+<script src="/static/acai_layout.js?v=15"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 let currentPeriod='today';
@@ -463,7 +463,7 @@ async function loadShiftAnalytics(){
 
   const to=new Date();
   const from=new Date();from.setDate(from.getDate()-saDays());
-  const fmt=d=>d.toISOString().slice(0,10);
+  const fmt=d=>ACAI.localDate(d);
 
   let a;
   try{

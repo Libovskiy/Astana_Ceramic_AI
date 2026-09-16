@@ -63,7 +63,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=14"></script>
+<script src="/static/acai_layout.js?v=15"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 let allTasks=[];let currentFilter='';let currentUser=null;
@@ -349,7 +349,7 @@ async function submitReturnTask(id){
 
 function openAddTask(){
   const now=new Date();now.setDate(now.getDate()+1);
-  const dateStr=now.toISOString().slice(0,16);
+  const dateStr=ACAI.localDateTime(now).slice(0,16);
   ACAI.showModal(`
     <h3>Новая задача</h3>
     <div class="field"><label>Название *</label><input class="input" id="nt-title" placeholder="Что нужно сделать?"></div>

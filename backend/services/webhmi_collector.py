@@ -81,7 +81,7 @@ def save_readings(readings: dict) -> None:
         return
     db: Session = SessionLocal()
     try:
-        ts = datetime.utcnow()
+        ts = datetime.now()   # местное время, как и вся остальная система
         for name, value in readings.items():
             db.add(models.SensorReading(
                 sensor_name=name,

@@ -293,7 +293,7 @@ function newEntry() {
     });
 
     document.getElementById("log_date").value =
-        new Date().toISOString().slice(0, 10);
+        ACAI.localDate();
 
     document.getElementById("labEntryTitle").textContent = "Новая запись";
     document.getElementById("labEntryStatus").textContent = "";

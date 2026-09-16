@@ -152,7 +152,7 @@ def init_shift_report_tables() -> None:
         for order, name in enumerate(DEFAULT_DEFECT_REASONS, start=1):
             conn.execute(
                 """INSERT OR IGNORE INTO defect_reasons (name, sort_order, created_by, created_at)
-                   VALUES (?, ?, 'стартовый список', datetime('now'))""",
+                   VALUES (?, ?, 'стартовый список', datetime('now','localtime'))""",
                 (name, order * 10),
             )
 
@@ -167,7 +167,7 @@ def init_shift_report_tables() -> None:
     """)
     conn.execute(
         """INSERT OR IGNORE INTO shift_report_norms (id, car_minutes, layer_minutes, updated_at)
-           VALUES (1, ?, ?, datetime('now'))""",
+           VALUES (1, ?, ?, datetime('now','localtime'))""",
         (DEFAULT_CAR_NORM_MINUTES, DEFAULT_LAYER_NORM_MINUTES),
     )
 
@@ -195,7 +195,7 @@ def set_norms(car_minutes: int, layer_minutes: int, username: str) -> dict:
     conn = _conn()
     conn.execute(
         """UPDATE shift_report_norms
-           SET car_minutes=?, layer_minutes=?, updated_by=?, updated_at=datetime('now')
+           SET car_minutes=?, layer_minutes=?, updated_by=?, updated_at=datetime('now','localtime')
            WHERE id=1""",
         (car_minutes, layer_minutes, username),
     )
@@ -271,7 +271,7 @@ def get_or_create_report(report_date: str, shift: str, brigade: str, username: s
     if row is None:
         cur = conn.execute(
             """INSERT INTO shift_reports (report_date, shift, brigade, status, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+               VALUES (?, ?, ?, ?, ?, datetime('now','localtime'))""",
             (report_date, shift, brigade, STATUS_DRAFT, username),
         )
         conn.commit()
@@ -393,7 +393,7 @@ def add_car(report_id: int, data: dict, username: str) -> dict:
         """INSERT INTO shift_report_cars
            (report_id, car_number, brick_type, layer1_at, layer2_at, layer3_at, finished_at,
             pallets_good, pallets_defect, defect_reason, defect_note, created_by, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))""",
         (
             report_id,
             str(data.get("car_number")).strip(),
@@ -480,7 +480,7 @@ def _set_status(report_id: int, status: str, field_prefix: str | None, username:
     if field_prefix:
         conn.execute(
             f"""UPDATE shift_reports
-                SET status=?, {field_prefix}_by=?, {field_prefix}_at=datetime('now'), return_comment=?
+                SET status=?, {field_prefix}_by=?, {field_prefix}_at=datetime('now','localtime'), return_comment=?
                 WHERE id=?""",
             (status, username, return_comment, report_id),
         )
@@ -697,7 +697,7 @@ def create_defect_reason(name: str, username: str) -> dict:
     try:
         cur = conn.execute(
             """INSERT INTO defect_reasons (name, sort_order, created_by, created_at)
-               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM defect_reasons), ?, datetime('now'))""",
+               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM defect_reasons), ?, datetime('now','localtime'))""",
             (name, username),
         )
         conn.commit()

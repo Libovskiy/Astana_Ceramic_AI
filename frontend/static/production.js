@@ -95,7 +95,7 @@ function initShiftLogForm() {
     const dateInput = document.getElementById("logDate");
 
     if (dateInput) {
-        dateInput.value = new Date().toISOString().slice(0, 10);
+        dateInput.value = ACAI.localDate();
     }
 
     const submitButton = document.getElementById("submitProductionLog");
