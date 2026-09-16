@@ -220,7 +220,73 @@ def get_notifications(user):
     except Exception as error:
         print(f"[notification_service] ТО пропущено: {error}")
 
+    try:
+        notifications.extend(_backup_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] Бэкап пропущен: {error}")
+
+    # Сортируем ещё раз после добавления задач, ТО и бэкапа — раньше
+    # сортировка шла до них, и просроченная задача оказывалась ниже
+    # рядового напоминания.
+    notifications.sort(key=lambda item: severity_order.get(item["severity"], 99))
+
     return notifications
+
+
+# =========================================================
+# БЭКАП НЕ ДЕЛАЕТСЯ
+# =========================================================
+
+# Ночная копия создаётся раз в сутки; даём запас на случай, если Mac
+# спал и launchd досчитал запуск позже.
+BACKUP_STALE_HOURS = 30
+
+
+def _backup_notifications(user):
+    """
+    Предупреждение администратору, если свежей копии базы нет.
+
+    Ночной бэкап однажды молча падал двое суток: скрипт перенесли, а
+    launchd продолжал искать его по старому пути. Узнали случайно. Без
+    напоминания такое повторится — никто не заглядывает в папку backups
+    просто так.
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    from backend.config import BASE_DIR, is_owner
+
+    if user.get("role") != "admin" and not is_owner(user):
+        return []
+
+    backups = sorted(
+        (Path(BASE_DIR) / "backups").glob("factory_*.db"),
+        key=lambda f: f.stat().st_mtime,
+    )
+
+    if not backups:
+        return [{
+            "type": "backup_missing",
+            "severity": "critical",
+            "icon": "💾",
+            "title": "Резервных копий нет ни одной",
+            "subtitle": "Проверьте задание com.acai.backup",
+            "url": "/settings",
+        }]
+
+    age_hours = (datetime.now().timestamp() - backups[-1].stat().st_mtime) / 3600
+
+    if age_hours < BACKUP_STALE_HOURS:
+        return []
+
+    return [{
+        "type": "backup_missing",
+        "severity": "critical",
+        "icon": "💾",
+        "title": f"Бэкап не делался {int(age_hours // 24)} сут {int(age_hours % 24)} ч",
+        "subtitle": "Проверьте logs/backup.error.log",
+        "url": "/settings",
+    }]
 
 
 # =========================================================
@@ -259,6 +325,16 @@ def _maintenance_start():
         return int(year_str), int(month_str)
     except Exception:
         return None, None
+
+
+def _plural(n, one, few, many):
+    """1 работа, 2 работы, 5 работ — иначе в колокольчике «52 работ»."""
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return few
+    return many
 
 
 def _maintenance_notifications(user):
@@ -348,26 +424,41 @@ def _maintenance_notifications(user):
             else:
                 bucket["due_now"] += 1
 
-    for eq_id, info in by_equipment.items():
+    if not by_equipment:
+        return out
 
-        total = info["overdue"] + info["due_now"]
-        overdue = info["overdue"]
+    # Одно уведомление на весь график, а не по штуке на станок. Было
+    # 14 пунктов про ТО из 17 — просроченная поломка и подтверждение
+    # закрытия тонули среди них, и колокольчик переставали открывать.
+    # Подробности по станкам и так видны на странице графика.
+    total = sum(i["overdue"] + i["due_now"] for i in by_equipment.values())
+    overdue = sum(i["overdue"] for i in by_equipment.values())
 
-        if overdue:
-            title = f"ТО просрочено: {overdue} из {total}"
-            severity = "critical"
-        else:
-            title = f"ТО в этом месяце: {total}"
-            severity = "warning"
+    names = sorted(
+        by_equipment.values(),
+        key=lambda i: (-i["overdue"], -(i["overdue"] + i["due_now"]))
+    )
+    top = [i["equipment_name"] or "Оборудование" for i in names[:3]]
+    rest = len(names) - len(top)
+    subtitle = ", ".join(top) + (f" и ещё {rest}" if rest > 0 else "")
 
-        out.append({
-            "type": "maintenance_due",
-            "severity": severity,
-            "icon": "🔧",
-            "title": title,
-            "subtitle": info["equipment_name"] or "Оборудование",
-            "url": "/maintenance",
-        })
+    if overdue:
+        title = (f"ТО просрочено: {overdue} {_plural(overdue, 'работа', 'работы', 'работ')}, "
+                 f"всего {total} на {len(names)} {_plural(len(names), 'станке', 'станках', 'станках')}")
+        severity = "critical"
+    else:
+        title = (f"ТО в этом месяце: {total} {_plural(total, 'работа', 'работы', 'работ')} "
+                 f"на {len(names)} {_plural(len(names), 'станке', 'станках', 'станках')}")
+        severity = "warning"
+
+    out.append({
+        "type": "maintenance_due",
+        "severity": severity,
+        "icon": "🔧",
+        "title": title,
+        "subtitle": subtitle,
+        "url": "/maintenance",
+    })
 
     return out
 

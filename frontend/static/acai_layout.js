@@ -390,6 +390,7 @@ const BELL_ICONS = {
   pending_confirmation:'✅',
   recurring_issue:     '🔁',
   maintenance_due:      '🔧',
+  backup_missing:      '💾',
 };
 
 const BELL_COLORS = {
