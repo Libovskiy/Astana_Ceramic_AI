@@ -3,6 +3,7 @@ webhmi_collector.py — коллектор данных с WebHMI PLINFA.
 Авторизация через заголовки X-Wh-Login / X-Wh-Password.
 """
 
+import os
 import time
 import logging
 import threading
@@ -15,9 +16,16 @@ from backend import models
 
 log = logging.getLogger("webhmi_collector")
 
-WEBHMI_URL    = "http://192.168.1.74/lp"
-WEBHMI_LOGIN  = "supervisor"
-WEBHMI_PASS   = "5064"
+# Доступ к панели берём из .env, а не из кода: этот файл уезжает в
+# репозиторий, а пароль от панели, которая управляет оборудованием, —
+# не то, что стоит хранить в истории коммитов.
+#
+# Расширению в браузере эти значения не нужны: оно работает внутри
+# вкладки, где человек уже вошёл в панель, по его же сессии. Здесь они
+# только для серверного сборщика (ACAI_WEBHMI_COLLECTOR=1).
+WEBHMI_URL    = os.environ.get("ACAI_WEBHMI_URL", "http://192.168.1.74/lp")
+WEBHMI_LOGIN  = os.environ.get("ACAI_WEBHMI_LOGIN", "")
+WEBHMI_PASS   = os.environ.get("ACAI_WEBHMI_PASS", "")
 POLL_INTERVAL = 30
 TIMEOUT       = 15
 
@@ -90,6 +98,13 @@ def save_readings(readings: dict) -> None:
 
 
 def run_collector() -> None:
+    if not WEBHMI_LOGIN or not WEBHMI_PASS:
+        log.error(
+            "Коллектор WebHMI не запущен: не заданы ACAI_WEBHMI_LOGIN/ACAI_WEBHMI_PASS в .env. "
+            "Без них панель ответит 403, и лог забьётся ошибками."
+        )
+        return
+
     log.info(f"Коллектор WebHMI запущен — опрос каждые {POLL_INTERVAL} сек")
     while True:
         try:
