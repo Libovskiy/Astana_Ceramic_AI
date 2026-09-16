@@ -25,7 +25,7 @@ uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
 `~/Library/LaunchAgents`, расположение файла в репозитории роли не
 играет): `com.acai.server.plist` (порт 8000, автозапуск/
 автовосстановление после падения), `com.acai.backup.plist`
-(`backup_db.py`, каждый день в 02:00) и `com.acai.backup.docs.plist`
+(`scripts/backup/backup_full.py`, каждый день в 02:00) и `com.acai.backup.docs.plist`
 (`scripts/backup/backup_full.py --with-docs`, по воскресеньям в 03:00,
 полный бэкап с документами). Логи — `logs/backup.log`.
 
@@ -72,8 +72,8 @@ uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
 
 Все — ручные утилиты, запускаются вручную из корня проекта
 (`python scripts/<категория>/<файл>.py`), в автозапуск не входят
-(кроме `backup_db.py`, который остаётся в корне — на него ссылается
-`com.acai.backup.plist`):
+(`backup_db.py` в корне — ручная утилита на случай, когда нужна
+только база без фотографий):
 
 - `scripts/admin/` — создание пользователей, привязка оборудования.
 - `scripts/seed/` — заполнение тестовыми/начальными данными.

@@ -9,7 +9,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin/python</string>
-        <string>backup_db.py</string>
+        <string>scripts/backup/backup_full.py</string>
     </array>
 
     <key>WorkingDirectory</key>
