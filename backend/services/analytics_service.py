@@ -242,3 +242,153 @@ def get_biggest_loss_summary(days=7):
         "equipment_name": row["equipment_name"],
         "minutes": round(row["total_minutes"])
     }
+
+
+# =========================================================
+# ГРАФИК ТО: ЧТО ПОЛОЖЕНО И ЧТО СДЕЛАНО
+# =========================================================
+
+def get_maintenance_summary():
+    """
+    Выполнение графика ТО с начала месяца.
+
+    Считаем ТОЛЬКО с того месяца, в котором график завели в систему.
+    До этого ТО могли делать по бумаге — записывать их в просрочку
+    значило бы обвинить механиков в том, чего система не видела.
+    Дата начала подписывается на экране, чтобы цифра не выглядела
+    итогом за весь год.
+
+    Работа считается выполненной, если по ней есть запись в
+    maintenance_log за этот год и месяц.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    today = datetime.now()
+    year, month = today.year, today.month
+
+    started = cursor.execute(
+        "SELECT MIN(created_at) FROM maintenance_schedule WHERE year = ?", (year,)
+    ).fetchone()[0]
+
+    rows = cursor.execute(
+        "SELECT id, work_name, months, responsible, equipment_id FROM maintenance_schedule WHERE year = ?",
+        (year,)
+    ).fetchall()
+
+    done_ids = {
+        row["schedule_id"]
+        for row in cursor.execute(
+            "SELECT schedule_id FROM maintenance_log WHERE year = ? AND month = ?",
+            (year, month)
+        ).fetchall()
+        if row["schedule_id"] is not None
+    }
+
+    conn.close()
+
+    due = []
+
+    for row in rows:
+        months = {m.strip() for m in str(row["months"] or "").split(",") if m.strip().isdigit()}
+        if str(month) in months:
+            due.append(row)
+
+    by_responsible = {}
+
+    for row in due:
+        who = row["responsible"] or "не назначен"
+        slot = by_responsible.setdefault(who, {"responsible": who, "due": 0, "done": 0})
+        slot["due"] += 1
+        if row["id"] in done_ids:
+            slot["done"] += 1
+
+    done_count = sum(1 for row in due if row["id"] in done_ids)
+
+    overdue = [
+        {"work_name": row["work_name"], "responsible": row["responsible"] or "не назначен"}
+        for row in due if row["id"] not in done_ids
+    ]
+
+    return {
+        "year": year,
+        "month": month,
+        "schedule_started_at": started,
+        "due": len(due),
+        "done": done_count,
+        "overdue": len(overdue),
+        "percent": round(done_count * 100 / len(due)) if due else None,
+        "by_responsible": sorted(by_responsible.values(), key=lambda s: -s["due"]),
+        "overdue_examples": overdue[:6],
+    }
+
+
+# =========================================================
+# ОБХОДЫ СМЕНЫ
+# =========================================================
+
+def get_checklist_summary(days=7):
+    """
+    Обходы за период: сколько прошло, сколько замечаний и на каком
+    оборудовании они повторяются.
+
+    Повторяющееся замечание важнее единичного: если один и тот же
+    узел всплывает в каждом обходе, это не случайность, а место,
+    куда нужно идти с ремонтом.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    date_from = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+
+    rounds = cursor.execute(
+        """
+        SELECT id, started_at, finished_at, full_name, shift,
+               total_count, ok_count, warn_count, bad_count
+        FROM checklist_rounds
+        WHERE started_at >= ?
+        ORDER BY started_at DESC
+        """,
+        (date_from,)
+    ).fetchall()
+
+    problems = cursor.execute(
+        """
+        SELECT e.name AS equipment_name, i.status, COUNT(*) AS times
+        FROM checklist_items i
+        JOIN checklist_rounds r ON r.id = i.round_id
+        LEFT JOIN equipment e ON e.id = i.equipment_id
+        WHERE r.started_at >= ? AND i.status IN ('bad', 'warn')
+        GROUP BY e.name, i.status
+        ORDER BY times DESC
+        """,
+        (date_from,)
+    ).fetchall()
+
+    conn.close()
+
+    rounds_list = [dict(r) for r in rounds]
+
+    by_equipment = {}
+
+    for row in problems:
+        name = row["equipment_name"] or "не указано"
+        slot = by_equipment.setdefault(name, {"equipment_name": name, "bad": 0, "warn": 0})
+        slot[row["status"]] = row["times"]
+
+    top = sorted(
+        by_equipment.values(),
+        key=lambda s: (s["bad"], s["warn"]),
+        reverse=True
+    )
+
+    return {
+        "rounds_count": len(rounds_list),
+        "checks_total": sum(r["total_count"] or 0 for r in rounds_list),
+        "bad_total": sum(r["bad_count"] or 0 for r in rounds_list),
+        "warn_total": sum(r["warn_count"] or 0 for r in rounds_list),
+        "last_round": rounds_list[0] if rounds_list else None,
+        "top_problems": top[:6],
+    }

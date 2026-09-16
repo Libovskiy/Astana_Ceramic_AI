@@ -87,6 +87,24 @@
         </div>
       </div>
 
+      <!-- ТО И ОБХОДЫ — данные давно в базе, но в сводку не попадали -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-head">
+            <h2>График ТО за месяц</h2>
+            <span id="mtNote" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+          <div class="card-body" id="maintenanceBox" style="padding:12px 16px"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Обходы смены</h2>
+            <span id="clNote" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+          <div class="card-body" id="checklistBox" style="padding:12px 16px"></div>
+        </div>
+      </div>
+
       <!-- НИЖНЯЯ СЕТКА -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
         <div class="card">
@@ -192,6 +210,8 @@ function renderMetrics(s){
     ? `измерено ${fmt(closedMin)} · ещё идёт ${fmt(openMin)}`
     : `${dt.incidents_count||0} инцидентов`;
     renderStaleDowntime(dt.stale || []);
+  renderMaintenance(s.maintenance);
+  renderChecklist(s.checklist);
   document.getElementById('keyMetrics').innerHTML=`
     <div class="metric ${pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
       <div class="metric-label">Выполнение плана</div>
@@ -208,7 +228,9 @@ function renderMetrics(s){
       <div class="metric-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loss.equipment_name||'Нет данных'}</div>
     </div>
     <div class="metric accent">
-      <div class="metric-label">Дисциплина</div>
+      <!-- Было «Дисциплина»: рядом с минутами читалось как оценка
+           поведения, хотя речь про службы — механика и электрика. -->
+      <div class="metric-label">Простой по службам</div>
       <div style="display:flex;gap:8px;margin-top:6px">
         <div style="text-align:center">
           <div style="font-size:18px;font-weight:700;color:var(--warn)">${dt.by_discipline?.mechanical||0}м</div>
@@ -255,6 +277,79 @@ function renderPending(list, count){
 
   el.innerHTML = `<div style="text-align:right">
     <div style="font-weight:600">${count} ${word} до сводки</div>${rows}${more}</div>`;
+}
+
+// График ТО. Считается с месяца, когда график завели в систему —
+// до этого ТО могли делать по бумаге, и записывать их в просрочку
+// значило бы обвинить механиков в том, чего система не видела.
+function renderMaintenance(m){
+  const box=document.getElementById('maintenanceBox');
+  const note=document.getElementById('mtNote');
+  if(!box) return;
+  if(!m || !m.due){
+    box.innerHTML='<div class="empty">На этот месяц работ по графику нет</div>';
+    if(note) note.textContent='';
+    return;
+  }
+  if(note && m.schedule_started_at)
+    note.textContent = 'график ведётся с ' + ACAI.shortDate(m.schedule_started_at);
+
+  const pct=m.percent==null?0:m.percent;
+  const color=pct>=90?'var(--ok)':pct>=50?'var(--warn)':'var(--danger)';
+
+  const rows=(m.by_responsible||[]).map(r=>{
+    const p=r.due?Math.round(r.done*100/r.due):0;
+    return `<div class="downtime-item">
+      <span style="flex:1">${r.responsible}</span>
+      <span style="color:var(--text-dim);font-size:12px">${r.done} из ${r.due}</span>
+      <strong style="color:${p>=90?'var(--ok)':p>=50?'var(--warn)':'var(--danger)'}">${p}%</strong>
+    </div>`;
+  }).join('');
+
+  const examples=(m.overdue_examples||[]).slice(0,3)
+    .map(o=>`<div style="margin-top:2px">${o.work_name} — ${o.responsible}</div>`).join('');
+
+  box.innerHTML=`
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
+      <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:${color}">${pct}%</div>
+      <div style="font-size:12px;color:var(--text-dim)">выполнено ${m.done} из ${m.due} работ</div>
+    </div>
+    ${rows}
+    ${m.overdue?`<div style="margin-top:10px;font-size:12px;color:var(--text-dim)">
+        <strong style="color:var(--warn)">Не сделано: ${m.overdue}</strong>${examples}</div>`:''}`;
+}
+
+// Обходы смены. Повторяющееся замечание важнее единичного: если один
+// и тот же узел всплывает в каждом обходе, туда пора идти с ремонтом.
+function renderChecklist(c){
+  const box=document.getElementById('checklistBox');
+  const note=document.getElementById('clNote');
+  if(!box) return;
+  if(!c || !c.rounds_count){
+    box.innerHTML='<div class="empty">За период обходов не было</div>';
+    if(note) note.textContent='';
+    return;
+  }
+  if(note && c.last_round)
+    note.textContent='последний ' + ACAI.shortDate(c.last_round.started_at);
+
+  const rows=(c.top_problems||[]).map(t=>`
+    <div class="downtime-item">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.equipment_name}</span>
+      ${t.bad?`<span style="color:var(--danger);font-size:12px">неисправно ×${t.bad}</span>`:''}
+      ${t.warn?`<span style="color:var(--warn);font-size:12px">замечание ×${t.warn}</span>`:''}
+    </div>`).join('');
+
+  box.innerHTML=`
+    <div style="display:flex;gap:16px;margin-bottom:10px">
+      <div><div style="font-family:var(--mono);font-size:24px;font-weight:700">${c.rounds_count}</div>
+           <div style="font-size:11px;color:var(--text-dim)">обходов</div></div>
+      <div><div style="font-family:var(--mono);font-size:24px;font-weight:700">${c.checks_total}</div>
+           <div style="font-size:11px;color:var(--text-dim)">проверок</div></div>
+      <div><div style="font-family:var(--mono);font-size:24px;font-weight:700;color:${c.bad_total?'var(--danger)':'var(--ok)'}">${c.bad_total}</div>
+           <div style="font-size:11px;color:var(--text-dim)">неисправно</div></div>
+    </div>
+    ${rows||'<div class="empty">Замечаний не было</div>'}`;
 }
 
 function renderStaleDowntime(list){

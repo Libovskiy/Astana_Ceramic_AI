@@ -2019,12 +2019,23 @@ def reports_summary(
     downtime = get_downtime_by_period(days=days)
     biggest_loss = get_biggest_loss_summary(days=days)
 
+    # График ТО и обходы смены раньше в сводку не попадали, хотя данные
+    # для них давно лежат в базе: 78 работ в графике и статусы по
+    # каждому пункту обхода. Директор узнавал о просроченном ТО из
+    # разговора, а не из отчёта.
+    from backend.services.analytics_service import (
+        get_maintenance_summary,
+        get_checklist_summary,
+    )
+
     return {
         "success": True,
         "period": period,
         "performance": performance.get(period, {}),
         "downtime": downtime,
-        "biggest_loss": biggest_loss
+        "biggest_loss": biggest_loss,
+        "maintenance": get_maintenance_summary(),
+        "checklist": get_checklist_summary(days=days),
     }
 
 # =========================================
