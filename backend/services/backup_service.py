@@ -6,6 +6,7 @@ restore operation for the system owner.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from datetime import datetime
@@ -28,8 +29,31 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def _safe_backup_name() -> Path:
-    return BACKUP_DIR / f"factory_{_timestamp()}.db"
+def _safe_backup_name(reason: str = "manual") -> Path:
+    """
+    Имя копии обязано быть уникальным, и вот почему.
+
+    Раньше имя было просто factory_<до секунды>.db, а запись шла поверх
+    существующего файла молча. При восстановлении сначала делается копия
+    текущей базы («до восстановления») — и если она попадала в ту же
+    секунду, что и бэкап, из которого восстанавливают, она этот бэкап
+    затирала. Восстановление после этого возвращало не сохранённое
+    состояние, а то же самое испорченное. Проверка восстановления это и
+    показала.
+
+    Поэтому: причина в имени (видно, откуда копия) и счётчик, если файл
+    с таким именем уже есть.
+    """
+    safe_reason = re.sub(r"[^a-z0-9_-]+", "-", (reason or "manual").lower()).strip("-") or "manual"
+    base = f"factory_{_timestamp()}_{safe_reason}"
+
+    candidate = BACKUP_DIR / f"{base}.db"
+    counter = 2
+    while candidate.exists():
+        candidate = BACKUP_DIR / f"{base}-{counter}.db"
+        counter += 1
+
+    return candidate
 
 
 def _integrity_check(path: Path) -> tuple[bool, str]:
@@ -48,7 +72,7 @@ def create_backup(reason: str = "manual") -> dict:
         if not DB_PATH.exists():
             raise FileNotFoundError(f"База данных не найдена: {DB_PATH}")
 
-        target = _safe_backup_name()
+        target = _safe_backup_name(reason)
         source = sqlite3.connect(str(DB_PATH))
         destination = sqlite3.connect(str(target))
         try:
