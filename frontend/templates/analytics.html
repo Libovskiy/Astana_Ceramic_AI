@@ -46,6 +46,19 @@
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
 
+      <!-- ВЫПУСК И БРАК ПО СМЕННЫМ ОТЧЁТАМ — то, что обсуждают на совещании -->
+      <div class="card" id="shiftAnalyticsCard" style="margin-bottom:16px;display:none">
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2>Выпуск и брак по сменам</h2>
+          <span id="saPending" style="font-size:11px;color:var(--warn)"></span>
+        </div>
+        <div class="card-body" style="padding:12px 16px">
+          <div class="metrics" id="saTotals" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px"></div>
+          <div id="saBreakdown" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
+          <div id="saReasons" style="margin-top:14px"></div>
+        </div>
+      </div>
+
       <!-- ГРАФИКИ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
         <div class="card">
@@ -96,7 +109,7 @@ let currentPeriod='today';
 document.querySelectorAll('.period-tab').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('.period-tab').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');currentPeriod=btn.dataset.period;loadAnalytics();
+    btn.classList.add('active');currentPeriod=btn.dataset.period;loadAnalytics();loadShiftAnalytics();
   });
 });
 
@@ -266,7 +279,89 @@ function renderSensorsNow(lv){
     }).join('')+`</div>`;
 }
 
-initLayout();loadAnalytics();
+initLayout();loadAnalytics();loadShiftAnalytics();
+
+// ── ВЫПУСК И БРАК ПО СМЕННЫМ ОТЧЁТАМ ──────────────────────
+// Считается только по подтверждённым отчётам (см. бэкенд): на
+// совещании обсуждают проверенные цифры. Сколько отчётов ещё ждут
+// подтверждения — показываем отдельно, чтобы никто не решил, что
+// смена ничего не выпустила.
+function saDays(){return currentPeriod==='today'?0:(currentPeriod==='week'?6:29);}
+
+async function loadShiftAnalytics(){
+  const card=document.getElementById('shiftAnalyticsCard');
+  if(!card)return;
+
+  const to=new Date();
+  const from=new Date();from.setDate(from.getDate()-saDays());
+  const fmt=d=>d.toISOString().slice(0,10);
+
+  let a;
+  try{
+    const r=await ACAI.get(`/api/shift-report/analytics?date_from=${fmt(from)}&date_to=${fmt(to)}`);
+    a=r.analytics;
+  }catch(e){card.style.display='none';return;}
+
+  card.style.display='block';
+  const t=a.totals||{};
+
+  document.getElementById('saPending').textContent =
+    t.pending_reports ? `${t.pending_reports} отчётов ещё не подтверждены — в сводку не вошли` : '';
+
+  document.getElementById('saTotals').innerHTML=`
+    ${saMetric('Вагонеток',t.cars_count||0)}
+    ${saMetric('Поддонов годных',t.pallets_good||0,'var(--ok)')}
+    ${saMetric('Брак, поддонов',t.pallets_defect||0,t.pallets_defect?'var(--danger)':null)}
+    ${saMetric('Брак, %',(t.defect_percent||0)+'%',t.defect_percent>5?'var(--danger)':null)}
+    ${saMetric('Среднее на вагонетку',t.avg_car_minutes!=null?saMin(t.avg_car_minutes):'—',
+       (t.avg_car_minutes!=null&&t.avg_car_minutes>t.norm_car_minutes)?'var(--warn)':null)}
+    ${saMetric('Потеряно сверх нормы',t.over_norm_minutes?saMin(t.over_norm_minutes):'—',
+       t.over_norm_minutes?'var(--warn)':null)}`;
+
+  document.getElementById('saBreakdown').innerHTML =
+    saTable('По бригадам',a.by_brigade,'Бригада') + saTable('По виду кирпича',a.by_brick_type,'Вид');
+
+  // Причины брака — главное, ради чего собирают совещание: видно, что
+  // именно даёт потери, а не просто «брак вырос».
+  const reasons=(a.by_reason||[]).slice(0,8);
+  document.getElementById('saReasons').innerHTML = reasons.length ? `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Причины брака</div>
+    ${reasons.map(r=>{
+      const max=reasons[0].pallets||1;
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${saEsc(r.name)}</div>
+        <div style="width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="width:${Math.round(r.pallets*100/max)}%;height:100%;background:var(--danger)"></div>
+        </div>
+        <div class="mono" style="width:80px;text-align:right;font-size:12px">${r.pallets} подд.</div>
+      </div>`;
+    }).join('')}` : '<div class="empty">Брака в этом периоде не зафиксировано</div>';
+}
+
+function saTable(title,rows,col){
+  if(!rows||!rows.length)return `<div><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${title}</div><div class="empty">Нет данных</div></div>`;
+  return `<div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${title}</div>
+    <table class="table"><thead><tr>
+      <th>${col}</th><th>Вагон.</th><th>Годн.</th><th>Брак</th><th>Брак %</th><th>Ср. время</th>
+    </tr></thead><tbody>
+      ${rows.map(r=>`<tr>
+        <td>${saEsc(r.name)}</td>
+        <td class="mono">${r.cars}</td>
+        <td class="mono">${r.good}</td>
+        <td class="mono" style="color:${r.defect?'var(--danger)':'var(--text-dim)'}">${r.defect}</td>
+        <td class="mono" style="color:${r.defect_percent>5?'var(--danger)':'var(--text-dim)'}">${r.defect_percent}%</td>
+        <td class="mono">${r.avg_car_minutes!=null?saMin(r.avg_car_minutes):'—'}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function saMetric(label,value,color){
+  return `<div class="metric"><div class="metric-label">${label}</div>
+    <div class="metric-value" style="font-size:20px${color?';color:'+color:''}">${value}</div></div>`;
+}
+function saMin(m){const h=Math.floor(m/60),r=m%60;return h?`${h} ч ${r} мин`:`${r} мин`;}
+function saEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
 setInterval(()=>ACAI.get('/api/sensors/live').then(renderSensorsNow).catch(()=>{}),5000);
 </script>
 </body>

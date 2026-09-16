@@ -115,6 +115,15 @@ def list_reports(status: str | None = None, brigade: str | None = None,
     }
 
 
+@router.get("/analytics")
+def analytics(date_from: str | None = None, date_to: str | None = None,
+              user: dict = Depends(current_user)):
+    """Сводка для совещаний — только по подтверждённым отчётам."""
+    if user["role"] not in svc.VIEW_ALL_ROLES | svc.CHECK_ROLES:
+        raise HTTPException(status_code=403, detail="Нет доступа к сводке.")
+    return {"success": True, "analytics": svc.analytics(date_from, date_to)}
+
+
 @router.get("/{report_id}")
 def get_report(report_id: int, user: dict = Depends(current_user)):
     report = svc.report_with_cars(report_id)

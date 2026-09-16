@@ -491,3 +491,104 @@ def return_report(report_id: int, username: str, comment: str) -> dict:
         raise ValueError("Напишите, что исправить — иначе смене непонятно, почему вернули")
 
     return _set_status(report_id, STATUS_RETURNED, None, username, comment.strip())
+
+
+# =========================================================
+# АНАЛИТИКА ДЛЯ СОВЕЩАНИЙ
+# =========================================================
+#
+# Считаем ТОЛЬКО по подтверждённым отчётам: на совещании обсуждают
+# цифры, которые прошли проверку начальника смены и гл. инженера.
+# Неподтверждённые показываем отдельной строкой «ждут подтверждения» —
+# чтобы было видно, что картина неполная, а не думать, что смена
+# ничего не выпустила.
+
+
+def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
+    norms = get_norms()
+
+    query = """
+        SELECT r.id, r.report_date, r.shift, r.brigade, r.status,
+               c.brick_type, c.pallets_good, c.pallets_defect, c.defect_reason,
+               c.layer1_at, c.layer2_at, c.layer3_at, c.finished_at
+        FROM shift_reports r
+        LEFT JOIN shift_report_cars c ON c.report_id = r.id
+        WHERE r.status = ?
+    """
+    params: list = [STATUS_APPROVED]
+
+    if date_from:
+        query += " AND r.report_date >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND r.report_date <= ?"
+        params.append(date_to)
+
+    conn = _conn()
+    rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    pending_query = "SELECT COUNT(*) FROM shift_reports WHERE status != ?"
+    pending_params: list = [STATUS_APPROVED]
+    if date_from:
+        pending_query += " AND report_date >= ?"
+        pending_params.append(date_from)
+    if date_to:
+        pending_query += " AND report_date <= ?"
+        pending_params.append(date_to)
+    pending = conn.execute(pending_query, pending_params).fetchone()[0]
+    conn.close()
+
+    cars = [r for r in rows if r.get("layer1_at") or r.get("pallets_good") or r.get("pallets_defect")]
+    enriched = [enrich_car(c, norms) for c in cars]
+
+    def _bucket(items: list[dict], key: str) -> list[dict]:
+        out: dict[str, dict] = {}
+        for item in items:
+            name = (item.get(key) or "").strip() or "не указано"
+            slot = out.setdefault(name, {"name": name, "cars": 0, "good": 0, "defect": 0,
+                                         "minutes": 0, "finished": 0})
+            slot["cars"] += 1
+            slot["good"] += int(item.get("pallets_good") or 0)
+            slot["defect"] += int(item.get("pallets_defect") or 0)
+            if item.get("total_minutes") is not None:
+                slot["minutes"] += item["total_minutes"]
+                slot["finished"] += 1
+
+        result = []
+        for slot in out.values():
+            total = slot["good"] + slot["defect"]
+            slot["defect_percent"] = round(slot["defect"] * 100 / total, 1) if total else 0
+            slot["avg_car_minutes"] = round(slot["minutes"] / slot["finished"]) if slot["finished"] else None
+            result.append(slot)
+
+        return sorted(result, key=lambda s: -s["cars"])
+
+    # Причины брака: считаем только там, где брак реально был — иначе
+    # список забьётся пустыми причинами от нормальных вагонеток.
+    defect_rows = [c for c in enriched if int(c.get("pallets_defect") or 0) > 0]
+    reasons = _bucket(defect_rows, "defect_reason")
+    for reason in reasons:
+        reason["pallets"] = reason["defect"]
+
+    # Динамика по дням — для графика на совещании
+    by_date: dict[str, dict] = {}
+    for car in enriched:
+        day = car.get("report_date")
+        slot = by_date.setdefault(day, {"date": day, "good": 0, "defect": 0, "cars": 0})
+        slot["good"] += int(car.get("pallets_good") or 0)
+        slot["defect"] += int(car.get("pallets_defect") or 0)
+        slot["cars"] += 1
+
+    totals = summarize(enriched, norms)
+    totals["reports_count"] = len({r["id"] for r in rows})
+    totals["pending_reports"] = pending
+
+    return {
+        "totals": totals,
+        "by_brigade": _bucket(enriched, "brigade"),
+        "by_shift": _bucket(enriched, "shift"),
+        "by_brick_type": _bucket(enriched, "brick_type"),
+        "by_reason": reasons,
+        "by_date": sorted(by_date.values(), key=lambda s: s["date"]),
+        "norms": norms,
+    }
