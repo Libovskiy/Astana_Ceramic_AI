@@ -37,7 +37,7 @@ import secrets
 import re
 from datetime import datetime, timedelta
 
-from backend.config import DB_NAME
+from backend.config import DB_NAME, OWNERS
 
 
 SESSION_LIFETIME_HOURS = 12
@@ -111,6 +111,22 @@ def init_auth_tables():
             PRIMARY KEY (user_id, equipment_id)
         )
     """)
+
+    # -----------------------------------------
+    # is_active — отключён ли доступ (уволился, ушёл в отпуск,
+    # перевёлся). Это НЕ то же самое, что hidden: hidden лишь убирает
+    # учётку из списка (нужно для технической учётки владельца, она
+    # обязана работать), а is_active = 0 запрещает вход.
+    #
+    # Отключение вместо удаления: фамилия остаётся в закрытых
+    # обращениях, отчётах и задачах — иначе история смен теряет автора.
+    # -----------------------------------------
+
+    columns = {row["name"] for row in cursor.execute("PRAGMA table_info(users)")}
+
+    if "is_active" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+        cursor.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
 
     conn.commit()
     conn.close()
@@ -201,7 +217,18 @@ def create_user(username: str, password: str, full_name: str, role: str) -> int:
 # AUTHENTICATE
 # =========================================================
 
+class AccessDisabled(Exception):
+    """Пароль верный, но доступ учётке закрыт (is_active = 0)."""
+
+
 def authenticate(username: str, password: str):
+    """
+    Возвращает пользователя или None, если логина нет либо пароль неверный.
+
+    Если пароль верный, но доступ отключён — поднимает AccessDisabled.
+    Человеку важно видеть разницу: иначе уволенный или отстранённый
+    будет считать, что опечатался, и звонить в IT вместо начальника.
+    """
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -222,7 +249,12 @@ def authenticate(username: str, password: str):
     if not secrets.compare_digest(expected_hash, row["password_hash"]):
         return None
 
-    return dict(row)
+    user = dict(row)
+
+    if not user.get("is_active", 1):
+        raise AccessDisabled()
+
+    return user
 
 
 # =========================================================
@@ -274,6 +306,7 @@ def get_user_by_session(token: str | None):
             users.full_name,
             users.role,
             users.brigade,
+            COALESCE(users.is_active, 1) AS is_active,
             sessions.expires_at AS session_expires_at
         FROM sessions
         JOIN users ON users.id = sessions.user_id
@@ -286,6 +319,20 @@ def get_user_by_session(token: str | None):
 
     if not row:
         conn.close()
+        return None
+
+    # Доступ отключили, пока человек уже был в системе: обрываем вход
+    # здесь же, не дожидаясь, пока истечёт срок сессии.
+    if not row["is_active"]:
+
+        cursor.execute(
+            "DELETE FROM sessions WHERE token = ?",
+            (token,)
+        )
+
+        conn.commit()
+        conn.close()
+
         return None
 
     expires_at = datetime.strptime(
@@ -443,7 +490,8 @@ def get_all_users():
 
     cursor.execute(
         """
-        SELECT id, username, full_name, role, brigade, created_at
+        SELECT id, username, full_name, role, brigade, created_at,
+               COALESCE(is_active, 1) AS is_active
         FROM users
         WHERE COALESCE(hidden, 0) = 0
         ORDER BY id
@@ -503,6 +551,12 @@ def delete_user(user_id):
 
     cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     cursor.execute("DELETE FROM worker_equipment WHERE user_id = ?", (user_id,))
+
+    # Назначения задач тоже ссылаются на user_id: без этой уборки
+    # задача остаётся назначенной на несуществующего человека и
+    # пропадает из чужих списков, хотя формально ещё открыта.
+    cursor.execute("DELETE FROM task_assignees WHERE user_id = ?", (user_id,))
+
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
     conn.commit()
@@ -547,7 +601,13 @@ def set_password(user_id: int, new_password: str) -> None:
 
 
 def set_hidden(user_id: int, hidden: bool) -> None:
-    """Скрыть учётку из списка пользователей (или показать обратно)."""
+    """
+    Скрыть учётку из списка пользователей (или показать обратно).
+
+    ВНИМАНИЕ: это только видимость в списке — скрытая учётка работает
+    и входит как обычно (так и надо для технической учётки владельца).
+    Чтобы закрыть доступ, нужен set_active(user_id, False).
+    """
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -559,6 +619,53 @@ def set_hidden(user_id: int, hidden: bool) -> None:
 
     conn.commit()
     conn.close()
+
+
+def set_active(user_id: int, active: bool) -> dict:
+    """
+    Закрыть или вернуть доступ. Это замена удалению: уволенный войти
+    не может, но его фамилия остаётся в закрытых обращениях, сменных
+    отчётах и задачах — история смены не теряет автора.
+
+    При отключении все открытые сессии закрываются сразу: человек,
+    который сидит в системе с телефона, вылетает на следующем действии.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, username, full_name, COALESCE(hidden, 0) AS hidden FROM users WHERE id = ?",
+        (user_id,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        raise ValueError("Пользователь не найден.")
+
+    # Учётку владельца отключать нельзя: через неё входят, когда всё
+    # остальное сломано, и только она распоряжается бэкапами.
+    # Скрытая учётка (hidden) — тот же случай: она техническая.
+    if not active and (row["hidden"] or row["username"] in OWNERS):
+        conn.close()
+        raise ValueError("Эту учётку отключить нельзя.")
+
+    cursor.execute(
+        "UPDATE users SET is_active = ? WHERE id = ?",
+        (1 if active else 0, user_id)
+    )
+
+    if not active:
+        cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+    conn.commit()
+    conn.close()
+
+    return {"id": row["id"], "username": row["username"],
+            "full_name": row["full_name"], "is_active": active}
+
 
 def rename_user(user_id: int, new_username: str = None, new_full_name: str = None) -> None:
     """

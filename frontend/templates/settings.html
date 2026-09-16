@@ -120,20 +120,48 @@ function renderUsers(){
   const q=(document.getElementById('userSearch')?.value||'').toLowerCase();
   const users=allUsers.filter(u=>!q||(u.full_name||'').toLowerCase().includes(q)||(u.username||'').toLowerCase().includes(q));
   const ROLE_COLORS={admin:'var(--danger)',director:'var(--accent)',chief_engineer:'var(--accent)',engineer:'var(--accent)',worker:'var(--ok)',shift_supervisor:'var(--warn)',chief_mechanic:'var(--warn)',mechanic:'var(--ok)'};
-  document.getElementById('userList').innerHTML=users.map(u=>`
-    <div class="user-row">
-      <div class="u-avatar" style="background:${avatarColor(u.full_name)}">${initials(u.full_name)}</div>
+  document.getElementById('userList').innerHTML=users.map(u=>{
+    // is_active приходит как 1/0. Отключённых не убираем из списка:
+    // их надо видеть, чтобы вернуть доступ при возвращении из отпуска.
+    const off = !u.is_active;
+    return `
+    <div class="user-row" style="${off?'opacity:.55':''}">
+      <div class="u-avatar" style="background:${off?'var(--text-dim)':avatarColor(u.full_name)}">${initials(u.full_name)}</div>
       <div style="flex:1;min-width:0">
-        <div class="u-name">${u.full_name||'—'}</div>
+        <div class="u-name">${u.full_name||'—'}${off?' <span style="font-size:10px;font-weight:600;color:var(--danger)">ДОСТУП ЗАКРЫТ</span>':''}</div>
         <div class="u-login">@${u.username}</div>
       </div>
       <span style="font-size:11px;font-weight:600;color:${ROLE_COLORS[u.role]||'var(--text-dim)'};flex-shrink:0">${ROLE_LABELS[u.role]||u.role}</span>
       <div style="display:flex;gap:6px">
         <button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>
         <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')">🔑 Пароль</button>
-        <button class="btn danger sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
+        <button class="btn secondary sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
+        ${off
+          ? `<button class="btn primary sm" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`
+          : `<button class="btn danger sm" onclick="setUserActive(${u.id},false,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Закрыть доступ</button>`}
       </div>
-    </div>`).join('')||'<div class="empty">Нет пользователей</div>';
+    </div>`;}).join('')||'<div class="empty">Нет пользователей</div>';
+}
+
+// Увольнение и отпуск: доступ закрывается, а фамилия остаётся в
+// закрытых обращениях, сменных отчётах и задачах. Удаление их стирает,
+// поэтому для ухода человека нужна именно эта кнопка.
+async function setUserActive(id, active, name){
+  const msg = active
+    ? `Вернуть доступ «${name}»? Человек сможет снова входить в систему.`
+    : `Закрыть доступ «${name}»?\n\nОн не сможет войти, открытые сессии завершатся сразу. История и отчёты останутся.`;
+  if(!confirm(msg)) return;
+  try{
+    const r=await fetch(`/api/settings/users/${id}/active`,{
+      method:'PUT', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({active})
+    });
+    const d=await r.json();
+    if(!d.success){ACAI.toast(d.message||'Не получилось','danger');return;}
+    ACAI.toast(active?'Доступ возвращён':'Доступ закрыт');
+    await load();
+  }catch{ACAI.toast('Ошибка сети','danger');}
 }
 
 function openAddUser(){

@@ -108,7 +108,9 @@ from backend.services.auth_service import (
     assign_equipment,
     validate_password_strength,
     VALID_ROLES,
-    delete_user
+    delete_user,
+    set_active,
+    AccessDisabled
 )
 from backend.services.rate_limit_service import check_rate_limit
 from backend.services.regulation_service import init_regulation_extensions
@@ -757,7 +759,19 @@ def login(data: LoginRequest, response: Response, request: Request):
             "message": "Слишком много попыток входа. Подождите 5 минут.",
         }
 
-    user = authenticate(data.username, data.password)
+    try:
+        user = authenticate(data.username, data.password)
+
+    except AccessDisabled:
+
+        # Пароль верный, но доступ закрыт. Попытку не считаем подбором:
+        # это свой человек, которому отключили учётку.
+        log_action(username=data.username, role=None, action="login_disabled")
+
+        return {
+            "success": False,
+            "message": "Доступ к системе закрыт. Обратитесь к руководителю.",
+        }
 
     if user is None:
 
@@ -1416,6 +1430,51 @@ def delete_user_route(
         "success": True
     }
 
+
+@app.put("/api/settings/users/{user_id}/active")
+def set_user_active_route(
+    user_id: int,
+    request: dict,
+    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+):
+    """
+    Закрыть или вернуть доступ. Это правильный способ проводить
+    увольнение: удаление стирает человека из назначенных задач, а
+    отключение оставляет его фамилию в истории смен.
+    """
+
+    active = bool(request.get("active"))
+
+    if user_id == user["id"] and not active:
+
+        return {
+            "success": False,
+            "message": "Нельзя закрыть доступ самому себе."
+        }
+
+    try:
+
+        result = set_active(user_id, active)
+
+    except ValueError as error:
+
+        return {
+            "success": False,
+            "message": str(error)
+        }
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="user_enabled" if active else "user_disabled",
+        target=f"user:{user_id}",
+        details=None
+    )
+
+    return {
+        "success": True,
+        "user": result
+    }
 
 
 @app.put("/api/settings/users/{user_id}/equipment")
@@ -3244,33 +3303,6 @@ def set_user_password_route(user_id: int, request: dict, user: dict = Depends(re
         return {"success": False, "message": str(e)}
     set_password(user_id, new_p)
     log_action(username=user["username"], role=user["role"], action="user_password_changed", target=f"user:{user_id}")
-    return {"success": True}
-
-
-@app.post("/api/auth/change-password")
-def change_password_route(request: dict, user: dict = Depends(get_current_user)):
-    from backend.services.auth_service import authenticate, set_password, validate_password_strength
-    curr = request.get("current_password", "")
-    new_p = request.get("new_password", "")
-    if not authenticate(user["username"], curr):
-        return {"success": False, "message": "Неверный текущий пароль"}
-    try:
-        validate_password_strength(new_p)
-    except ValueError as e:
-        return {"success": False, "message": str(e)}
-    set_password(user["id"], new_p)
-    return {"success": True}
-
-
-@app.put("/api/settings/users/{user_id}/password")
-def set_user_password_route(user_id: int, request: dict, user: dict = Depends(require_roles("admin"))):
-    from backend.services.auth_service import set_password, validate_password_strength
-    new_p = request.get("password", "")
-    try:
-        validate_password_strength(new_p)
-    except ValueError as e:
-        return {"success": False, "message": str(e)}
-    set_password(user_id, new_p)
     return {"success": True}
 
 
