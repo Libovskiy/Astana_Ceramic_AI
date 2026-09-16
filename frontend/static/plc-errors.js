@@ -15,6 +15,20 @@ let _plcCurrentUser = null;
 let _plcCurrentLine = null;
 let _plcErrors = [];
 
+/**
+ * Сворачивание секции. Общее для кодов ошибок и для оборудования —
+ * обе секции длинные, и держать их открытыми одновременно нельзя.
+ */
+function toggleSection(cardId, event) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.toggle("collapsed");
+}
+
+function expandSection(cardId) {
+  document.getElementById(cardId)?.classList.remove("collapsed");
+}
+
 async function initPlcErrors(user) {
   _plcCurrentUser = user;
 
@@ -62,8 +76,30 @@ function renderPlcErrors() {
   const container = document.getElementById("plcErrorsList");
   const canEdit = PLC_EDIT_ROLES.includes(_plcCurrentUser?.role);
 
+  const query = (document.getElementById("plcSearch")?.value || "").trim().toLowerCase();
+
+  // Ищем и по коду, и по тексту названия/решения: электрик приходит
+  // либо с кодом с панели, либо со словами «тепловое реле резчика».
+  // Ведущие нули в коде не важны — A49 и A049 — одно и то же (см. match_key на бэкенде).
+  const stripZeros = s => s.replace(/^([a-zа-я]+)0+(\d)/i, "$1$2");
+  const filtered = !query ? _plcErrors : _plcErrors.filter(e => {
+    const haystack = `${e.code} ${stripZeros(e.code)} ${e.title} ${e.solution || ""}`.toLowerCase();
+    return haystack.includes(query) || haystack.includes(stripZeros(query));
+  });
+
+  // Поиск без раскрытия секции выглядел бы как «ничего не происходит».
+  if (query) expandSection("plcErrorsCard");
+
+  const counter = document.getElementById("plcCount");
+  if (counter) counter.textContent = query ? `${filtered.length} из ${_plcErrors.length}` : `${_plcErrors.length}`;
+
   if (!_plcErrors.length) {
     container.innerHTML = `<div class="empty-state">Кодов для этой линии пока нет в базе.</div>`;
+    return;
+  }
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">По запросу «${escapePlcHtml(query)}» ничего не нашлось.</div>`;
     return;
   }
 
@@ -77,7 +113,7 @@ function renderPlcErrors() {
         ${canEdit ? '<th style="width:70px"></th>' : ''}
       </tr></thead>
       <tbody>
-        ${_plcErrors.map(e => `
+        ${filtered.map(e => `
           <tr>
             <td class="mono" style="color:var(--warn);font-weight:700">${escapePlcHtml(e.code)}</td>
             <td>${escapePlcHtml(e.title)}</td>

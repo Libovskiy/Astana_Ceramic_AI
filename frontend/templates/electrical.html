@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/acai.css?v=9">
-<link rel="stylesheet" href="/static/equipment-page.css?v=1">
+<link rel="stylesheet" href="/static/equipment-page.css?v=2">
 </head>
 <body>
 <div class="app">
@@ -38,65 +38,83 @@
         </div>
       </section>
 
-      <section class="diagnostic-toolbar" style="flex-wrap: wrap;">
-        <select id="stageFilter">
-          <option value="">Все этапы</option>
-          <option value="mass">Массаподготовка</option>
-          <option value="forming">Формовка</option>
-          <option value="drying">Сушка</option>
-          <option value="kiln">Печь</option>
-          <option value="packaging">Упаковка</option>
-        </select>
-        <select id="statusFilter">
-          <option value="">Все статусы</option>
-          <option value="Работает">Работает</option>
-          <option value="Внимание">Внимание</option>
-          <option value="Ошибка">Ошибка</option>
-        </select>
-        <input id="nameFilter" type="text" placeholder="Поиск по названию..." style="flex: 2;">
-      </section>
-
-      <section class="dashboard-summary">
-        <div class="summary-card">
-          <div class="summary-icon">▣</div>
-          <div><span>Всего оборудования</span><strong id="totalCount">—</strong></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">✓</div>
-          <div><span>Работает</span><strong id="workingCount">—</strong></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">!</div>
-          <div><span>Внимание</span><strong id="warningCount">—</strong></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">!</div>
-          <div><span>Ошибка</span><strong id="errorCount">—</strong></div>
-        </div>
-      </section>
-
-      <section class="dashboard-card">
-        <div class="card-header">
-          <h2>Список оборудования</h2>
-          <p>Кликните "История" для полного журнала по станку</p>
-        </div>
-        <div id="equipmentList">
-          <div class="loading-state">Загрузка оборудования...</div>
-        </div>
-      </section>
-
-      <section class="dashboard-card" id="plcErrorsCard" style="display:none">
-        <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-          <div>
-            <h2>База кодов ошибок PLC</h2>
-            <p>Код с панели → готовое решение. Одна база на всю линию, не на один станок</p>
+      <!-- ── КОДЫ ОШИБОК PLC — выше оборудования: с них начинается разбор ── -->
+      <section class="dashboard-card collapsible collapsed" id="plcErrorsCard" style="display:none">
+        <div class="card-header collapse-head" onclick="toggleSection('plcErrorsCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Коды ошибок PLC <span class="collapse-count" id="plcCount"></span></h2>
+              <p>Код с панели → готовое решение. Одна база на всю линию, не на один станок</p>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="collapse-tools" onclick="event.stopPropagation()">
             <select id="plcLineSelect" class="select" onchange="loadPlcErrors()"></select>
+            <input id="plcSearch" class="input" type="search" placeholder="Поиск: код или текст…" oninput="renderPlcErrors()">
             <button class="btn primary sm" id="plcAddBtn" style="display:none" onclick="openPlcErrorForm()">+ Код</button>
           </div>
         </div>
-        <div id="plcErrorsList"><div class="loading-state">Загрузка...</div></div>
+        <div class="collapse-body">
+          <div id="plcErrorsList"><div class="loading-state">Загрузка...</div></div>
+        </div>
+      </section>
+
+      <!-- ── ОБОРУДОВАНИЕ ── -->
+      <section class="dashboard-card collapsible collapsed" id="equipmentCard">
+        <div class="card-header collapse-head" onclick="toggleSection('equipmentCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Оборудование по электрочасти <span class="collapse-count" id="equipmentCount"></span></h2>
+              <p>Кликните "История" для полного журнала по станку</p>
+            </div>
+          </div>
+          <div class="collapse-tools" onclick="event.stopPropagation()">
+            <input id="nameFilter" class="input" type="search" placeholder="Поиск по названию…">
+          </div>
+        </div>
+
+        <div class="collapse-body">
+          <section class="diagnostic-toolbar" style="flex-wrap: wrap;">
+            <select id="stageFilter">
+              <option value="">Все этапы</option>
+              <option value="mass">Массаподготовка</option>
+              <option value="forming">Формовка</option>
+              <option value="drying">Сушка</option>
+              <option value="kiln">Печь</option>
+              <option value="packaging">Упаковка</option>
+            </select>
+            <select id="statusFilter">
+              <option value="">Все статусы</option>
+              <option value="Работает">Работает</option>
+              <option value="Внимание">Внимание</option>
+              <option value="Ошибка">Ошибка</option>
+            </select>
+          </section>
+
+          <section class="dashboard-summary">
+            <div class="summary-card">
+              <div class="summary-icon">▣</div>
+              <div><span>Всего оборудования</span><strong id="totalCount">—</strong></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">✓</div>
+              <div><span>Работает</span><strong id="workingCount">—</strong></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">!</div>
+              <div><span>Внимание</span><strong id="warningCount">—</strong></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">!</div>
+              <div><span>Ошибка</span><strong id="errorCount">—</strong></div>
+            </div>
+          </section>
+
+          <div id="equipmentList">
+            <div class="loading-state">Загрузка оборудования...</div>
+          </div>
+        </div>
       </section>
 
     </div>
@@ -107,12 +125,34 @@
 <script src="/static/mobile_nav_v2.js?v=2"></script>
 <script>window.DISCIPLINE_LOCK = "electrical";</script>
 <script src="/static/equipment.js?v=32"></script>
-<script src="/static/plc-errors.js?v=1"></script>
+<script src="/static/plc-errors.js?v=2"></script>
 <script>
 initLayout().then(ctx => {
   window.currentUser = ctx?.user;
   initPlcErrors(ctx?.user);
 });
+
+// Счётчик у заголовка секции оборудования: считаем то, что реально
+// отрисовано (с учётом фильтров) — equipment.js перерисовывает список
+// сам, поэтому просто следим за контейнером, а не дублируем его логику.
+(function () {
+  const list = document.getElementById("equipmentList");
+  const counter = document.getElementById("equipmentCount");
+  if (!list || !counter) return;
+
+  const update = () => {
+    const shown = list.querySelectorAll(".diagnostic-equipment-row").length;
+    counter.textContent = shown ? String(shown) : "";
+  };
+
+  new MutationObserver(update).observe(list, { childList: true, subtree: true });
+  update();
+
+  // Искать в свёрнутой секции бессмысленно — раскрываем при вводе.
+  document.getElementById("nameFilter")?.addEventListener("input", e => {
+    if (e.target.value.trim()) expandSection("equipmentCard");
+  });
+})();
 </script>
 
 </body>
