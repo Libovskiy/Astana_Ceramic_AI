@@ -15,6 +15,7 @@ backup_service умеет только базу, да и ту раньше бр�
 момент копирования получится битый файл.
 """
 import argparse
+import gzip
 import shutil
 import sqlite3
 import sys
@@ -98,6 +99,42 @@ def cleanup(keep: int):
         print(f"  удалён старый комплект {stamp} ({removed} файлов)")
 
 
+# Логи сервера. launchd пишет в них без ограничения: лог ошибок успел
+# дорасти до 17 МБ. Раз в сутки, если файл больше порога, сжатая копия
+# уходит в logs/archive, а сам файл обнуляется на месте. Сервер
+# открывает логи в режиме дозаписи, поэтому продолжает писать в
+# обнулённый файл без перезапуска.
+LOGS_DIR = BASE_DIR / "logs"
+LOG_ROTATE_BYTES = 5 * 1024 * 1024
+LOG_ARCHIVES_KEEP = 10
+
+
+def rotate_logs(stamp: str) -> None:
+    archive = LOGS_DIR / "archive"
+
+    for log in sorted(LOGS_DIR.glob("*.log")):
+        size = log.stat().st_size
+        if size < LOG_ROTATE_BYTES:
+            continue
+
+        archive.mkdir(exist_ok=True)
+        target = archive / f"{log.stem}_{stamp}.log.gz"
+
+        with open(log, "rb") as src, gzip.open(target, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+        # Именно обнуление, а не удаление: удалённый файл сервер
+        # продолжил бы держать открытым и писать в пустоту.
+        with open(log, "r+b") as f:
+            f.truncate(0)
+
+        print(f"✓ лог      {log.name}: {human(size)} → {target.name} ({human(target.stat().st_size)})")
+
+        old = sorted(archive.glob(f"{log.stem}_*.log.gz"))
+        for extra in old[:-LOG_ARCHIVES_KEEP]:
+            extra.unlink()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--with-docs", action="store_true", help="включить папку docs")
@@ -115,6 +152,7 @@ def main():
         backup_dir(DOCS_DIR, stamp, "docs")
 
     cleanup(args.keep)
+    rotate_logs(stamp)
 
     total = sum(f.stat().st_size for f in BACKUP_DIR.glob("*") if f.is_file())
     print(f"\nВсего в backups/: {human(total)}")
