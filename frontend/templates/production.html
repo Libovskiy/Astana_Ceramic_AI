@@ -65,45 +65,6 @@
         <div id="logResult" style="margin-top: 12px; font-size: 13px;"></div>
       </section>
 
-      <!-- SHIFT PRODUCTION CHART -->
-      <section class="dashboard-card">
-        <div class="card-header">
-          <h2>Производство за смену</h2>
-          <p>Факт по времени внутри смены, относительно плана</p>
-        </div>
-
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-          <select id="chartDate" class="select" style="max-width: 180px;"></select>
-          <select id="chartShift" class="select">
-            <option value="День">День</option>
-            <option value="Ночь">Ночь</option>
-          </select>
-        </div>
-
-        <div style="position: relative; height: 280px;">
-          <canvas id="shiftChart"></canvas>
-        </div>
-
-        <div class="metrics" style="margin-top: 20px;">
-          <div class="metric">
-            <div class="metric-label">Произведено</div>
-            <div class="metric-value" id="chartProduced">—</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">План на смену</div>
-            <div class="metric-value" id="chartTarget">—</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">От плана</div>
-            <div class="metric-value" id="chartPercent">—</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Осталось</div>
-            <div class="metric-value" id="chartRemaining">—</div>
-          </div>
-        </div>
-      </section>
-
       <!-- MONTHLY PLAN -->
       <section class="dashboard-card" id="planSection" style="display: none;">
         <div class="card-header">
@@ -122,22 +83,6 @@
         </div>
         <div id="shiftHistory">
           <div class="loading-state">Загрузка...</div>
-        </div>
-      </section>
-
-      <!-- PRODUCTION FLOW -->
-      <section class="production-section">
-        <div class="section-header">
-          <h2>Производственный процесс</h2>
-          <p>Основные этапы производства</p>
-        </div>
-
-        <div class="production-flow" id="productionFlow"></div>
-
-        <div class="production-actions">
-          <button type="button" class="primary-button" id="openProductionMap">
-            Открыть производственную карту →
-          </button>
         </div>
       </section>
 

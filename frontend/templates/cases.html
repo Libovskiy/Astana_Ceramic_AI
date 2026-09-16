@@ -305,7 +305,7 @@ function openNewCase(){
     ACAI.showModal(`
       <h3>Новое обращение</h3>
       <div class="field"><label>Оборудование *</label>
-        <select class="input" id="nc-eq">
+        <select class="input" id="nc-eq" onchange="clearNcError()">
           <option value="">— Выберите —</option>
           ${eq.map(e=>`<option value="${e.id}">${e.name} · ${e.location||e.stage||'—'}</option>`).join('')}
         </select>
@@ -327,7 +327,15 @@ function openNewCase(){
     `);
   });
 }
+// Сообщение об ошибке висело до следующей отправки: человек выбирал
+// оборудование, а красное «Выберите оборудование» оставалось на экране
+// и выглядело так, будто форма не приняла выбор.
+function clearNcError(){
+  const el=document.getElementById('nc-err');
+  if(el) el.textContent='';
+}
 function setNcSymptom(btn,s){
+  clearNcError();
   document.getElementById('nc-symptom').value=s;
   document.querySelectorAll('#_modal button[onclick*="setNcSymptom"]').forEach(b=>b.style.background='var(--surface-2)');
   btn.style.background='var(--accent)';btn.style.color='#fff';
