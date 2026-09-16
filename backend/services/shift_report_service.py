@@ -59,6 +59,24 @@ CHECK_ROLES = {"shift_supervisor", "admin"}                       # провер
 APPROVE_ROLES = {"chief_engineer", "admin"}                       # подтверждает окончательно
 VIEW_ALL_ROLES = {"admin", "director", "chief_engineer", "analyst"}
 
+# Стартовый список причин брака. Не догма: гл. инженер правит его под
+# завод прямо в интерфейсе — важно лишь, чтобы причина выбиралась из
+# списка, а не писалась каждый раз заново своими словами.
+DEFAULT_DEFECT_REASONS = [
+    "Трещины после обжига",
+    "Недожог",
+    "Пережог",
+    "Скол угла или грани",
+    "Деформация, искривление",
+    "Разрушение при съёме с вагонетки",
+    "Известковые включения (дутики)",
+    "Высолы",
+    "Отклонение по размеру",
+    "Повреждение при упаковке",
+    "Отклонение по цвету",
+    "Слипание кирпича",
+]
+
 DEFAULT_CAR_NORM_MINUTES = 75
 DEFAULT_LAYER_NORM_MINUTES = 25
 
@@ -111,6 +129,32 @@ def init_shift_report_tables() -> None:
             FOREIGN KEY (report_id) REFERENCES shift_reports(id)
         )
     """)
+
+    # Уточнение к причине: сама причина берётся из справочника (чтобы
+    # на совещании «трещины» и «трещины после обжига» не были двумя
+    # разными строками), а подробности пишутся сюда свободно.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(shift_report_cars)")}
+    if "defect_note" not in existing:
+        conn.execute("ALTER TABLE shift_report_cars ADD COLUMN defect_note TEXT")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS defect_reasons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            sort_order INTEGER NOT NULL DEFAULT 100,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_by TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    if not conn.execute("SELECT COUNT(*) FROM defect_reasons").fetchone()[0]:
+        for order, name in enumerate(DEFAULT_DEFECT_REASONS, start=1):
+            conn.execute(
+                """INSERT OR IGNORE INTO defect_reasons (name, sort_order, created_by, created_at)
+                   VALUES (?, ?, 'стартовый список', datetime('now'))""",
+                (name, order * 10),
+            )
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS shift_report_norms (
@@ -348,8 +392,8 @@ def add_car(report_id: int, data: dict, username: str) -> dict:
     cur = conn.execute(
         """INSERT INTO shift_report_cars
            (report_id, car_number, brick_type, layer1_at, layer2_at, layer3_at, finished_at,
-            pallets_good, pallets_defect, defect_reason, created_by, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
+            pallets_good, pallets_defect, defect_reason, defect_note, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
         (
             report_id,
             str(data.get("car_number")).strip(),
@@ -361,6 +405,7 @@ def add_car(report_id: int, data: dict, username: str) -> dict:
             int(data.get("pallets_good") or 0),
             int(data.get("pallets_defect") or 0),
             (data.get("defect_reason") or "").strip(),
+            (data.get("defect_note") or "").strip(),
             username,
         ),
     )
@@ -385,7 +430,7 @@ def update_car(car_id: int, data: dict) -> dict:
     conn.execute(
         """UPDATE shift_report_cars
            SET car_number=?, brick_type=?, layer1_at=?, layer2_at=?, layer3_at=?, finished_at=?,
-               pallets_good=?, pallets_defect=?, defect_reason=?
+               pallets_good=?, pallets_defect=?, defect_reason=?, defect_note=?
            WHERE id=?""",
         (
             str(data.get("car_number") or car["car_number"]).strip(),
@@ -397,6 +442,7 @@ def update_car(car_id: int, data: dict) -> dict:
             int(data.get("pallets_good") or 0),
             int(data.get("pallets_defect") or 0),
             (data.get("defect_reason") or "").strip(),
+            (data.get("defect_note") or "").strip(),
             car_id,
         ),
     )
@@ -592,3 +638,57 @@ def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
         "by_date": sorted(by_date.values(), key=lambda s: s["date"]),
         "norms": norms,
     }
+
+
+# =========================================================
+# СПРАВОЧНИК ПРИЧИН БРАКА
+# =========================================================
+#
+# Причина выбирается из списка, а не пишется руками. Иначе в сводке
+# «трещины», «трещины после обжига» и «трещина» будут тремя разными
+# строками, и на совещании не увидеть, что это одна и та же проблема
+# на треть выпуска. Подробности пишутся отдельным полем defect_note.
+
+
+def list_defect_reasons() -> list[dict]:
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT * FROM defect_reasons WHERE is_active=1 ORDER BY sort_order, name"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def create_defect_reason(name: str, username: str) -> dict:
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Название причины не может быть пустым")
+
+    conn = _conn()
+    try:
+        cur = conn.execute(
+            """INSERT INTO defect_reasons (name, sort_order, created_by, created_at)
+               VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM defect_reasons), ?, datetime('now'))""",
+            (name, username),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise ValueError(f"Причина «{name}» уже есть в справочнике")
+
+    row = conn.execute("SELECT * FROM defect_reasons WHERE id=?", (new_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def archive_defect_reason(reason_id: int) -> None:
+    """
+    Убираем из списка, но не из уже заполненных отчётов: причина там
+    хранится текстом, и прошлые смены должны остаться как есть —
+    иначе история переписывается задним числом.
+    """
+    conn = _conn()
+    conn.execute("UPDATE defect_reasons SET is_active=0 WHERE id=?", (reason_id,))
+    conn.commit()
+    conn.close()

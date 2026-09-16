@@ -142,7 +142,10 @@ function srCarRow(c, editable) {
       </td>
       <td class="mono">${c.pallets_good ?? 0}</td>
       <td class="mono" style="color:${c.pallets_defect ? "var(--danger)" : "var(--text-dim)"}">${c.pallets_defect ?? 0}</td>
-      <td style="font-size:12px;color:var(--text-dim);max-width:220px">${srEscape(c.defect_reason || "—")}</td>
+      <td style="font-size:12px;color:var(--text-dim);max-width:240px">
+        ${c.defect_reason ? srEscape(c.defect_reason) : "—"}
+        ${c.defect_note ? `<div style="font-size:11px;opacity:.75">${srEscape(c.defect_note)}</div>` : ""}
+      </td>
       ${editable ? `
         <td><div style="display:flex;gap:6px">
           <button class="btn secondary sm" onclick="srCarForm(${c.id})" title="Править">✎</button>
@@ -197,8 +200,20 @@ function srCarForm(carId) {
       <div class="field"><label>Окончание</label><input class="input" id="sr-fin" type="time" value="${v("finished_at")}"></div>
       <div class="field"><label>Поддонов годных</label><input class="input" id="sr-good" type="number" min="0" value="${car ? (car.pallets_good ?? 0) : 0}"></div>
       <div class="field"><label>Поддонов брака</label><input class="input" id="sr-bad" type="number" min="0" value="${car ? (car.pallets_defect ?? 0) : 0}"></div>
-      <div class="field" style="grid-column:1/-1"><label>Причина брака или задержки</label>
-        <textarea class="input" id="sr-reason" rows="2" placeholder="Например: трещины после обжига; стояли из-за обрыва плёнки">${car ? srEscape(car.defect_reason || "") : ""}</textarea>
+      <div class="field" style="grid-column:1/-1"><label>Причина брака</label>
+        <select class="select" id="sr-reason">
+          <option value="">— не указана —</option>
+          ${(_srMeta.defect_reasons || []).map(r =>
+            `<option value="${srAttr(r)}" ${car && car.defect_reason === r ? "selected" : ""}>${srEscape(r)}</option>`
+          ).join("")}
+          ${car && car.defect_reason && !(_srMeta.defect_reasons || []).includes(car.defect_reason)
+            ? `<option value="${srAttr(car.defect_reason)}" selected>${srEscape(car.defect_reason)}</option>` : ""}
+        </select>
+        ${_srMeta.can_edit_reasons
+          ? `<button class="btn secondary sm" style="margin-top:6px" onclick="srAddReason()">+ Своя причина</button>` : ""}
+      </div>
+      <div class="field" style="grid-column:1/-1"><label>Подробности или причина задержки</label>
+        <textarea class="input" id="sr-note" rows="2" placeholder="Например: стояли из-за обрыва плёнки на обмотчике">${car ? srEscape(car.defect_note || "") : ""}</textarea>
       </div>
     </div>
     <div id="sr-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
@@ -221,6 +236,7 @@ async function srSaveCar(carId) {
     pallets_good: parseInt(document.getElementById("sr-good").value || 0),
     pallets_defect: parseInt(document.getElementById("sr-bad").value || 0),
     defect_reason: document.getElementById("sr-reason").value.trim(),
+    defect_note: document.getElementById("sr-note").value.trim(),
   };
 
   if (!body.car_number) { errEl.textContent = "Укажите номер вагонетки"; return; }
@@ -369,4 +385,30 @@ function srEscape(s) {
 
 function srAttr(s) {
   return srEscape(s).replace(/"/g, "&quot;");
+}
+
+
+// Гл. инженер может завести причину, не уходя из формы: иначе оператор
+// упрётся в «нет подходящей» и снова напишет своими словами.
+async function srAddReason() {
+  const name = prompt("Новая причина брака:");
+  if (!name || !name.trim()) return;
+
+  try {
+    await srRequest("/api/shift-report/defect-reasons", "POST", { name: name.trim() });
+    const meta = await ACAI.get("/api/shift-report/meta");
+    _srMeta.defect_reasons = meta.defect_reasons;
+
+    const select = document.getElementById("sr-reason");
+    if (select) {
+      const option = document.createElement("option");
+      option.value = name.trim();
+      option.textContent = name.trim();
+      option.selected = true;
+      select.appendChild(option);
+    }
+    ACAI.toast("Причина добавлена ✓", "ok");
+  } catch (e) {
+    ACAI.toast(e.message || "Не удалось добавить", "danger");
+  }
 }

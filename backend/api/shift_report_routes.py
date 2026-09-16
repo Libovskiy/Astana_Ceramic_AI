@@ -48,6 +48,11 @@ class CarPayload(BaseModel):
     pallets_good: int = 0
     pallets_defect: int = 0
     defect_reason: str = ""
+    defect_note: str = ""
+
+
+class ReasonPayload(BaseModel):
+    name: str
 
 
 class OpenPayload(BaseModel):
@@ -79,7 +84,30 @@ def meta(user: dict = Depends(current_user)):
         "can_approve": user["role"] in svc.APPROVE_ROLES,
         "can_set_norms": user["role"] in svc.APPROVE_ROLES,
         "status_labels": svc.STATUS_LABELS,
+        "defect_reasons": [r["name"] for r in svc.list_defect_reasons()],
+        "can_edit_reasons": user["role"] in svc.APPROVE_ROLES,
     }
+
+
+@router.get("/defect-reasons")
+def defect_reasons(user: dict = Depends(current_user)):
+    return {"success": True, "reasons": svc.list_defect_reasons()}
+
+
+@router.post("/defect-reasons")
+def add_defect_reason(payload: ReasonPayload, user: dict = Depends(current_user)):
+    _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
+    try:
+        return {"success": True, "reason": svc.create_defect_reason(payload.name, user["username"])}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.delete("/defect-reasons/{reason_id}")
+def remove_defect_reason(reason_id: int, user: dict = Depends(current_user)):
+    _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
+    svc.archive_defect_reason(reason_id)
+    return {"success": True}
 
 
 @router.post("/open")
