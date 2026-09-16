@@ -25,6 +25,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DB_FILE = BASE_DIR / "factory.db"
 PHOTOS_DIR = BASE_DIR / "data" / "checklist_photos"
+# Вложения из переписки: фото шильдиков, видео узлов, акты осмотра.
+# Восстановить их неоткуда — в git они не попадают (и не должны).
+CHAT_FILES_DIR = BASE_DIR / "uploads" / "messenger"
 DOCS_DIR = BASE_DIR / "docs"
 BACKUP_DIR = BASE_DIR / "backups"
 DEFAULT_KEEP = 14
@@ -107,6 +110,7 @@ def main():
     print(f"Бэкап {datetime.now():%d.%m.%Y %H:%M}\n")
     backup_db(stamp)
     backup_dir(PHOTOS_DIR, stamp, "photos")
+    backup_dir(CHAT_FILES_DIR, stamp, "chatfiles")
     if args.with_docs:
         backup_dir(DOCS_DIR, stamp, "docs")
 

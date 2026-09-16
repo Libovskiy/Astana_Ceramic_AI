@@ -185,7 +185,7 @@ const NAV_ITEMS = [
   { icon: '💬', label: 'Обращения',     href: '/chat',         roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
   // Переписка между людьми — отдельно от «Обращений»: там разговор о
   // поломке со статусом и станком, здесь просто общение.
-  { icon: '✉️', label: 'Переписка',     href: '/messenger',    roles: '*' },
+  { icon: '💭', label: 'Переписка',     href: '/messenger',    roles: '*' },
   { icon: '🔧', label: 'Диагностика',   href: '/diagnostics',  roles: ['worker','shift_supervisor','engineer','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician'] },
   { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🔩', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic'] },
@@ -193,13 +193,13 @@ const NAV_ITEMS = [
   // worker тут не случайно: сменный отчёт упаковки заполняют бригады
   // А/Б/В/Г, а у них роль worker. Без этой ссылки они не могли дойти
   // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
-  { icon: '⚡', label: 'Производство',  href: '/production',   roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
+  { icon: '🏭', label: 'Производство',  href: '/production',   roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
   { icon: '✅', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🗓️', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','engineer'] },
   { section: 'Аналитика' },
   { icon: '📊', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','analyst'] },
   { icon: '⚠️', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
-  { icon: '📅', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','engineer','shift_supervisor'] },
+  { icon: '📌', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','engineer','shift_supervisor'] },
   { icon: '📄', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','analyst'] },
   { section: 'База знаний' },
   { icon: '📚', label: 'Инструкции',    href: '/instructions', roles: '*' },
@@ -207,8 +207,8 @@ const NAV_ITEMS = [
   { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','engineer','chief_mechanic','chief_electrician'] },
   { section: 'Производство' },
   { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
-  { icon: '🔩', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','engineer'] },
-  { icon: '🏭', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
+  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','engineer'] },
+  { icon: '🧱', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
   { section: 'Система' },
   { icon: '📜', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician'] },
   { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin'] },

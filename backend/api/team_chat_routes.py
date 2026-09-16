@@ -8,7 +8,11 @@
 Логика и объяснения решений — в backend/services/team_chat_service.py.
 """
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, Cookie, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.services.auth_service import get_user_by_session
@@ -92,9 +96,99 @@ def create_group(payload: GroupPayload, user: dict = Depends(current_user)):
 
 
 @router.get("/conversations/{conversation_id}/messages")
-def messages(conversation_id: int, after_id: int = 0, user: dict = Depends(current_user)):
-    data = _handle(svc.get_messages, conversation_id, user["id"], after_id)
+def messages(conversation_id: int, after_id: int = 0, before_id: int | None = None,
+             limit: int = 50, user: dict = Depends(current_user)):
+    """
+    after_id — новое (опрос), before_id — старое (прокрутка вверх).
+    См. docstring get_messages в сервисе.
+    """
+    data = _handle(svc.get_messages, conversation_id, user["id"], after_id, before_id, limit)
     return {"success": True, **data}
+
+
+@router.post("/conversations/{conversation_id}/attachments")
+async def upload(conversation_id: int,
+                 file: UploadFile = File(...),
+                 caption: str = Form(""),
+                 user: dict = Depends(current_user)):
+    """
+    Фото, видео или любой файл до 50 МБ.
+
+    Пишем на диск потоком, кусками по мегабайту: полсотни мегабайт в
+    памяти — это по такому куску на каждого, кто отправляет
+    одновременно, и сервер на маке ляжет.
+    """
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".upload")
+    written = 0
+
+    try:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+
+            written += len(chunk)
+
+            if written > svc.MAX_ATTACHMENT_BYTES:
+                temp.close()
+                Path(temp.name).unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Файл больше {svc.MAX_ATTACHMENT_BYTES // (1024*1024)} МБ.",
+                )
+
+            temp.write(chunk)
+
+        temp.close()
+
+        message = _handle(
+            svc.save_attachment, conversation_id, user["id"],
+            Path(temp.name), file.filename or "файл",
+            file.content_type, caption,
+        )
+
+        return {"success": True, "message": message}
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        temp.close()
+        Path(temp.name).unlink(missing_ok=True)
+        raise
+
+
+@router.get("/attachments/{attachment_id}")
+def attachment(attachment_id: int, preview: int = 0, user: dict = Depends(current_user)):
+    """
+    Отдаёт вложение участнику переписки.
+
+    В браузере показываем только картинки и видео. Всё прочее уходит
+    вложением на скачивание (Content-Disposition: attachment) — PDF,
+    SVG и HTML, открытые прямо в нашем домене, это чужой код рядом с
+    сессией сотрудника.
+    """
+
+    data = _handle(svc.get_attachment, attachment_id, user["id"], bool(preview))
+
+    inline = data["kind"] in (svc.KIND_IMAGE, svc.KIND_VIDEO)
+
+    headers = {}
+
+    if not inline:
+        # filename* по RFC 5987 — иначе кириллица в имени файла
+        # превращается в мусор при скачивании.
+        from urllib.parse import quote
+        name = quote(data["original_name"])
+        headers["Content-Disposition"] = f"attachment; filename*=UTF-8\'\'{name}"
+
+    return FileResponse(
+        data["path"],
+        media_type=data["mime"],
+        headers=headers or None,
+        filename=None,
+    )
 
 
 @router.post("/conversations/{conversation_id}/messages")

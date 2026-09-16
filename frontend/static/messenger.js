@@ -26,7 +26,10 @@ let me = null;
 let conversations = [];
 let contacts = [];
 let current = null;       // {id, kind, title, members}
-let lastMessageId = 0;
+let lastMessageId = 0;   // самое новое показанное — от него идёт опрос
+let oldestMessageId = 0; // самое старое показанное — от него грузится история
+let hasMore = false;     // есть ли что грузить выше
+let loadingOlder = false;
 let listTimer = null;
 let threadTimer = null;
 
@@ -90,6 +93,8 @@ async function openConversation(id) {
 
   current = { id };
   lastMessageId = 0;
+  oldestMessageId = 0;
+  hasMore = false;
   $('mgMessages').innerHTML = '<div class="mg-empty">Загрузка…</div>';
   $('mgHead').style.display = 'flex';
   $('mgComposer').style.display = 'flex';
@@ -104,7 +109,8 @@ async function pullMessages(first) {
 
   let data;
   try {
-    data = await ACAI.get(`/api/messenger/conversations/${current.id}/messages?after_id=${lastMessageId}`);
+    const query = lastMessageId ? `after_id=${lastMessageId}` : 'limit=50';
+    data = await ACAI.get(`/api/messenger/conversations/${current.id}/messages?${query}`);
   } catch {
     return;
   }
@@ -131,11 +137,88 @@ async function pullMessages(first) {
   list.forEach(m => {
     box.insertAdjacentHTML('beforeend', bubble(m));
     lastMessageId = Math.max(lastMessageId, m.id);
+    if (!oldestMessageId || m.id < oldestMessageId) oldestMessageId = m.id;
   });
+
+  if (first) {
+    hasMore = !!data.has_more;
+    updateOlderMarker();
+  }
 
   if (wasAtBottom) box.scrollTop = box.scrollHeight;
 
   await markRead();
+}
+
+// ── История: подгрузка при прокрутке вверх ────────────────
+//
+// Переписка хранится целиком и никогда не обрезается. Открываем
+// хвостом в 50 сообщений, остальное догружаем, когда человек листает
+// вверх — как в привычных мессенджерах. Иначе открытие годовой ленты
+// на телефоне занимало бы минуту.
+
+function updateOlderMarker() {
+  const box = $('mgMessages');
+  let marker = document.getElementById('mgOlder');
+
+  if (!hasMore) { marker?.remove(); return; }
+
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.id = 'mgOlder';
+    marker.className = 'mg-older';
+    marker.textContent = 'Показать более ранние';
+    marker.onclick = loadOlder;
+    box.insertBefore(marker, box.firstChild);
+  }
+}
+
+async function loadOlder() {
+  if (!current || !hasMore || loadingOlder || !oldestMessageId) return;
+
+  loadingOlder = true;
+
+  const box = $('mgMessages');
+  const marker = document.getElementById('mgOlder');
+  if (marker) marker.textContent = 'Загружаю…';
+
+  // Запоминаем, насколько лента длиннее видимой части: после вставки
+  // сверху восстановим положение, чтобы экран не прыгнул.
+  const before = box.scrollHeight - box.scrollTop;
+
+  try {
+    const data = await ACAI.get(
+      `/api/messenger/conversations/${current.id}/messages?before_id=${oldestMessageId}&limit=50`
+    );
+
+    const list = data.messages || [];
+
+    // Вставляем снизу вверх, каждое перед предыдущим — так порядок
+    // сохраняется без перерисовки всей ленты.
+    let anchorNode = marker ? marker.nextSibling : box.firstChild;
+
+    list.forEach(m => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = bubble(m);
+      const node = wrap.firstElementChild;
+      box.insertBefore(node, anchorNode);
+      anchorNode = node.nextSibling;
+      if (!oldestMessageId || m.id < oldestMessageId) oldestMessageId = m.id;
+    });
+
+    hasMore = !!data.has_more;
+    box.scrollTop = box.scrollHeight - before;
+
+    if (marker) {
+      if (hasMore) marker.textContent = 'Показать более ранние';
+      else marker.remove();
+    }
+
+  } catch {
+    if (marker) marker.textContent = 'Не загрузилось, нажмите ещё раз';
+  } finally {
+    loadingOlder = false;
+  }
 }
 
 function renderHead() {
@@ -154,6 +237,51 @@ function renderHead() {
   }
 }
 
+function humanSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + ' Б';
+  if (n < 1024 * 1024) return Math.round(n / 1024) + ' КБ';
+  return (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
+}
+
+function fileIcon(name) {
+  const ext = String(name || '').split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return '📕';
+  if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return '📘';
+  if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return '📗';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
+  if (['dwg', 'dxf'].includes(ext)) return '📐';
+  return '📎';
+}
+
+function attachmentHtml(a) {
+  if (!a) return '';
+
+  if (a.kind === 'image') {
+    // Показываем уменьшенную копию, по нажатию открывается оригинал.
+    // Пропорции задаём заранее, чтобы лента не прыгала при загрузке.
+    const ratio = (a.width && a.height) ? `aspect-ratio:${a.width}/${a.height};` : '';
+    return `<a class="mg-photo" href="${a.url}" target="_blank" rel="noopener"
+              title="Открыть оригинал">
+      <img src="${a.has_preview ? a.preview_url : a.url}" alt="${esc(a.original_name)}"
+           loading="lazy" style="${ratio}">
+    </a>`;
+  }
+
+  if (a.kind === 'video') {
+    return `<video class="mg-video" controls preload="metadata" src="${a.url}"></video>`;
+  }
+
+  return `<a class="mg-file" href="${a.url}" download>
+    <span class="mg-file-icon">${fileIcon(a.original_name)}</span>
+    <span class="mg-file-body">
+      <span class="mg-file-name">${esc(a.original_name)}</span>
+      <span class="mg-file-size">${humanSize(a.size_bytes)}</span>
+    </span>
+    <span class="mg-file-dl">↓</span>
+  </a>`;
+}
+
 function bubble(m) {
   // Признак «моё» считает сервер — он знает, кто прислал запрос.
   // Сверка по id оставлена запасным вариантом.
@@ -163,13 +291,26 @@ function bubble(m) {
   const del = (mine && !m.deleted_at)
     ? `<button class="mg-del" onclick="removeMessage(${m.id})" title="Удалить">✕</button>` : '';
 
+  const media = attachmentHtml(m.attachment);
+
+  // У файла подпись не обязательна — чаще фото отправляют молча,
+  // и пустой абзац под ним выглядел бы как опечатка.
+  const text = m.body ? `<div class="mg-text">${esc(m.body)}</div>` : '';
+
   return `<div class="mg-row ${mine ? 'mine' : ''}" data-id="${m.id}">
-    <div class="mg-bubble${m.deleted_at ? ' deleted' : ''}">
+    <div class="mg-bubble${m.deleted_at ? ' deleted' : ''}${media ? ' has-media' : ''}">
       ${who}
-      <div class="mg-text">${esc(m.body)}</div>
+      ${media}
+      ${text}
       <div class="mg-meta">${ACAI.shortTime(m.created_at)}${del}</div>
     </div>
   </div>`;
+}
+
+// Доскроллил почти до верха — подгружаем, не дожидаясь нажатия.
+function onScroll() {
+  const box = $('mgMessages');
+  if (box.scrollTop < 120) loadOlder();
 }
 
 async function markRead() {
@@ -203,6 +344,100 @@ async function send() {
     input.value = text;
     ACAI.toast(e.message || 'Не отправилось', 'danger');
   }
+}
+
+// ── Отправка файлов ───────────────────────────────────────
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+function pickFile() {
+  if (!current) return;
+  $('mgFile').click();
+}
+
+async function onFilePicked(input) {
+  const files = [...(input.files || [])];
+  input.value = '';   // иначе тот же файл второй раз не выберется
+
+  // Подпись из поля ввода уходит с ПЕРВЫМ файлом: писать её к каждому
+  // из пяти снимков человек не собирался.
+  let caption = ($('mgInput').value || '').trim();
+
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) {
+      ACAI.toast(`«${file.name}» больше 50 МБ`, 'danger');
+      continue;
+    }
+    await uploadFile(file, caption);
+    caption = '';
+  }
+
+  $('mgInput').value = '';
+  $('mgInput').style.height = 'auto';
+}
+
+function uploadFile(file, caption) {
+  return new Promise((resolve) => {
+    const box = $('mgMessages');
+    if (box.querySelector('.mg-empty')) box.innerHTML = '';
+
+    // Пока файл идёт — временная плашка с полосой. По заводскому
+    // Wi-Fi 50 МБ едут заметно, и без неё непонятно, работает ли.
+    const holder = document.createElement('div');
+    holder.className = 'mg-row mine';
+    holder.innerHTML = `<div class="mg-bubble mg-uploading">
+      <div class="mg-up-name">${esc(file.name)}</div>
+      <div class="mg-up-bar"><div class="mg-up-fill"></div></div>
+      <div class="mg-up-pct">0%</div>
+    </div>`;
+    box.appendChild(holder);
+    box.scrollTop = box.scrollHeight;
+
+    const fill = holder.querySelector('.mg-up-fill');
+    const pct = holder.querySelector('.mg-up-pct');
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('caption', caption || '');
+
+    // XMLHttpRequest, а не fetch: только он сообщает ход отправки.
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/messenger/conversations/${current.id}/attachments`);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const p = Math.round(e.loaded * 100 / e.total);
+      fill.style.width = p + '%';
+      pct.textContent = p + '%';
+    };
+
+    xhr.onload = () => {
+      holder.remove();
+      if (xhr.status === 200) {
+        try {
+          const d = JSON.parse(xhr.responseText);
+          box.insertAdjacentHTML('beforeend', bubble(d.message));
+          lastMessageId = Math.max(lastMessageId, d.message.id);
+          box.scrollTop = box.scrollHeight;
+          loadList(true);
+        } catch { ACAI.toast('Странный ответ сервера', 'danger'); }
+      } else {
+        let detail = 'Не отправилось';
+        try { detail = JSON.parse(xhr.responseText).detail || detail; } catch {}
+        ACAI.toast(detail, 'danger');
+      }
+      resolve();
+    };
+
+    xhr.onerror = () => {
+      holder.remove();
+      ACAI.toast('Обрыв связи при отправке', 'danger');
+      resolve();
+    };
+
+    xhr.send(form);
+  });
 }
 
 async function removeMessage(id) {
@@ -540,6 +775,19 @@ async function boot() {
     }
   });
 
+  $('mgMessages').addEventListener('scroll', onScroll);
+
+  // Перетаскивание файла прямо в переписку — на компьютере так быстрее.
+  const thread = $('mgThread');
+  ['dragenter', 'dragover'].forEach(ev =>
+    thread.addEventListener(ev, e => { e.preventDefault(); thread.classList.add('mg-drop'); }));
+  ['dragleave', 'drop'].forEach(ev =>
+    thread.addEventListener(ev, e => { e.preventDefault(); thread.classList.remove('mg-drop'); }));
+  thread.addEventListener('drop', e => {
+    if (!current || !e.dataTransfer?.files?.length) return;
+    onFilePicked({ files: e.dataTransfer.files, value: '' });
+  });
+
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
@@ -562,6 +810,9 @@ window.kick = kick;
 window.saveTitle = saveTitle;
 window.leaveGroup = leaveGroup;
 window.showList = showList;
+window.pickFile = pickFile;
+window.onFilePicked = onFilePicked;
+window.loadOlder = loadOlder;
 window.renderList = renderList;
 
 boot();

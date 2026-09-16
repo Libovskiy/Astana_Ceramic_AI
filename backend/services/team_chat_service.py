@@ -40,16 +40,44 @@
 устройств и не требует записи на каждое открытие.
 """
 
+import mimetypes
+import shutil
 import sqlite3
+import uuid
 from datetime import datetime
+from pathlib import Path
 
-from backend.config import DB_NAME
+from backend.config import BASE_DIR, DB_NAME
 
 KIND_DM = "dm"
 KIND_GROUP = "group"
 
 MAX_MESSAGE_LENGTH = 4000
 MAX_TITLE_LENGTH = 80
+
+# 50 МБ. Столько весит минутный ролик с телефона — на заводском
+# Wi-Fi это уже долго, но отправить шильдик или короткое видео
+# работающего узла должно быть можно.
+MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+
+ATTACHMENTS_DIR = BASE_DIR / "uploads" / "messenger"
+
+# Показываем прямо в переписке только то, что браузер умеет рисовать
+# сам и что безопасно открывать. Всё остальное отдаётся файлом на
+# скачивание: SVG и HTML внутри страницы — это чужой код в нашем
+# домене, а PDF умеет выполнять скрипты.
+INLINE_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+INLINE_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+
+KIND_IMAGE = "image"
+KIND_VIDEO = "video"
+KIND_FILE = "file"
+
+# Длинная сторона картинки для показа в переписке. Оригинал остаётся
+# на диске и скачивается по кнопке — в ленте он не нужен, а по
+# заводскому Wi-Fi двадцатимегабайтное фото грузится ощутимо.
+PREVIEW_MAX_SIDE = 1280
+PREVIEW_QUALITY = 82
 
 
 def get_connection():
@@ -125,8 +153,38 @@ def init_team_chat():
         ON team_members(user_id)
     """)
 
+    # Одно вложение на сообщение — как в привычных мессенджерах:
+    # отправил три фото, вышло три сообщения. Так проще и удалять, и
+    # показывать, и не надо решать, что делать с подписью к пачке.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS team_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            -- image / video / file: по нему страница решает, показать
+            -- картинку, проигрыватель или строку со скрепкой
+            kind TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            mime TEXT,
+            size_bytes INTEGER NOT NULL,
+            -- пути относительно uploads/messenger, не абсолютные:
+            -- иначе при переезде проекта всё отвалится
+            stored_path TEXT NOT NULL,
+            preview_path TEXT,
+            width INTEGER,
+            height INTEGER,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_attachments_message
+        ON team_attachments(message_id)
+    """)
+
     conn.commit()
     conn.close()
+
+    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # =========================================================
@@ -522,11 +580,77 @@ def leave(conversation_id: int, me_id: int) -> None:
 # СООБЩЕНИЯ
 # =========================================================
 
+def _attachments_for(conn, message_ids: list[int]) -> dict:
+    """Вложения одним запросом на всю пачку, а не по одному на сообщение."""
+
+    if not message_ids:
+        return {}
+
+    marks = ",".join("?" for _ in message_ids)
+
+    rows = conn.execute(
+        f"""
+        SELECT id, message_id, kind, original_name, mime, size_bytes,
+               width, height, preview_path
+        FROM team_attachments
+        WHERE message_id IN ({marks})
+        """,
+        message_ids
+    ).fetchall()
+
+    out = {}
+
+    for row in rows:
+        item = dict(row)
+        item["has_preview"] = bool(item.pop("preview_path"))
+        item["url"] = f"/api/messenger/attachments/{item['id']}"
+        item["preview_url"] = f"/api/messenger/attachments/{item['id']}?preview=1"
+        out[item["message_id"]] = item
+
+    return out
+
+
+def _shape_messages(conn, rows, me_id: int) -> list[dict]:
+
+    messages = []
+
+    for row in rows:
+        item = dict(row)
+        item["mine"] = item["user_id"] == me_id
+        if item["deleted_at"]:
+            item["body"] = "сообщение удалено"
+        messages.append(item)
+
+    # У удалённого сообщения вложение не показываем: человек нажал
+    # «удалить» именно чтобы фото пропало из переписки.
+    attachments = _attachments_for(
+        conn, [m["id"] for m in messages if not m["deleted_at"]]
+    )
+
+    for item in messages:
+        item["attachment"] = attachments.get(item["id"])
+
+    return messages
+
+
 def get_messages(conversation_id: int, me_id: int,
-                 after_id: int = 0, limit: int = 200) -> dict:
+                 after_id: int = 0, before_id: int | None = None,
+                 limit: int = 50) -> dict:
     """
-    after_id — чтобы опрос тянул только новое, а не всю переписку
-    каждые несколько секунд.
+    Два режима чтения одной переписки:
+
+        after_id  — что появилось нового. Этим живёт опрос: он тянет
+                    только свежие сообщения, а не всю ленту каждые
+                    несколько секунд.
+
+        before_id — что было раньше. Этим догружается история, когда
+                    человек листает вверх. Переписка хранится целиком
+                    и никогда не обрезается — просто показывается
+                    порциями, иначе открытие годовой ленты на телефоне
+                    заняло бы минуту.
+
+    has_more говорит странице, есть ли ещё что грузить выше: без него
+    она пыталась бы подгружать в пустоту на каждой прокрутке.
     """
 
     conn = get_connection()
@@ -542,27 +666,66 @@ def get_messages(conversation_id: int, me_id: int,
         if not _is_member(conn, conversation_id, me_id):
             raise PermissionError("Вы не участник этой переписки.")
 
-        rows = conn.execute(
-            """
-            SELECT m.id, m.user_id, m.body, m.created_at, m.deleted_at,
-                   u.full_name, u.username, u.role
-            FROM team_messages m
-            JOIN users u ON u.id = m.user_id
-            WHERE m.conversation_id = ? AND m.id > ?
-            ORDER BY m.id
-            LIMIT ?
-            """,
-            (conversation_id, after_id, limit)
-        ).fetchall()
+        limit = max(1, min(int(limit or 50), 200))
 
-        messages = []
+        if before_id:
+            # Берём последние ДО указанного и разворачиваем: так с краю
+            # оказываются ближайшие к уже показанным, а не самые древние.
+            rows = conn.execute(
+                """
+                SELECT m.id, m.user_id, m.body, m.created_at, m.deleted_at,
+                       u.full_name, u.username, u.role
+                FROM team_messages m
+                JOIN users u ON u.id = m.user_id
+                WHERE m.conversation_id = ? AND m.id < ?
+                ORDER BY m.id DESC
+                LIMIT ?
+                """,
+                (conversation_id, before_id, limit)
+            ).fetchall()
+            rows = list(reversed(rows))
 
-        for row in rows:
-            item = dict(row)
-            item["mine"] = item["user_id"] == me_id
-            if item["deleted_at"]:
-                item["body"] = "сообщение удалено"
-            messages.append(item)
+        elif after_id:
+            rows = conn.execute(
+                """
+                SELECT m.id, m.user_id, m.body, m.created_at, m.deleted_at,
+                       u.full_name, u.username, u.role
+                FROM team_messages m
+                JOIN users u ON u.id = m.user_id
+                WHERE m.conversation_id = ? AND m.id > ?
+                ORDER BY m.id
+                LIMIT ?
+                """,
+                (conversation_id, after_id, limit)
+            ).fetchall()
+
+        else:
+            # Первое открытие: показываем хвост переписки, как в любом
+            # мессенджере — человек хочет видеть последнее сообщение.
+            rows = conn.execute(
+                """
+                SELECT m.id, m.user_id, m.body, m.created_at, m.deleted_at,
+                       u.full_name, u.username, u.role
+                FROM team_messages m
+                JOIN users u ON u.id = m.user_id
+                WHERE m.conversation_id = ?
+                ORDER BY m.id DESC
+                LIMIT ?
+                """,
+                (conversation_id, limit)
+            ).fetchall()
+            rows = list(reversed(rows))
+
+        messages = _shape_messages(conn, rows, me_id)
+
+        oldest = messages[0]["id"] if messages else None
+
+        has_more = False
+        if oldest is not None:
+            has_more = conn.execute(
+                "SELECT 1 FROM team_messages WHERE conversation_id = ? AND id < ? LIMIT 1",
+                (conversation_id, oldest)
+            ).fetchone() is not None
 
         members = _members_of(conn, conversation_id)
 
@@ -575,6 +738,7 @@ def get_messages(conversation_id: int, me_id: int,
                 "members_count": len(members),
             },
             "messages": messages,
+            "has_more": has_more,
         }
 
     finally:
@@ -695,6 +859,233 @@ def mark_read(conversation_id: int, me_id: int, message_id: int | None = None) -
         conn.commit()
 
         return message_id
+
+    finally:
+        conn.close()
+
+
+# =========================================================
+# ВЛОЖЕНИЯ
+# =========================================================
+
+def _classify(mime: str | None, name: str) -> str:
+    """
+    Чем показывать: картинкой, проигрывателем или строкой файла.
+
+    MIME с телефона приходит не всегда, поэтому если его нет —
+    угадываем по расширению.
+    """
+
+    mime = (mime or "").lower().split(";")[0].strip()
+
+    if not mime:
+        mime = mimetypes.guess_type(name)[0] or ""
+
+    if mime in INLINE_IMAGE_TYPES:
+        return KIND_IMAGE
+
+    if mime in INLINE_VIDEO_TYPES:
+        return KIND_VIDEO
+
+    return KIND_FILE
+
+
+def _safe_name(name: str) -> str:
+    """
+    Имя от пользователя показываем, но НЕ используем как путь: в нём
+    может приехать «../../factory.db». На диск кладём случайное имя.
+    """
+
+    name = (name or "").replace("\\", "/").split("/")[-1].strip()
+    return name[:120] or "файл"
+
+
+def _make_preview(stored: Path, kind: str) -> tuple[Path | None, int | None, int | None]:
+    """
+    Уменьшенная копия картинки для показа в ленте. Заодно снимает EXIF:
+    в нём с телефона приезжают GPS-координаты съёмки и модель аппарата,
+    а переписку могут переслать дальше.
+
+    Без Pillow просто показываем оригинал — это хуже по трафику, но
+    работает.
+    """
+
+    if kind != KIND_IMAGE:
+        return None, None, None
+
+    try:
+        from PIL import Image
+    except ImportError:
+        return None, None, None
+
+    try:
+        with Image.open(stored) as img:
+            img.load()
+            width, height = img.width, img.height
+
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+
+            img.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE), Image.LANCZOS)
+
+            preview = stored.with_name(stored.stem + "_preview.jpg")
+            # save без exif= — метаданные не переносятся
+            img.save(preview, format="JPEG", quality=PREVIEW_QUALITY, optimize=True)
+
+            return preview, width, height
+
+    except Exception:
+        # Битая или необычная картинка — не повод терять сообщение.
+        return None, None, None
+
+
+def save_attachment(conversation_id: int, me_id: int, temp_path: Path,
+                    original_name: str, mime: str | None,
+                    caption: str = "") -> dict:
+    """
+    Кладёт уже принятый файл на место и создаёт сообщение с вложением.
+
+    Файл приходит временным: роут пишет его на диск потоком, чтобы
+    полсотни мегабайт не оказались в памяти целиком.
+    """
+
+    temp_path = Path(temp_path)
+
+    size = temp_path.stat().st_size
+
+    if size == 0:
+        temp_path.unlink(missing_ok=True)
+        raise ValueError("Файл пустой.")
+
+    if size > MAX_ATTACHMENT_BYTES:
+        temp_path.unlink(missing_ok=True)
+        raise ValueError(f"Файл больше {MAX_ATTACHMENT_BYTES // (1024 * 1024)} МБ.")
+
+    caption = (caption or "").strip()[:MAX_MESSAGE_LENGTH]
+    original_name = _safe_name(original_name)
+
+    conn = get_connection()
+
+    try:
+        if not _is_member(conn, conversation_id, me_id):
+            temp_path.unlink(missing_ok=True)
+            raise PermissionError("Вы не участник этой переписки.")
+
+        kind = _classify(mime, original_name)
+
+        # Раскладываем по месяцам: за год переписки в одной папке
+        # набралось бы столько файлов, что ls перестанет отвечать.
+        month = datetime.now().strftime("%Y-%m")
+        folder = ATTACHMENTS_DIR / month
+        folder.mkdir(parents=True, exist_ok=True)
+
+        suffix = Path(original_name).suffix.lower()[:12]
+        stored = folder / f"{uuid.uuid4().hex}{suffix}"
+
+        shutil.move(str(temp_path), str(stored))
+
+        preview, width, height = _make_preview(stored, kind)
+
+        now = _now()
+        cur = conn.cursor()
+
+        # Подпись к файлу — обычный текст сообщения. Пустая подпись
+        # тоже нормально: чаще фото отправляют молча.
+        cur.execute(
+            """
+            INSERT INTO team_messages (conversation_id, user_id, body, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (conversation_id, me_id, caption, now)
+        )
+        message_id = cur.lastrowid
+
+        cur.execute(
+            """
+            INSERT INTO team_attachments
+                (message_id, kind, original_name, mime, size_bytes,
+                 stored_path, preview_path, width, height, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                message_id, kind, original_name,
+                (mime or "").split(";")[0].strip() or None,
+                size,
+                str(stored.relative_to(ATTACHMENTS_DIR)),
+                str(preview.relative_to(ATTACHMENTS_DIR)) if preview else None,
+                width, height, now,
+            )
+        )
+
+        cur.execute(
+            "UPDATE team_members SET last_read_message_id = ? WHERE conversation_id = ? AND user_id = ?",
+            (message_id, conversation_id, me_id)
+        )
+
+        conn.commit()
+
+        row = conn.execute(
+            """
+            SELECT m.id, m.user_id, m.body, m.created_at, m.deleted_at,
+                   u.full_name, u.username, u.role
+            FROM team_messages m JOIN users u ON u.id = m.user_id
+            WHERE m.id = ?
+            """,
+            (message_id,)
+        ).fetchone()
+
+        message = _shape_messages(conn, [row], me_id)[0]
+        return message
+
+    finally:
+        temp_path.unlink(missing_ok=True)
+        conn.close()
+
+
+def get_attachment(attachment_id: int, me_id: int, preview: bool = False) -> dict:
+    """
+    Отдаёт путь к файлу, проверив, что человек состоит в переписке.
+    Без этой проверки ссылку на фото можно было бы переслать кому
+    угодно, и она открылась бы.
+    """
+
+    conn = get_connection()
+
+    try:
+        row = conn.execute(
+            """
+            SELECT a.*, m.conversation_id, m.deleted_at
+            FROM team_attachments a
+            JOIN team_messages m ON m.id = a.message_id
+            WHERE a.id = ?
+            """,
+            (attachment_id,)
+        ).fetchone()
+
+        if not row:
+            raise ValueError("Файл не найден.")
+
+        if not _is_member(conn, row["conversation_id"], me_id):
+            raise PermissionError("Это вложение из чужой переписки.")
+
+        if row["deleted_at"]:
+            raise ValueError("Сообщение удалено.")
+
+        relative = row["preview_path"] if (preview and row["preview_path"]) else row["stored_path"]
+        path = ATTACHMENTS_DIR / relative
+
+        if not path.exists():
+            raise ValueError("Файл не найден на диске.")
+
+        is_preview = preview and bool(row["preview_path"])
+
+        return {
+            "path": path,
+            "mime": "image/jpeg" if is_preview else (row["mime"] or "application/octet-stream"),
+            "original_name": row["original_name"],
+            "kind": row["kind"],
+            "is_preview": is_preview,
+        }
 
     finally:
         conn.close()

@@ -315,3 +315,103 @@
     .mg-composer textarea { font-size: 16px; }
     .mg-send { width: 46px; height: 46px; }
 }
+
+/* =========================================================
+   ВЛОЖЕНИЯ И ИСТОРИЯ
+   ========================================================= */
+
+/* Кнопка «показать более ранние» и автоподгрузка при прокрутке */
+.mg-older {
+    align-self: center;
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.mg-attach {
+    border: none;
+    background: var(--surface-2);
+    color: var(--text);
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.mg-attach:hover { background: var(--border); }
+
+/* Пузырь с файлом уже сам себе поле — лишние отступы убираем */
+.mg-bubble.has-media { padding: 4px 4px 6px; max-width: 78%; }
+.mg-bubble.has-media .mg-who { padding: 4px 8px 0; }
+.mg-bubble.has-media .mg-text { padding: 6px 8px 0; }
+.mg-bubble.has-media .mg-meta { padding: 0 8px; }
+
+.mg-photo { display: block; }
+.mg-photo img {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    max-height: 380px;
+    object-fit: cover;
+    border-radius: 10px;
+    background: var(--surface-2);
+}
+
+.mg-video {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    max-height: 380px;
+    border-radius: 10px;
+    background: #000;
+}
+
+.mg-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text);
+    text-decoration: none;
+    min-width: 200px;
+}
+.mg-row.mine .mg-file { background: rgba(255,255,255,.14); color: #fff; }
+.mg-file:hover { filter: brightness(1.1); }
+
+.mg-file-icon { font-size: 22px; flex-shrink: 0; }
+.mg-file-body { flex: 1; min-width: 0; }
+.mg-file-name {
+    display: block; font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mg-file-size { display: block; font-size: 11px; opacity: .7; }
+.mg-file-dl { font-size: 16px; opacity: .7; flex-shrink: 0; }
+
+/* Полоса отправки: пока файл идёт по заводскому Wi-Fi */
+.mg-uploading { min-width: 200px; }
+.mg-up-name {
+    font-size: 12px; font-weight: 600; margin-bottom: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mg-up-bar {
+    height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,.25); overflow: hidden;
+}
+.mg-up-fill { height: 100%; width: 0; background: #fff; transition: width .2s; }
+.mg-up-pct { font-size: 10px; opacity: .8; text-align: right; margin-top: 3px; }
+
+/* Перетаскивание файла в окно переписки */
+.mg-thread.mg-drop { outline: 2px dashed var(--accent); outline-offset: -8px; }
+
+@media (max-width: 768px) {
+    .mg-photo img, .mg-video { max-width: 240px; max-height: 300px; }
+    .mg-attach { width: 46px; height: 46px; }
+}
