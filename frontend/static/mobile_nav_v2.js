@@ -110,11 +110,20 @@ function createBottomNav(sidebar) {
   sidebar.querySelectorAll('.nav-item').forEach(function (link) {
     var href = link.getAttribute('href');
     var icon = link.querySelector('.ni-icon');
-    var text = link.textContent.replace(/\s+/g, ' ').trim();
+
+    // Подпись берём без значка и без счётчика обращений: в
+    // link.textContent они идут первыми, и подпись превращалась в
+    // тот же значок — на панели выходило «🏠🏠».
+    var copy = link.cloneNode(true);
+    var strip = copy.querySelector('.ni-icon');
+    if (strip) strip.remove();
+    var badge = copy.querySelector('.ni-badge');
+    if (badge) badge.remove();
+
     available[href] = {
       href: href,
       icon: icon ? icon.textContent.trim() : '•',
-      label: text.split(' ')[0]
+      label: copy.textContent.replace(/\s+/g, ' ').trim()
     };
   });
 

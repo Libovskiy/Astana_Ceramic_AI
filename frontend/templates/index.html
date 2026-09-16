@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/acai.css?v=9">
+<link rel="stylesheet" href="/static/acai.css?v=13">
 <style>
 .sensor-strip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .ss-item{display:flex;align-items:center;gap:6px;}
@@ -168,8 +168,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=11"></script>
-<script src="/static/mobile_nav_v2.js?v=2"></script>
+<script src="/static/acai_layout.js?v=12"></script>
+<script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
 
@@ -679,6 +679,39 @@ setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
      повторяется поломка. Обращений не создаёт и оборудование не трогает —
      только читает и отвечает. Кружок справа внизу, чтобы не занимать
      место на экране, пока не нужен. -->
+<style>
+/* На телефоне кружок садился ровно на нижнюю панель навигации и
+   закрывал собой кнопку, а окно висело узкой карточкой поверх
+   содержимого. Поднимаем кружок над панелью, а окно раскрываем
+   снизу на всю ширину — как привычная шторка.
+   !important нужен: выше стоят инлайновые стили. */
+@media (max-width: 768px) {
+  #aiFab {
+    right: 14px !important;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    width: 50px !important; height: 50px !important;
+    font-size: 21px !important;
+    z-index: 58 !important;
+  }
+  #aiPanel {
+    left: 0 !important; right: 0 !important; bottom: 0 !important;
+    width: auto !important; max-width: none !important;
+    max-height: 82vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    border-left: none !important; border-right: none !important;
+    border-bottom: none !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    z-index: 70 !important;
+  }
+
+  /* Пока открыто меню, кружок не висит поверх затемнения. */
+  .nav-open #aiFab { display: none !important; }
+
+  /* Запас снизу, чтобы кружок не накрывал последнюю строку списка:
+     долистать её иначе некуда, она всегда оказывалась под ним. */
+  .page { padding-bottom: calc(146px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+</style>
 <button id="aiFab" type="button" title="Спросить о заводе"
   style="display:none;position:fixed;right:20px;bottom:20px;z-index:65;
          width:56px;height:56px;border-radius:50%;border:none;

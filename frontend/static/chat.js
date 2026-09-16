@@ -118,8 +118,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     document.getElementById("chatSubtitle").textContent =
         user.full_name || user.username;
 
-    // Куда возвращаться из переписки. У рабочего других разделов нет.
+    // Куда возвращаться из переписки. Рабочему — на сменный отчёт:
+    // упаковочные бригады заполняют его сами, и без этой кнопки они
+    // застревали в переписке, потому что раньше идти было некуда.
     const HOME_BY_ROLE = {
+        worker: "/production",
         shift_supervisor: "/production",
         engineer: "/production",
         chief_engineer: "/",

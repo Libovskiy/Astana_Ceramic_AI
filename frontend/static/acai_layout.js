@@ -291,7 +291,17 @@ async function initLayout() {
   try { _r = await ACAI.get('/auth/me'); } catch { return; }
   // поддерживаем оба формата: {username,role} и {success,user:{...}}
   user = _r?.user || _r;
-  try { dashData = await ACAI.get('/dashboard'); } catch {}
+
+  // Сводка по заводу открыта не всем (DASHBOARD_ALLOWED_ROLES в
+  // backend/api/main.py). Раньше её запрашивали у всех подряд, и у
+  // рабочего, механика, электрика и технолога каждая страница
+  // начиналась с 403 в консоли — лишний запрос и лишний шум в логах.
+  const DASH_ROLES = ['admin','director','chief_engineer','engineer',
+                      'shift_supervisor','analyst','chief_mechanic','chief_electrician'];
+
+  if (DASH_ROLES.includes(user?.role)) {
+    try { dashData = await ACAI.get('/dashboard'); } catch {}
+  }
 
   const openCases = dashData?.open_cases || 0;
 

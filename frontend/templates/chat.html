@@ -5,8 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACAI — Обращения</title>
-    <link rel="stylesheet" href="/static/style.css?v=31">
-    <link rel="stylesheet" href="/static/chat.css?v=31">
+    <!-- Тема берётся из общего acai.css: раньше тут стоял старый
+         style.css с другими именами переменных, и страница обращений
+         была светлой, когда весь остальной сайт тёмный. Рабочий
+         логинился на тёмном экране и проваливался на белый. -->
+    <link rel="stylesheet" href="/static/acai.css?v=13">
+    <link rel="stylesheet" href="/static/chat.css?v=34">
 </head>
 <body>
 
@@ -24,9 +28,10 @@
         </div>
 
         <div class="chat-header-right">
-            <!-- Кнопка "Разделы" видна только тем, у кого есть другие
-                 разделы. Рабочему уходить некуда — у него весь ACAI
-                 это переписка, и лишний пункт меню только мешает. -->
+            <!-- Кнопка "Разделы" ведёт в рабочую зону по должности
+                 (см. HOME_BY_ROLE в chat.js). Рабочему она нужна:
+                 упаковочные бригады заполняют сменный отчёт, а он
+                 живёт на отдельной странице. -->
             <button type="button" id="chatSound" class="chat-action" title="Звук уведомлений">🔊</button>
             <a href="/" id="chatHome" class="chat-action" style="display:none;" title="Другие разделы">Разделы</a>
             <button type="button" id="chatCardButton" class="chat-action" style="display:none;"
@@ -116,7 +121,7 @@
 </div>
 
 <script src="/static/notify.js?v=31"></script>
-<script src="/static/chat.js?v=31"></script>
+<script src="/static/chat.js?v=32"></script>
 
 </body>
 </html>
