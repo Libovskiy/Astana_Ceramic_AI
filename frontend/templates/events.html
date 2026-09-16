@@ -67,14 +67,18 @@
 <script src="/static/acai_layout.js?v=10"></script>
 <script src="/static/mobile_nav_v2.js?v=2"></script>
 <script>
-let allTasks=[];let currentFilter='';
+let allTasks=[];let currentFilter='';let currentUser=null;
 
 const PRIO_LABELS={high:'Высокий',normal:'Нормальный',low:'Низкий',critical:'Критический'};
 const TYPE_LABELS={ordinary:'Обычная',maintenance:'ТО',spare_part:'Запчасти',production:'Производство',laboratory:'Лаборатория',document:'Документ',personnel:'Персонал',critical:'Критическая',event:'Событие'};
-const STATUS_LABELS={new:'Новая',in_progress:'В работе',done:'Выполнена',cancelled:'Отменена'};
+const STATUS_LABELS={new:'Новая',in_progress:'В работе',completed:'На проверке',confirmed:'Подтверждена',cancelled:'Отменена'};
+// Закрытой задача считается только после подтверждения гл. инженером:
+// пока «на проверке» — работа сделана, но её никто не принял.
+const CLOSED_STATUSES=['confirmed','cancelled'];
+const isClosed=t=>CLOSED_STATUSES.includes(t.status);
 
 function dueInfo(due_at,status){
-  if(!due_at||status==='done')return{label:'',cls:''};
+  if(!due_at||CLOSED_STATUSES.includes(status))return{label:'',cls:''};
   const diff=new Date(due_at).getTime()-Date.now();
   if(diff<0)return{label:'⚠ Просрочено',cls:'overdue'};
   if(diff<3600000)return{label:'Через <1ч',cls:'today'};
@@ -88,9 +92,10 @@ async function load(){
   allTasks=r.tasks||[];
   const now=Date.now();
   const open=allTasks.filter(t=>t.status==='new'||t.status==='in_progress').length;
+  const review=allTasks.filter(t=>t.status==='completed').length;
   const inprog=allTasks.filter(t=>t.status==='in_progress').length;
-  const done=allTasks.filter(t=>t.status==='done').length;
-  const overdue=allTasks.filter(t=>t.due_at&&new Date(t.due_at).getTime()<now&&t.status!=='done'&&t.status!=='cancelled').length;
+  const done=allTasks.filter(t=>t.status==='confirmed').length;
+  const overdue=allTasks.filter(t=>t.due_at&&new Date(t.due_at).getTime()<now&&!isClosed(t)).length;
   document.getElementById('taskMetrics').innerHTML=`
     <div class="metric ${open>0?'accent':'ok'}"><div class="metric-label">Открытых</div><div class="metric-value accent">${open}</div><div class="metric-sub">задач</div></div>
     <div class="metric ${inprog>0?'warn':'ok'}"><div class="metric-label">В работе</div><div class="metric-value ${inprog>0?'warn':'ok'}">${inprog}</div><div class="metric-sub">выполняются</div></div>
@@ -103,7 +108,7 @@ async function load(){
 function renderTasks(){
   const now=Date.now();
   let items=allTasks;
-  if(currentFilter==='overdue') items=items.filter(t=>t.due_at&&new Date(t.due_at).getTime()<now&&t.status!=='done');
+  if(currentFilter==='overdue') items=items.filter(t=>t.due_at&&new Date(t.due_at).getTime()<now&&!isClosed(t));
   else if(currentFilter) items=items.filter(t=>t.status===currentFilter);
   const q=(document.getElementById('taskSearch')?.value||'').toLowerCase();
   if(q) items=items.filter(t=>(t.title||'').toLowerCase().includes(q)||(t.description||'').toLowerCase().includes(q));
@@ -120,7 +125,7 @@ function renderTasks(){
 
   document.getElementById('taskList').innerHTML=items.map(t=>{
     const di=dueInfo(t.due_at,t.status);
-    const cls=t.status==='done'?'done':(t.priority||'normal');
+    const cls=isClosed(t)?'done':(t.priority||'normal');
     const dueStr=t.due_at?new Date(t.due_at).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
     return`<div class="task-card ${cls}">
       <div class="task-head">
@@ -132,15 +137,15 @@ function renderTasks(){
         </div>
       </div>
       ${t.description?`<div class="task-desc">${taskDesc(t.description)}</div>`:''}
+      ${t.review_comment?`<div class="task-desc" style="color:var(--warn)">↩ Вернули на доработку: ${escapeTask(t.review_comment)}</div>`:''}
+      ${t.completion_comment&&!t.review_comment?`<div class="task-desc" style="color:var(--text-dim)">✓ Отчёт исполнителя: ${escapeTask(t.completion_comment)}</div>`:''}
       <div class="task-meta">
         ${dueStr?`<span>📅 ${dueStr}</span>`:''}
         ${di.label?`<span class="due-label ${di.cls}">${di.label}</span>`:''}
         ${t.creator_name?`<span>✏️ ${t.creator_name}</span>`:''}
         ${t.equipment_name?`<span>⚙️ ${t.equipment_name}</span>`:''}
         ${assigneeLabel(t.id)}
-        ${t.status!=='done'?`<button class="btn secondary sm" style="margin-left:auto" onclick="openAssign(${t.id})">👤 Назначить</button>
-          <button class="btn ok sm" onclick="doneTask(${t.id})">✓ Выполнено</button>`:
-          `<button class="btn secondary sm" style="margin-left:auto" onclick="reopenTask(${t.id})">↩ Переоткрыть</button>`}
+        ${taskButtons(t)}
       </div>
     </div>`;
   }).join('');
@@ -190,7 +195,7 @@ function assigneeLabel(taskId){
 }
 
 async function loadAssignees(){
-  const ids=allTasks.filter(t=>t.status!=='done').map(t=>t.id);
+  const ids=allTasks.filter(t=>!isClosed(t)).map(t=>t.id);
   await Promise.all(ids.map(async id=>{
     try{
       const r=await ACAI.get(`/api/tasks/${id}/assignees`);
@@ -262,13 +267,85 @@ async function saveAssign(taskId){
   }
 }
 
-async function doneTask(id){
-  try{await ACAI.post(`/api/tasks/${id}/status`,{status:'done'});ACAI.toast('Выполнено ✓','ok');await load();}
+function escapeTask(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+// Кнопки зависят и от статуса задачи, и от роли: отчитывается исполнитель,
+// принимает работу гл. инженер. Сервер проверяет это ещё раз.
+function taskButtons(t){
+  const canConfirm=['chief_engineer','director','admin'].includes(currentUser?.role);
+  const parts=[];
+
+  if(!isClosed(t)) parts.push(`<button class="btn secondary sm" style="margin-left:auto" onclick="openAssign(${t.id})">👤 Назначить</button>`);
+
+  if(t.status==='new'||t.status==='in_progress'){
+    parts.push(`<button class="btn ok sm" onclick="openCompleteTask(${t.id})">✓ Выполнено</button>`);
+  }else if(t.status==='completed'){
+    if(canConfirm){
+      parts.push(`<button class="btn ok sm" onclick="confirmTask(${t.id})">✓ Подтвердить</button>`);
+      parts.push(`<button class="btn secondary sm" onclick="openReturnTask(${t.id})">↩ Вернуть</button>`);
+    }else{
+      parts.push(`<span style="margin-left:auto;font-size:11px;color:var(--warn)">Ждёт подтверждения гл. инженера</span>`);
+    }
+  }else if(t.status==='confirmed'){
+    parts.push(`<span style="margin-left:auto;font-size:11px;color:var(--ok)">✓ Подтверждена${t.confirmed_at?' · '+ACAI.shortDate(t.confirmed_at):''}</span>`);
+  }
+
+  return parts.join('');
+}
+
+// Отметка «выполнено» без описания бесполезна: проверяющий не знает, что
+// приняли, а через месяц никто не вспомнит, что именно чинили.
+function openCompleteTask(id){
+  ACAI.showModal(`
+    <h3>Отчёт по задаче</h3>
+    <div class="field">
+      <label>Что сделано *</label>
+      <textarea class="input" id="tc-comment" rows="3" placeholder="Например: заменил подшипник, проверил на холостом ходу"></textarea>
+    </div>
+    <div id="tc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitCompleteTask(${id})">Сдать на проверку</button>
+    </div>`);
+}
+
+async function submitCompleteTask(id){
+  const comment=document.getElementById('tc-comment').value.trim();
+  const errEl=document.getElementById('tc-err');
+  if(!comment){errEl.textContent='Напишите, что сделано';return;}
+  try{
+    await ACAI.post(`/api/tasks/${id}/complete`,{comment});
+    ACAI.closeModal();ACAI.toast('Отправлено на проверку ✓','ok');await load();
+  }catch(e){errEl.textContent=e.message;}
+}
+
+async function confirmTask(id){
+  try{await ACAI.post(`/api/tasks/${id}/confirm`,{});ACAI.toast('Подтверждено ✓','ok');await load();}
   catch(e){ACAI.toast(e.message,'danger');}
 }
-async function reopenTask(id){
-  try{await ACAI.post(`/api/tasks/${id}/status`,{status:'new'});ACAI.toast('Переоткрыто');await load();}
-  catch(e){ACAI.toast(e.message,'danger');}
+
+function openReturnTask(id){
+  ACAI.showModal(`
+    <h3>Вернуть на доработку</h3>
+    <div class="field">
+      <label>Что не так *</label>
+      <textarea class="input" id="tr-comment" rows="3" placeholder="Например: подшипник заменён, но течь осталась"></textarea>
+    </div>
+    <div id="tr-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitReturnTask(${id})">Вернуть</button>
+    </div>`);
+}
+
+async function submitReturnTask(id){
+  const comment=document.getElementById('tr-comment').value.trim();
+  const errEl=document.getElementById('tr-err');
+  if(!comment){errEl.textContent='Напишите, что исправить';return;}
+  try{
+    await ACAI.post(`/api/tasks/${id}/return`,{comment});
+    ACAI.closeModal();ACAI.toast('Возвращено исполнителю','ok');await load();
+  }catch(e){errEl.textContent=e.message;}
 }
 
 function openAddTask(){
@@ -353,7 +430,9 @@ document.querySelectorAll('.filter-chip').forEach(btn=>{
   });
 });
 
-initLayout();load();
+// Роль нужна до отрисовки: кнопка «Подтвердить» есть только у гл.
+// инженера, и рисовать её всем, чтобы потом получить 403, — плохо.
+initLayout().then(ctx=>{currentUser=ctx?.user;load();});
 </script>
 </body>
 </html>

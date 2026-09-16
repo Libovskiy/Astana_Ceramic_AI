@@ -412,7 +412,7 @@ def _task_notifications(user):
             rows = conn.execute(
                 """SELECT id, title, due_at, priority, status
                    FROM tasks
-                   WHERE status NOT IN ('done', 'cancelled')
+                   WHERE status NOT IN ('confirmed', 'cancelled')
                      AND due_at IS NOT NULL AND due_at != ''
                    ORDER BY due_at
                    LIMIT 50"""
@@ -422,7 +422,7 @@ def _task_notifications(user):
                 """SELECT DISTINCT t.id, t.title, t.due_at, t.priority, t.status
                    FROM tasks t
                    LEFT JOIN task_assignees ta ON ta.task_id = t.id
-                   WHERE t.status NOT IN ('done', 'cancelled')
+                   WHERE t.status NOT IN ('confirmed', 'cancelled')
                      AND t.due_at IS NOT NULL AND t.due_at != ''
                      AND (ta.user_id = ? OR t.created_by = ?)
                    ORDER BY t.due_at

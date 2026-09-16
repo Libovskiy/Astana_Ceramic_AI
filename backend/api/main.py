@@ -184,6 +184,9 @@ app.include_router(plc_errors_router)
 from backend.api.shift_report_routes import router as shift_report_router
 app.include_router(shift_report_router)
 
+from backend.api.task_status_routes import router as task_status_router
+app.include_router(task_status_router)
+
 from backend.api.docs_files_routes import router as docs_files_router
 app.include_router(docs_files_router)
 

@@ -44,9 +44,14 @@ TASK_PRIORITIES = (
 TASK_STATUSES = (
     "new",
     "in_progress",
-    "completed",
+    "completed",   # исполнитель отчитался, ждёт подтверждения гл. инженера
+    "confirmed",   # гл. инженер подтвердил — задача закрыта окончательно
     "cancelled",
 )
+
+# Статусы, при которых задача больше не висит как незакрытая:
+# по ним фильтруются напоминания в колокольчике и счётчики.
+TASK_CLOSED_STATUSES = ("confirmed", "cancelled")
 
 TASK_VISIBILITY = (
     "assignees",
@@ -110,6 +115,17 @@ def init_task_tables():
                 REFERENCES equipment(id)
         )
     """)
+
+    # Подтверждение гл. инженером. Добавляем миграцией, а не в CREATE:
+    # таблица уже существует на рабочей базе.
+    existing = {row[1] for row in cursor.execute("PRAGMA table_info(tasks)")}
+    for column, ddl in (
+        ("confirmed_at", "ALTER TABLE tasks ADD COLUMN confirmed_at TEXT"),
+        ("confirmed_by", "ALTER TABLE tasks ADD COLUMN confirmed_by INTEGER"),
+        ("review_comment", "ALTER TABLE tasks ADD COLUMN review_comment TEXT"),
+    ):
+        if column not in existing:
+            cursor.execute(ddl)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS task_assignees (
@@ -919,6 +935,124 @@ def cancel_task(task_id, user_id, comment=None):
                 comment.strip() if comment else None,
                 cancelled_at,
             ),
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+# =========================================================
+# ПОДТВЕРЖДЕНИЕ ГЛ. ИНЖЕНЕРОМ
+# =========================================================
+#
+# Исполнитель, закрывая задачу, обязан написать комментарий (см.
+# complete_task) — «выполнено» или что именно сделал. Но пока
+# гл. инженер это не подтвердил, задача не считается закрытой:
+# по бумагам работа есть, а по факту её никто не проверял.
+#
+# Отсюда два действия ниже: подтвердить (задача закрывается
+# окончательно) или вернуть исполнителю с замечанием.
+
+
+def confirm_task(task_id, user_id):
+    conn = get_connection()
+
+    try:
+        task = conn.execute(
+            "SELECT id, status FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+
+        if task is None:
+            raise ValueError("Задача не найдена.")
+
+        if task["status"] != "completed":
+            raise ValueError(
+                "Подтвердить можно только задачу, по которой исполнитель отчитался."
+            )
+
+        confirmed_at = now_iso()
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'confirmed',
+                confirmed_at = ?,
+                confirmed_by = ?,
+                review_comment = NULL
+            WHERE id = ?
+            """,
+            (confirmed_at, user_id, task_id),
+        )
+
+        conn.execute(
+            """
+            INSERT INTO task_history (
+                task_id, user_id, action, from_status, to_status, comment, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (task_id, user_id, "confirmed", "completed", "confirmed", None, confirmed_at),
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+def return_task(task_id, user_id, comment):
+    """Вернуть исполнителю на доработку — обязательно с замечанием."""
+    if not comment or not comment.strip():
+        raise ValueError(
+            "Напишите, что не так — иначе исполнителю непонятно, что переделывать."
+        )
+
+    conn = get_connection()
+
+    try:
+        task = conn.execute(
+            "SELECT id, status FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+
+        if task is None:
+            raise ValueError("Задача не найдена.")
+
+        if task["status"] != "completed":
+            raise ValueError(
+                "Вернуть можно только задачу, по которой исполнитель отчитался."
+            )
+
+        returned_at = now_iso()
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'in_progress',
+                completed_at = NULL,
+                completed_by = NULL,
+                review_comment = ?
+            WHERE id = ?
+            """,
+            (comment.strip(), task_id),
+        )
+
+        conn.execute(
+            """
+            INSERT INTO task_history (
+                task_id, user_id, action, from_status, to_status, comment, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (task_id, user_id, "returned", "completed", "in_progress", comment.strip(), returned_at),
         )
 
         conn.commit()
