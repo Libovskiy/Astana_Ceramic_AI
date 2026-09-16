@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Astana Ceramic — Нет доступа</title>
+    <link rel="stylesheet" href="/static/acai.css?v=9">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            padding: 24px;
+        }
+        .na-card {
+            max-width: 460px;
+            width: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+        .na-icon { font-size: 40px; margin-bottom: 12px; }
+        .na-card h1 { font-size: 20px; margin: 0 0 10px; }
+        .na-card p { color: var(--text-dim); font-size: 14px; line-height: 1.6; margin: 0 0 8px; }
+        .na-role {
+            display: inline-block;
+            margin: 14px 0 20px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .na-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <div class="na-card">
+        <div class="na-icon">🔒</div>
+        <h1>Этот раздел не для вашей должности</h1>
+        <p>Страница <strong>{{ path }}</strong> закрыта для вашей роли.
+           Если доступ нужен по работе — попросите администратора его открыть.</p>
+        <div class="na-role">Вы вошли как: {{ full_name }} — {{ role_label }}</div>
+        <div class="na-actions">
+            <a class="btn btn-primary" href="{{ home }}">На свою страницу</a>
+            <button class="btn secondary" onclick="logout()">Выйти</button>
+        </div>
+    </div>
+    <script>
+        async function logout() {
+            try { await fetch('/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

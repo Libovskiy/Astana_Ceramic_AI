@@ -187,7 +187,10 @@ const NAV_ITEMS = [
   { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🔩', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic'] },
   { icon: '⚡', label: 'Электрика',     href: '/electrical',   roles: ['admin','director','chief_engineer','chief_electrician','electrician'] },
-  { icon: '⚡', label: 'Производство',  href: '/production',   roles: ['admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
+  // worker тут не случайно: сменный отчёт упаковки заполняют бригады
+  // А/Б/В/Г, а у них роль worker. Без этой ссылки они не могли дойти
+  // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
+  { icon: '⚡', label: 'Производство',  href: '/production',   roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
   { icon: '✅', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🗓️', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','engineer'] },
   { section: 'Аналитика' },
@@ -200,7 +203,7 @@ const NAV_ITEMS = [
   { icon: '⚖️', label: 'Регламенты',    href: '/regulations',  roles: '*' },
   { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','engineer','chief_mechanic','chief_electrician'] },
   { section: 'Производство' },
-  { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist'] },
+  { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
   { icon: '🔩', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','engineer'] },
   { icon: '🏭', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
   { section: 'Система' },
@@ -236,6 +239,7 @@ function renderSidebar(user, openCases = 0) {
     chief_mechanic: 'Гл. механик', mechanic: 'Механик',
     chief_electrician: 'Гл. электрик', electrician: 'Электрик',
     analyst: 'Аналитик', technologist: 'Технолог',
+    lab_technician: 'Лаборант',
   }[role] || role;
 
   return `

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, Response, Cookie, UploadFile, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -289,6 +290,125 @@ def favicon():
 templates = Jinja2Templates(
     directory="frontend/templates"
 )
+
+
+# =========================================
+# ДОСТУП К СТРАНИЦАМ
+# =========================================
+#
+# Скрыть пункт в меню — это косметика: адрес страницы всё равно можно
+# набрать руками. Поэтому те же списки ролей, что в NAV_ITEMS
+# (frontend/static/acai_layout.js), продублированы здесь и проверяются
+# на сервере. Меняешь роли в меню — меняй и тут, иначе человек увидит
+# ссылку, которая ведёт в отказ.
+#
+# "*" — страница открыта любому, кто вошёл в систему.
+# Роль admin проходит везде.
+
+PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
+    "/": ("director", "chief_engineer", "engineer", "shift_supervisor",
+          "analyst", "chief_mechanic", "chief_electrician"),
+    "/chat": ("worker", "director", "chief_engineer", "engineer", "shift_supervisor",
+              "chief_mechanic", "mechanic", "chief_electrician", "electrician"),
+    "/diagnostics": ("worker", "shift_supervisor", "engineer", "chief_engineer",
+                     "director", "chief_mechanic", "mechanic",
+                     "chief_electrician", "electrician"),
+    "/equipment": ("director", "chief_engineer", "engineer", "shift_supervisor",
+                   "chief_mechanic", "chief_electrician"),
+    "/mechanics": ("director", "chief_engineer", "chief_mechanic", "mechanic"),
+    "/electrical": ("director", "chief_engineer", "chief_electrician", "electrician"),
+    # worker здесь потому, что сменный отчёт упаковки заполняют бригады
+    # А/Б/В/Г — у них роль worker, а отчёт живёт на этой странице.
+    "/production": ("worker", "director", "chief_engineer", "engineer",
+                    "shift_supervisor", "analyst", "chief_mechanic",
+                    "chief_electrician"),
+    "/checklist": ("director", "chief_engineer", "engineer", "shift_supervisor",
+                   "chief_mechanic", "chief_electrician"),
+    "/maintenance": ("director", "chief_engineer", "chief_mechanic",
+                     "chief_electrician", "engineer"),
+    "/analytics": ("director", "chief_engineer", "analyst"),
+    "/cases": ("director", "chief_engineer", "engineer", "shift_supervisor",
+               "chief_mechanic", "mechanic", "chief_electrician", "electrician"),
+    "/events": ("director", "chief_engineer", "engineer", "shift_supervisor"),
+    "/reports": ("director", "chief_engineer", "analyst"),
+    "/instructions": "*",
+    "/regulations": "*",
+    "/my-regulation": "*",
+    "/mobile": "*",
+    "/knowledge": ("director", "chief_engineer", "engineer",
+                   "chief_mechanic", "chief_electrician"),
+    # lab_technician раньше отсутствовал: логин уводил лаборанта на /lab,
+    # а ссылки на /lab у него в меню не было.
+    "/lab": ("director", "chief_engineer", "analyst", "technologist", "lab_technician"),
+    "/parts": ("director", "chief_engineer", "chief_mechanic",
+               "chief_electrician", "mechanic", "engineer"),
+    "/technolog": ("director", "chief_engineer", "technologist"),
+    "/audit": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
+    "/settings": (),  # только admin
+}
+
+# Куда отправить человека, которому тут не место (совпадает с
+# ROLE_HOME_PAGE в frontend/static/login.js).
+ROLE_HOME_PAGE = {
+    "worker": "/chat",
+    "technologist": "/lab",
+    "lab_technician": "/lab",
+    "engineer": "/production",
+    "shift_supervisor": "/production",
+    "chief_mechanic": "/mechanics",
+    "mechanic": "/mechanics",
+    "chief_electrician": "/electrical",
+    "electrician": "/electrical",
+}
+
+ROLE_LABELS = {
+    "admin": "Администратор", "director": "Директор",
+    "chief_engineer": "Гл. инженер", "engineer": "Инженер",
+    "worker": "Рабочий", "shift_supervisor": "Мастер смены",
+    "chief_mechanic": "Гл. механик", "mechanic": "Механик",
+    "chief_electrician": "Гл. электрик", "electrician": "Электрик",
+    "analyst": "Аналитик", "technologist": "Технолог",
+    "lab_technician": "Лаборант",
+}
+
+
+@app.middleware("http")
+async def page_access_guard(request: Request, call_next):
+    """
+    Пускает на страницу только те роли, у которых она есть в меню.
+    Работает по точному совпадению адреса, поэтому API и статика идут
+    мимо: их права проверяют сами обработчики.
+    """
+
+    if request.method != "GET":
+        return await call_next(request)
+
+    allowed = PAGE_ROLES.get(request.url.path)
+
+    if allowed is None:
+        return await call_next(request)
+
+    user = get_user_by_session(request.cookies.get("session_token"))
+
+    if user is None:
+        return RedirectResponse(url="/login", status_code=302)
+
+    role = user.get("role", "")
+
+    if allowed != "*" and role != "admin" and role not in allowed:
+        return templates.TemplateResponse(
+            request=request,
+            name="no_access.html",
+            status_code=403,
+            context={
+                "path": request.url.path,
+                "full_name": user.get("full_name") or user.get("username") or "—",
+                "role_label": ROLE_LABELS.get(role, role),
+                "home": ROLE_HOME_PAGE.get(role, "/instructions"),
+            },
+        )
+
+    return await call_next(request)
 
 
 # =========================================
@@ -1786,7 +1906,10 @@ def complete_repair_route(
 @app.get("/api/reports/summary")
 def reports_summary(
     period: str = "week",
-    user: dict = Depends(get_current_user)
+    # Сводка по всему заводу: план, простои, худшее оборудование.
+    # Её зовут только /reports и /analytics, а они закрыты для цеха —
+    # значит и сам запрос не должен отвечать рабочему или лаборанту.
+    user: dict = Depends(require_roles("director", "chief_engineer", "analyst"))
 ):
     """
     Сводные данные для раздела «Отчёты».
