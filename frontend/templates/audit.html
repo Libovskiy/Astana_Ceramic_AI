@@ -23,6 +23,14 @@
 .log-who { font-size:13px; font-weight:600; }
 .log-what { font-size:13px; color:var(--text-dim); }
 .log-target { font-size:12px; color:var(--accent); font-family:var(--mono); }
+.log-changes { margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+.chg-row { display:flex; align-items:baseline; gap:8px; font-size:12px; padding:3px 0; flex-wrap:wrap; }
+.chg-field { min-width:130px; color:var(--text-dim); }
+.chg-before { color:var(--text-dim); text-decoration:line-through; }
+.chg-arrow { color:var(--text-dim); }
+.chg-after { color:var(--ok); font-weight:600; }
+.chg-reason { margin-top:6px; font-size:12px; color:var(--text-dim); font-style:italic; }
+.log-changes-empty { font-size:12px; color:var(--text-dim); }
 .log-detail { font-size:11px; color:var(--text-dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .log-time { font-size:11px; color:var(--text-dim); font-family:var(--mono); flex-shrink:0; white-space:nowrap; }
 
@@ -108,6 +116,91 @@ const ACTION_META = {
   repair_completed:   { icon:'🛠️', bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
   downtime_started:   { icon:'⏸️', bg:'rgba(239,68,68,.1)', label:'Простой начат' },
   downtime_ended:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой завершён' },
+
+  // Подписей было 13 на 70 с лишним действий, и журнал наполовину
+  // состоял из сырых «regulation_stage_updated». Понять по нему, что
+  // произошло, было нельзя.
+  // ВНИМАНИЕ: getMeta ищет и по частичному совпадению, поэтому
+  // длинные ключи должны идти РАНЬШЕ коротких — иначе
+  // «regulation_parameter_added» поймается на «regulation».
+
+  // регламенты
+  regulation_parameter_added:    { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен параметр' },
+  regulation_parameter_archived: { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Параметр убран' },
+  regulation_parameters_reordered:{ icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок параметров' },
+  regulation_stage_equipment_changed:{ icon:'🔗', bg:'rgba(99,102,241,.1)', label:'Оборудование этапа' },
+  regulation_stage_archived:     { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Этап убран' },
+  regulation_stage_updated:      { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+  regulation_stage_changed:      { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+  regulation_stage_added:        { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен этап' },
+  regulation_stages_reordered:   { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
+  regulation_acknowledged:       { icon:'👍', bg:'rgba(34,197,94,.1)', label:'Ознакомлен с регламентом' },
+  regulation_activated:          { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Регламент введён в действие' },
+  regulation_photo_uploaded:     { icon:'🖼️', bg:'rgba(99,102,241,.1)', label:'Фото регламента' },
+  regulation_renamed:            { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Регламент переименован' },
+  regulation_created:            { icon:'📄', bg:'rgba(59,130,246,.1)', label:'Создан регламент' },
+  regulation_changed:            { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Регламент изменён' },
+
+  // документы и база знаний
+  equipment_document_uploaded:   { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
+  equipment_document_attached:   { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
+  stage_document_uploaded:       { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ этапа' },
+  document_uploaded:             { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Загружен документ' },
+  document_approved:             { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Документ утверждён' },
+  document_rejected:             { icon:'❌', bg:'rgba(239,68,68,.1)', label:'Документ отклонён' },
+  document_archived:             { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Документ убран' },
+  knowledge_deleted_permanently: { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Удалено из базы знаний' },
+  knowledge_archived:            { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Убрано из базы знаний' },
+  knowledge_restored:            { icon:'♻️', bg:'rgba(34,197,94,.1)', label:'Возвращено в базу знаний' },
+
+  // производство
+  production_plan_updated:       { icon:'🎯', bg:'rgba(99,102,241,.1)', label:'Изменён план' },
+  production_logged:             { icon:'🧱', bg:'rgba(34,197,94,.1)', label:'Внесён выпуск' },
+  maintenance_plan_created:      { icon:'🗓️', bg:'rgba(59,130,246,.1)', label:'Создан план ТО' },
+  checklist_round_saved:         { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Обход смены сдан' },
+  mix_entry_created:             { icon:'🧪', bg:'rgba(59,130,246,.1)', label:'Замес записан' },
+  mix_outcome_set:               { icon:'🧪', bg:'rgba(34,197,94,.1)', label:'Итог замеса' },
+  lab_product_archived:          { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Продукт убран' },
+  lab_product_added:             { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен продукт' },
+  lab_entry_deleted:             { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Запись лаборатории удалена' },
+
+  // оборудование и этапы
+  equipment_permanently_deleted: { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Оборудование удалено' },
+  equipment_status_changed:      { icon:'🔄', bg:'rgba(245,158,11,.1)', label:'Статус изменён' },
+  equipment_photo_updated:       { icon:'🖼️', bg:'rgba(99,102,241,.1)', label:'Фото оборудования' },
+  equipment_created:             { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлено оборудование' },
+  equipment_updated:             { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Оборудование изменено' },
+  equipment_moved:               { icon:'↔️', bg:'rgba(99,102,241,.1)', label:'Перемещено' },
+  worker_equipment_assigned:     { icon:'🔗', bg:'rgba(99,102,241,.1)', label:'Закреплено за рабочим' },
+  stages_reordered:              { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
+  stage_archived:                { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Этап убран' },
+  stage_created:                 { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Создан этап' },
+  stage_updated:                 { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+
+  // задачи, ремонт, запчасти
+  task_assignees_changed:        { icon:'👥', bg:'rgba(99,102,241,.1)', label:'Изменены исполнители' },
+  task_created:                  { icon:'📌', bg:'rgba(59,130,246,.1)', label:'Создана задача' },
+  case_complete_repair:          { icon:'🛠️', bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
+  case_escalated:                { icon:'🚨', bg:'rgba(239,68,68,.1)', label:'Передано специалисту' },
+  case_take:                     { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
+  downtime_closed_by_status:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой закрыт по статусу' },
+  part_archived:                 { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Запчасть убрана' },
+  part_created:                  { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлена запчасть' },
+  part_updated:                  { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Запчасть изменена' },
+  procedure_created:             { icon:'📘', bg:'rgba(59,130,246,.1)', label:'Создана инструкция' },
+  procedure_deleted:             { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Инструкция удалена' },
+
+  // учётные записи
+  admin_revoke_sessions:         { icon:'🔒', bg:'rgba(239,68,68,.1)', label:'Сессии завершены' },
+  user_password_changed:         { icon:'🔑', bg:'rgba(245,158,11,.1)', label:'Пароль сотрудника изменён' },
+  user_role_changed:             { icon:'🏷️', bg:'rgba(245,158,11,.1)', label:'Должность изменена' },
+  user_created:                  { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Создан сотрудник' },
+  user_deleted:                  { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Учётка удалена' },
+  user_enabled:                  { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Доступ возвращён' },
+  user_disabled:                 { icon:'🚫', bg:'rgba(239,68,68,.1)', label:'Доступ закрыт' },
+  password_changed:              { icon:'🔑', bg:'rgba(245,158,11,.1)', label:'Пароль изменён' },
+  login_disabled:                { icon:'🚫', bg:'rgba(239,68,68,.1)', label:'Вход при закрытом доступе' },
+  login_blocked:                 { icon:'⛔', bg:'rgba(239,68,68,.1)', label:'Вход заблокирован (перебор)' },
 };
 
 function getMeta(action) {
@@ -118,6 +211,61 @@ function getMeta(action) {
     if (action?.includes(key)) return meta;
   }
   return { icon:'📝', bg:'rgba(100,116,139,.1)', label: action };
+}
+
+// Раскрытие записи: что именно поменяли.
+//
+// Грузим по нажатию, а не вместе со списком: разница есть не у всех
+// записей, а тянуть её для сотни строк заранее — лишний вес на
+// заводском Wi-Fi.
+const loadedChanges = {};
+
+async function toggleEntry(id, row) {
+  const box = document.getElementById('chg-' + id);
+  if (!box) return;
+
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+
+  box.style.display = '';
+
+  if (loadedChanges[id]) { box.innerHTML = loadedChanges[id]; return; }
+
+  box.innerHTML = '<div class="log-changes-empty">Загрузка…</div>';
+
+  let entry;
+  try {
+    const r = await ACAI.get('/api/audit-log/' + id);
+    entry = r.entry;
+  } catch {
+    box.innerHTML = '<div class="log-changes-empty">Не удалось загрузить подробности</div>';
+    return;
+  }
+
+  const rows = (entry.changes || []).map(c => `
+    <div class="chg-row">
+      <span class="chg-field">${esc(c.label)}</span>
+      <span class="chg-before">${esc(c.before)}</span>
+      <span class="chg-arrow">→</span>
+      <span class="chg-after">${esc(c.after)}</span>
+    </div>`).join('');
+
+  const reason = entry.reason
+    ? `<div class="chg-reason">Причина: ${esc(entry.reason)}</div>` : '';
+
+  // У части записей разницы нет — их писали до того, как система
+  // научилась её сохранять. Честно об этом говорим, а не показываем
+  // пустоту.
+  const body = rows
+    ? rows + reason
+    : `<div class="log-changes-empty">Подробности этого изменения не записаны${entry.reason ? '' : '.'}</div>` + reason;
+
+  loadedChanges[id] = body;
+  box.innerHTML = body;
+}
+
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function getRoleLabel(role) {
@@ -169,7 +317,7 @@ function renderLog() {
     }) : '—';
     const agoStr = ts ? ACAI.timeAgo(e.created_at) : '—';
 
-    return `<div class="log-item">
+    return `<div class="log-item" onclick="toggleEntry(${e.id}, this)" style="cursor:pointer">
       <div class="log-icon" style="background:${meta.bg}">${meta.icon}</div>
       <div class="log-body">
         <div class="log-head">
@@ -179,6 +327,7 @@ function renderLog() {
           ${target ? `<span class="log-target">${target}</span>` : ''}
         </div>
         ${detail ? `<div class="log-detail">${detail}</div>` : ''}
+        <div class="log-changes" id="chg-${e.id}" style="display:none"></div>
       </div>
       <div class="log-time" title="${timeStr}">${agoStr}</div>
     </div>`;

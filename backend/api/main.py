@@ -2581,6 +2581,29 @@ AUDIT_LOG_ALLOWED_ROLES = (
 )
 
 
+@app.get("/api/audit-log/{entry_id}")
+def get_audit_entry_route(
+    entry_id: int,
+    user: dict = Depends(require_roles(*AUDIT_LOG_ALLOWED_ROLES))
+):
+    """
+    Одна запись журнала с разобранной разницей «было → стало».
+
+    Нужна, чтобы по записи можно было понять, ЧТО именно поменяли, а
+    не только что «регламент изменён». Сырой JSON наружу не отдаём: в
+    нём пути к файлам и внутренние идентификаторы.
+    """
+
+    from backend.services.audit_service import get_audit_entry
+
+    entry = get_audit_entry(entry_id)
+
+    if not entry:
+        raise HTTPException(status_code=404, detail="Запись не найдена.")
+
+    return {"success": True, "entry": entry}
+
+
 @app.get("/api/audit-log")
 def get_audit_log_route(
     action: str | None = None,

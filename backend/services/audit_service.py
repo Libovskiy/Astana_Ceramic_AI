@@ -289,3 +289,150 @@ def get_audit_log_by_target(target=None, entity_type: str = None, entity_id: int
         return [dict(r) for r in rows]
     except Exception:
         return []
+
+
+# =========================================================
+# ЧТО ИМЕННО ИЗМЕНИЛОСЬ
+# =========================================================
+#
+# before_json/after_json хранят объект целиком — двадцать полей, из
+# которых поменялось одно. Читать это человеку нельзя, поэтому при
+# раскрытии записи считаем разницу и показываем только её.
+
+# Поля, которые человеку ничего не говорят: технические ссылки и
+# отметки времени, меняющиеся при каждом сохранении.
+_SKIP_FIELDS = {
+    "id", "updated_at", "created_at", "knowledge_indexed_at",
+    "knowledge_error", "file_path",
+}
+
+_FIELD_LABELS = {
+    "title": "Название",
+    "name": "Название",
+    "status": "Статус",
+    "is_active": "Активен",
+    "active": "Активен",
+    "doc_type": "Тип документа",
+    "note": "Примечание",
+    "equipment_id": "Станок",
+    "equipment_name": "Станок",
+    "part_name": "Узел",
+    "stage_key": "Этап",
+    "stage_id": "Этап",
+    "sort_order": "Порядок",
+    "description": "Описание",
+    "added_by": "Добавил",
+    "approved_by": "Утвердил",
+    "rejected_by": "Отклонил",
+    "knowledge_status": "В базе знаний",
+    "min_value": "Минимум",
+    "max_value": "Максимум",
+    "target_value": "Целевое",
+    "unit": "Единица",
+    "requirement_text": "Требование",
+    "tolerance_text": "Допуск",
+    "page_from": "Страница",
+    "responsible": "Ответственный",
+    "priority": "Приоритет",
+    "due_at": "Срок",
+    "added_at": "Добавлен",
+    "approved_at": "Утверждён",
+    "rejected_at": "Отклонён",
+}
+
+# Поля, где 1/0 означают «да/нет», а не число.
+_YESNO_FIELDS = {"is_active", "active", "is_critical", "hidden", "maintenance_required"}
+
+_VALUE_LABELS = {
+    True: "да", False: "нет",
+    None: "—", "": "—",
+    1: "да", 0: "нет",
+}
+
+
+def _readable(value, field=None):
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "да" if value else "нет"
+    # В базе «активен» лежит числом — человеку нужно да/нет.
+    if field in _YESNO_FIELDS and value in (0, 1, "0", "1"):
+        return "да" if str(value) == "1" else "нет"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def diff_change(before_json, after_json) -> list:
+    """
+    Список изменившихся полей: [{field, label, before, after}].
+
+    Поля, которых не было и не стало, пропускаем. Одинаковые значения
+    тоже: показывать «Статус: pending → pending» бессмысленно.
+    """
+
+    def load(raw):
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {"значение": data}
+        except (ValueError, TypeError):
+            return {}
+
+    before, after = load(before_json), load(after_json)
+
+    if not before and not after:
+        return []
+
+    changes = []
+
+    for field in sorted(set(before) | set(after)):
+
+        if field in _SKIP_FIELDS:
+            continue
+
+        was, now_value = before.get(field), after.get(field)
+
+        if was == now_value:
+            continue
+
+        # Поле появилось пустым и осталось пустым — не изменение.
+        if was in (None, "") and now_value in (None, ""):
+            continue
+
+        changes.append({
+            "field": field,
+            "label": _FIELD_LABELS.get(field, field),
+            "before": _readable(was, field),
+            "after": _readable(now_value, field),
+        })
+
+    return changes
+
+
+def get_audit_entry(entry_id: int):
+    """Одна запись журнала с разобранной разницей — для раскрытия."""
+
+    try:
+        conn = _get_conn()
+        row = conn.execute("SELECT * FROM audit_log WHERE id = ?", (entry_id,)).fetchone()
+
+        if not row:
+            conn.close()
+            return None
+
+        entry = dict(row)
+        _name_targets(conn, [entry])
+        conn.close()
+
+        entry["changes"] = diff_change(entry.get("before_json"), entry.get("after_json"))
+        # Сырой JSON наружу не отдаём: в нём пути к файлам и внутренние
+        # идентификаторы, а пользы для чтения никакой.
+        entry.pop("before_json", None)
+        entry.pop("after_json", None)
+
+        return entry
+
+    except Exception:
+        return None
