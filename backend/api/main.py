@@ -1431,6 +1431,33 @@ def get_procedure_route(
     }
 
 
+@app.delete("/api/procedures/{procedure_id}")
+def delete_procedure_route(
+    procedure_id: int,
+    user: dict = Depends(require_roles(*PROCEDURE_WRITE_ROLES))
+):
+    """
+    Удаление инструкции. Функция в сервисе была, наружу её не выводили —
+    поэтому ошибочно заведённую инструкцию нельзя было убрать.
+    """
+    procedure = get_procedure_with_steps(procedure_id)
+
+    if not procedure:
+        return {"success": False, "message": "Инструкция не найдена."}
+
+    delete_procedure(procedure_id)
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="procedure_deleted",
+        target=f"procedure:{procedure_id}",
+        before=procedure,
+    )
+
+    return {"success": True}
+
+
 @app.post("/api/procedures")
 def create_procedure_route(
     request: CreateProcedureRequest,

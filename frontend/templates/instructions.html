@@ -63,8 +63,33 @@
       </div>
     </header>
 
-    <div class="page" id="pageContent">
-      <div class="empty">Загрузка...</div>
+    <div class="page">
+
+      <!-- ИНСТРУКЦИИ ЗАВОДА: их пишут люди, и ИИ ставит их выше своих
+           догадок и документации. Экрана ввода не было — отсюда и
+           пустая таблица procedures. -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2>Инструкции завода <span id="procCount" style="font-size:11px;color:var(--text-dim)"></span></h2>
+          <button class="btn primary sm" id="procAddBtn" style="display:none" onclick="openProcForm()">+ Инструкция</button>
+        </div>
+        <div class="card-body" style="padding:10px 14px">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
+            Когда рабочий жалуется на этот станок, ИИ сначала ищет здесь — написанное человеком
+            надёжнее любой догадки. Работает, только если в названии есть слова, которыми
+            рабочий опишет проблему («подшипник», «плёнка», «струна»).
+          </div>
+          <div id="procList"><div class="empty">Загрузка...</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>База знаний по обращениям</h2></div>
+        <div class="card-body" style="padding:10px 14px">
+          <div id="pageContent"><div class="empty">Загрузка...</div></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -166,9 +191,175 @@ function openInstruction(item) {
   `);
 }
 
-document.getElementById('searchInst').addEventListener('input', () => render(allKnowledge));
+document.getElementById('searchInst').addEventListener('input', () => { render(allKnowledge); renderProcedures(); });
 
-initLayout();
+let procedures = {};
+let procEquipment = [];
+let procUser = null;
+
+const PROC_WRITE_ROLES = ['chief_engineer','chief_mechanic','chief_electrician','admin'];
+
+async function loadProcedures(){
+  try{
+    const r = await ACAI.get('/api/procedures');
+    procedures = r.grouped || {};
+    renderProcedures();
+  }catch(e){
+    document.getElementById('procList').innerHTML = '<div class="empty">Не удалось загрузить</div>';
+  }
+}
+
+function renderProcedures(){
+  const box = document.getElementById('procList');
+  const q = document.getElementById('searchInst')?.value.toLowerCase() || '';
+  const canWrite = PROC_WRITE_ROLES.includes(procUser?.role);
+
+  const groups = Object.entries(procedures).filter(([machine, items]) =>
+    !q || machine.toLowerCase().includes(q) || items.some(i => (i.title||'').toLowerCase().includes(q)));
+
+  const total = Object.values(procedures).reduce((n, items) => n + items.length, 0);
+  document.getElementById('procCount').textContent = total ? total : '';
+
+  if(!total){
+    box.innerHTML = `<div class="empty">Инструкций пока нет.${canWrite?' Заведите первую — ИИ начнёт её показывать сразу.':''}</div>`;
+    return;
+  }
+  if(!groups.length){ box.innerHTML = '<div class="empty">Ничего не найдено</div>'; return; }
+
+  box.innerHTML = groups.map(([machine, items]) => `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${escProc(machine)}</div>
+      ${items.map(p => `
+        <div class="top-item" style="align-items:flex-start;cursor:pointer" onclick="openProcView(${p.id})">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">${escProc(p.title)}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+              ${p.steps_count!=null?p.steps_count+' шагов':''}${p.duration_minutes?' · '+p.duration_minutes+' мин':''}${p.requires_stop?' · нужна остановка':''}
+            </div>
+          </div>
+          ${canWrite?`<button class="btn danger sm" onclick="event.stopPropagation();deleteProc(${p.id})" title="Убрать">✕</button>`:''}
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+async function openProcView(id){
+  const r = await ACAI.get(`/api/procedures/${id}`);
+  if(!r.success){ ACAI.toast(r.message||'Не найдено','danger'); return; }
+  const p = r.procedure;
+  ACAI.showModal(`
+    <h3>${escProc(p.title)}</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      ${escProc(p.equipment_name||'')}${p.duration_minutes?' · '+p.duration_minutes+' мин':''}${p.requires_stop?' · требуется остановка станка':''}
+    </div>
+    <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px">
+      ${(p.steps||[]).map(s=>`<li style="font-size:13px">${escProc(s.text)}</li>`).join('')}
+    </ol>
+    <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`);
+}
+
+function openProcForm(){
+  ACAI.showModal(`
+    <h3>Новая инструкция</h3>
+    <div class="field"><label>Оборудование *</label>
+      <select class="input" id="pr-eq">
+        <option value="">— Выберите —</option>
+        ${procEquipment.map(e=>`<option value="${e.id}">${escProc(e.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>Название *</label>
+      <input class="input" id="pr-title" placeholder="Например: Замена подшипника вала">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Важно: ИИ найдёт эту инструкцию, если слово из названия встретится в жалобе рабочего.
+        «Замена подшипника» сработает на «греется подшипник», «Ремонт №3» — ни на что.
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>Сколько занимает, мин</label><input class="input" id="pr-dur" type="number" min="1" placeholder="30"></div>
+      <div class="field"><label>Кто делает</label>
+        <select class="input" id="pr-role">
+          <option value="">— любой —</option>
+          <option value="mechanic">механик</option>
+          <option value="electrician">электрик</option>
+          <option value="worker">оператор</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="pr-stop" style="width:auto"> Требуется остановка станка
+      </label>
+    </div>
+    <div class="field"><label>Шаги *</label>
+      <div id="pr-steps"></div>
+      <button class="btn secondary sm" style="margin-top:6px" onclick="addProcStep()">+ Шаг</button>
+    </div>
+    <div id="pr-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitProc()">Сохранить</button>
+    </div>`);
+  addProcStep(); addProcStep(); addProcStep();
+}
+
+function addProcStep(){
+  const box = document.getElementById('pr-steps');
+  const n = box.children.length + 1;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  row.innerHTML = `<span style="font-size:12px;color:var(--text-dim);width:18px">${n}.</span>
+    <input class="input pr-step" placeholder="Что сделать на этом шаге" style="flex:1">
+    <button class="btn secondary sm" onclick="this.parentElement.remove();renumberProcSteps()">✕</button>`;
+  box.appendChild(row);
+}
+
+function renumberProcSteps(){
+  [...document.getElementById('pr-steps').children].forEach((row,i)=>{
+    row.querySelector('span').textContent = (i+1)+'.';
+  });
+}
+
+async function submitProc(){
+  const errEl = document.getElementById('pr-err');
+  const equipment_id = parseInt(document.getElementById('pr-eq').value||0);
+  const title = document.getElementById('pr-title').value.trim();
+  const steps = [...document.querySelectorAll('.pr-step')].map(i=>i.value.trim()).filter(Boolean);
+
+  if(!equipment_id){ errEl.textContent='Выберите оборудование'; return; }
+  if(!title){ errEl.textContent='Введите название'; return; }
+  if(!steps.length){ errEl.textContent='Добавьте хотя бы один шаг'; return; }
+
+  try{
+    const r = await ACAI.post('/api/procedures',{
+      equipment_id, title,
+      duration_minutes: parseInt(document.getElementById('pr-dur').value||0) || null,
+      target_role: document.getElementById('pr-role').value || null,
+      requires_stop: document.getElementById('pr-stop').checked,
+      steps,
+    });
+    if(r.success===false){ errEl.textContent=r.message||'Ошибка'; return; }
+    ACAI.closeModal(); ACAI.toast('Инструкция добавлена ✓','ok'); await loadProcedures();
+  }catch(e){ errEl.textContent = e.message||'Ошибка'; }
+}
+
+async function deleteProc(id){
+  if(!confirm('Убрать инструкцию?')) return;
+  try{
+    const r = await fetch(`/api/procedures/${id}`,{method:'DELETE',credentials:'include'});
+    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||r.status);
+    ACAI.toast('Убрано','ok'); await loadProcedures();
+  }catch(e){ ACAI.toast(e.message||'Не удалось','danger'); }
+}
+
+function escProc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+initLayout().then(async ctx=>{
+  procUser = ctx?.user;
+  if(PROC_WRITE_ROLES.includes(procUser?.role)){
+    document.getElementById('procAddBtn').style.display='block';
+    try{ const eq = await ACAI.get('/api/equipment'); procEquipment = eq.equipment||eq||[]; }catch{}
+  }
+  loadProcedures();
+});
 load();
 </script>
 </body>

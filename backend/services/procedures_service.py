@@ -10,6 +10,7 @@
     [Начать инструкцию] → шаги показываются по одному.
 """
 
+import re
 import sqlite3
 from datetime import datetime
 
@@ -119,7 +120,9 @@ def get_procedures_by_equipment():
             procedures.duration_minutes,
             procedures.target_role,
             procedures.requires_stop,
-            equipment.name AS equipment_name
+            equipment.name AS equipment_name,
+            (SELECT COUNT(*) FROM procedure_steps
+              WHERE procedure_steps.procedure_id = procedures.id) AS steps_count
         FROM procedures
         LEFT JOIN equipment ON equipment.id = procedures.equipment_id
         ORDER BY equipment.name, procedures.title
@@ -191,12 +194,30 @@ def delete_procedure(procedure_id):
     conn.close()
 
 
+def _stem(word):
+    """
+    Грубо отбрасываем окончание, чтобы «подшипника», «подшипником» и
+    «подшипники» сравнивались как одно слово. Полноценная морфология
+    здесь не нужна, а тянуть ради этого библиотеку — тем более.
+    """
+    return word[:-2] if len(word) >= 6 else word
+
+
 def find_matching_procedure(equipment_id, question_text):
     """
-    Ищет инструкцию для этого станка, название которой упоминается
-    в тексте вопроса (простое совпадение по словам, без ИИ —
-    честно и предсказуемо). Возвращает первую подходящую с шагами,
-    или None, если ничего не совпало.
+    Ищет инструкцию для этого станка, чьё название перекликается с
+    жалобой рабочего. Без ИИ — честно и предсказуемо.
+
+    Сравниваем по корням слов, а не по точному вхождению: инструкция
+    называется «Замена подшипника», рабочий пишет «греется подшипник» —
+    при сравнении строк как есть совпадения не будет из-за падежа, и
+    инструкция, которую человек написал специально, никогда не покажется.
+
+    Слова короче 5 букв в расчёт не берём: «вала», «узла», «для» есть в
+    половине названий и совпадали бы со всем подряд. Если подходит
+    несколько инструкций, берём ту, где совпало больше слов —
+    «Замена подшипника вала» должна побеждать инструкцию, зацепившуюся
+    одним словом «замена».
 
     "ё"/"е" приводятся к одному виду — тот же принцип, что и в
     остальном проекте (machine_service.py/symptom_service.py).
@@ -206,6 +227,10 @@ def find_matching_procedure(equipment_id, question_text):
         return None
 
     question_normalized = question_text.lower().replace("ё", "е")
+    question_words = re.findall(r"[а-яa-z0-9]+", question_normalized)
+
+    if not question_words:
+        return None
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -219,15 +244,34 @@ def find_matching_procedure(equipment_id, question_text):
 
     conn.close()
 
+    best_id = None
+    best_score = 0
+
     for row in candidates:
 
         title_normalized = row["title"].lower().replace("ё", "е")
+        title_words = [
+            word for word in re.findall(r"[а-яa-z0-9]+", title_normalized)
+            if len(word) >= 5
+        ]
 
-        # Совпадение, если хотя бы одно значимое слово из названия
-        # инструкции (длиннее 3 символов) встречается в вопросе.
-        title_words = [w for w in title_normalized.split() if len(w) > 3]
+        score = 0
 
-        if any(word in question_normalized for word in title_words):
-            return get_procedure_with_steps(row["id"])
+        for title_word in title_words:
 
-    return None
+            stem = _stem(title_word)
+
+            if len(stem) < 4:
+                continue
+
+            if any(question_word.startswith(stem) for question_word in question_words):
+                score += 1
+
+        if score > best_score:
+            best_score = score
+            best_id = row["id"]
+
+    if not best_id:
+        return None
+
+    return get_procedure_with_steps(best_id)
