@@ -249,6 +249,9 @@ init_shift_report_tables()
 from backend.services.team_chat_service import init_team_chat
 init_team_chat()
 
+from backend.services import usage_service
+usage_service.init_usage()
+
 from backend.services.equipment_state_service import (
     init_state_events
 )
@@ -356,6 +359,8 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
                "chief_electrician", "mechanic", "engineer", "electrician"),
     "/technolog": ("director", "chief_engineer", "technologist"),
     "/audit": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
+    # Пользуются ли системой: кто заходит, какие разделы, сколько работы
+    "/usage": ("director", "chief_engineer"),
     "/settings": (),  # только admin
 }
 
@@ -419,6 +424,9 @@ async def page_access_guard(request: Request, call_next):
                 "home": ROLE_HOME_PAGE.get(role, "/instructions"),
             },
         )
+
+    # Учёт использования: кто какой раздел открыл
+    usage_service.record_page_view(user["id"], request.url.path)
 
     return await call_next(request)
 
@@ -2648,6 +2656,17 @@ def get_audit_log_route(
 # =========================================
 # AUDIT LOG PAGE
 # =========================================
+
+@app.get("/usage")
+def usage_page(request: Request):
+
+    return templates.TemplateResponse(request=request, name="usage.html")
+
+
+@app.get("/api/usage/summary")
+def usage_summary(days: int = 7, user: dict = Depends(require_roles("director", "chief_engineer"))):
+    return {"success": True, **usage_service.summary(days)}
+
 
 @app.get("/audit")
 def audit_page(request: Request):

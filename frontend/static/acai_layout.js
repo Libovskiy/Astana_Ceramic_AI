@@ -229,6 +229,7 @@ const NAV_ITEMS = [
   { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','engineer'] },
   { icon: '🧱', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
   { section: 'Система' },
+  { icon: '👥', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer'] },
   { icon: '📜', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician'] },
   { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin'] },
 ];

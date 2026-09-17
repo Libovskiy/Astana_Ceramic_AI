@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Использование — ACAI</title>
+<script src="/static/theme.js?v=1"></script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<link rel="stylesheet" href="/static/acai.css?v=17">
+<style>
+.us-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+.us-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+.us-kpi-label { font-size:12px; color:var(--text-dim); }
+.us-kpi-value { font-family:var(--mono); font-size:28px; font-weight:700; margin-top:4px; }
+.us-kpi-sub { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+.us-two { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+@media (max-width: 900px) { .us-two { grid-template-columns:1fr; } }
+
+.us-note { font-size:12px; color:var(--text-dim); padding:10px 14px; border:1px dashed var(--border); border-radius:10px; margin-bottom:16px; line-height:1.5; }
+
+.us-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.us-row:last-child { border-bottom:none; }
+.us-row .us-name { flex:1; min-width:0; }
+.us-num { font-family:var(--mono); font-weight:700; min-width:34px; text-align:right; }
+.us-delta { font-size:11px; min-width:56px; text-align:right; color:var(--text-dim); }
+.us-delta.up { color:var(--ok); }
+.us-delta.down { color:var(--danger); }
+.us-bar { height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; flex:0 0 90px; }
+.us-bar > div { height:100%; background:var(--accent); }
+
+.us-chart { display:flex; align-items:flex-end; gap:4px; height:120px; padding-top:10px; }
+.us-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+.us-col-bar { width:100%; max-width:34px; background:var(--accent); border-radius:4px 4px 0 0; min-height:2px; }
+.us-col-bar.zero { background:var(--border); }
+.us-col-n { font-size:11px; font-family:var(--mono); }
+.us-col-d { font-size:10px; color:var(--text-dim); white-space:nowrap; }
+
+.us-people { width:100%; border-collapse:collapse; font-size:13px; }
+.us-people th { text-align:left; font-size:11px; font-weight:600; color:var(--text-dim); padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.us-people td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+.us-people tr.never td { color:var(--text-dim); }
+.us-people .who { font-weight:600; }
+.us-people .role { font-size:11px; color:var(--text-dim); }
+.us-people .mono { font-family:var(--mono); }
+.us-seen-ok { color:var(--ok); }
+.us-seen-old { color:var(--warn); }
+.us-seen-never { color:var(--danger); }
+.us-tags { font-size:11px; color:var(--text-dim); }
+.us-table-wrap { overflow-x:auto; }
+
+.us-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.us-chip { padding:5px 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-dim); cursor:pointer; font-size:12px; font-weight:500; }
+.us-chip.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+.us-unused { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.us-unused span { font-size:12px; padding:3px 10px; border-radius:999px; background:var(--surface-2); color:var(--text-dim); }
+
+@media (max-width: 700px) {
+  .us-people .hide-m { display:none; }
+  .us-bar { flex-basis:50px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Использование</div>
+        <div class="topbar-sub">Работают ли люди в системе</div>
+      </div>
+      <div class="topbar-right">
+        <div class="us-chips" id="periodChips">
+          <button class="us-chip active" data-days="7">7 дней</button>
+          <button class="us-chip" data-days="14">14 дней</button>
+          <button class="us-chip" data-days="30">30 дней</button>
+        </div>
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+
+    <div class="page" id="usPage">
+      <div class="empty">Загрузка...</div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=18"></script>
+<script src="/static/mobile_nav_v2.js?v=3"></script>
+<script>
+const ROLE_NAMES = {
+  admin:'Администратор', director:'Директор', chief_engineer:'Гл. инженер', engineer:'Инженер',
+  worker:'Рабочий', shift_supervisor:'Мастер смены', chief_mechanic:'Гл. механик', mechanic:'Механик',
+  chief_electrician:'Гл. электрик', electrician:'Электрик', analyst:'Аналитик',
+  technologist:'Технолог', lab_technician:'Лаборант',
+};
+
+let days = 7;
+let peopleFilter = 'all';
+let data = null;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function parseLocal(s) {
+  return s ? new Date(String(s).replace(' ', 'T')) : null;
+}
+
+function seenText(s) {
+  const d = parseLocal(s);
+  if (!d || isNaN(d)) return { text: 'не заходил', cls: 'us-seen-never' };
+  const min = Math.round((Date.now() - d.getTime()) / 60000);
+  let text;
+  if (min < 5) text = 'сейчас в системе';
+  else if (min < 60) text = `${min} мин назад`;
+  else if (min < 24 * 60) text = `${Math.floor(min / 60)} ч назад`;
+  else {
+    const dd = Math.floor(min / 1440);
+    text = dd === 1 ? 'вчера' : `${dd} дн назад`;
+  }
+  return { text, cls: min < 3 * 1440 ? 'us-seen-ok' : 'us-seen-old' };
+}
+
+function dayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+function deltaHtml(now, prev) {
+  if (!now && !prev) return '<span class="us-delta">—</span>';
+  if (!prev) return `<span class="us-delta up">новое</span>`;
+  const diff = now - prev;
+  if (diff === 0) return '<span class="us-delta">как раньше</span>';
+  return `<span class="us-delta ${diff > 0 ? 'up' : 'down'}">${diff > 0 ? '+' : ''}${diff} к прошл.</span>`;
+}
+
+async function load() {
+  try {
+    data = await ACAI.get(`/api/usage/summary?days=${days}`);
+    render();
+  } catch (e) {
+    document.getElementById('usPage').innerHTML = `<div class="empty">Не удалось загрузить: ${esc(e.message)}</div>`;
+  }
+}
+
+function render() {
+  const d = data;
+  const t = d.totals;
+  const work = d.work;
+  const workTotal = work.reduce((a, w) => a + w.count, 0);
+  const workPrev = work.reduce((a, w) => a + w.previous, 0);
+  const maxSeries = Math.max(1, ...d.series.map(s => s.users));
+  const maxSection = Math.max(1, ...d.sections.map(s => s.users));
+
+  const trackingNote = !d.tracking_since
+    ? 'Посещения начали считаться только что — первые цифры появятся, как только люди зайдут.'
+    : (d.tracking_since > d.from
+        ? `Заходы и открытые разделы считаются с ${dayLabel(d.tracking_since)} — раньше они не записывались. Внесённая работа (обращения, обходы, сообщения) видна за весь период.`
+        : '');
+
+  const peopleRows = d.people.filter(p => {
+    if (peopleFilter === 'active') return p.days_active || p.actions;
+    if (peopleFilter === 'idle') return !(p.days_active || p.actions);
+    return true;
+  });
+
+  document.getElementById('usPage').innerHTML = `
+    ${trackingNote ? `<div class="us-note">ℹ️ ${trackingNote}</div>` : ''}
+
+    <div class="us-grid">
+      <div class="us-kpi">
+        <div class="us-kpi-label">Работали в системе</div>
+        <div class="us-kpi-value" style="color:${t.active / Math.max(1, t.accounts) >= .5 ? 'var(--ok)' : 'var(--warn)'}">${t.active}<span style="font-size:16px;color:var(--text-dim)"> / ${t.accounts}</span></div>
+        <div class="us-kpi-sub">сотрудников за ${d.days} дн.</div>
+      </div>
+      <div class="us-kpi">
+        <div class="us-kpi-label">Ни разу не заходили</div>
+        <div class="us-kpi-value" style="color:${t.never ? 'var(--danger)' : 'var(--ok)'}">${t.never}</div>
+        <div class="us-kpi-sub">${d.tracking_since ? 'с ' + dayLabel(d.tracking_since) + ', когда начался учёт' : 'учёт только начат'}</div>
+      </div>
+      <div class="us-kpi">
+        <div class="us-kpi-label">Внесено записей</div>
+        <div class="us-kpi-value">${workTotal}</div>
+        <div class="us-kpi-sub">${workPrev ? `было ${workPrev} за прошлые ${d.days} дн.` : 'за прошлый период — 0'}</div>
+      </div>
+      <div class="us-kpi">
+        <div class="us-kpi-label">Обращений о поломках</div>
+        <div class="us-kpi-value">${work[0].count}</div>
+        <div class="us-kpi-sub">закрыто ${work[1].count}</div>
+      </div>
+    </div>
+
+    <div class="us-two">
+      <div class="card">
+        <div class="card-head"><h2>Сколько человек заходило по дням</h2></div>
+        <div class="card-body">
+          <div class="us-chart">
+            ${d.series.map(s => `
+              <div class="us-col" title="${dayLabel(s.day)}: ${s.users} чел.">
+                <div class="us-col-n">${s.users || ''}</div>
+                <div class="us-col-bar ${s.users ? '' : 'zero'}" style="height:${Math.round(s.users / maxSeries * 90)}px"></div>
+                <div class="us-col-d">${d.series.length > 14 ? dayLabel(s.day).slice(0, 2) : dayLabel(s.day)}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Кто работает — по должностям</h2></div>
+        <div class="card-body">
+          ${d.roles.map(r => `
+            <div class="us-row">
+              <span class="us-name">${esc(ROLE_NAMES[r.role] || r.role)}</span>
+              <div class="us-bar"><div style="width:${Math.round(r.active / Math.max(1, r.total) * 100)}%;background:${r.active ? 'var(--ok)' : 'var(--border)'}"></div></div>
+              <span class="us-num">${r.active}/${r.total}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="us-two">
+      <div class="card">
+        <div class="card-head"><h2>Что вносят в систему</h2></div>
+        <div class="card-body">
+          ${work.map(w => `
+            <div class="us-row" style="${w.count ? '' : 'opacity:.6'}">
+              <span>${w.icon}</span>
+              <span class="us-name">${esc(w.label)}</span>
+              <span class="us-num">${w.count}</span>
+              ${deltaHtml(w.count, w.previous)}
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Какие разделы открывают</h2></div>
+        <div class="card-body">
+          ${d.sections.length ? d.sections.map(s => `
+            <div class="us-row">
+              <span class="us-name">${esc(s.label)}</span>
+              <div class="us-bar"><div style="width:${Math.round(s.users / maxSection * 100)}%"></div></div>
+              <span class="us-num" title="человек">${s.users} чел.</span>
+              <span class="us-delta" title="открытий">${s.views} откр.</span>
+            </div>`).join('') : '<div class="empty">За период разделы не открывали</div>'}
+          ${d.unused_sections.length ? `
+            <div style="font-size:12px;color:var(--text-dim);margin-top:14px">Не открывал никто:</div>
+            <div class="us-unused">${d.unused_sections.map(u => `<span>${esc(u)}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2>Люди</h2>
+        <div class="us-chips" style="margin-left:auto">
+          <button class="us-chip ${peopleFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">Все (${d.people.length})</button>
+          <button class="us-chip ${peopleFilter === 'active' ? 'active' : ''}" onclick="setFilter('active')">Работали (${t.active})</button>
+          <button class="us-chip ${peopleFilter === 'idle' ? 'active' : ''}" onclick="setFilter('idle')">Не работали (${d.people.length - t.active})</button>
+        </div>
+      </div>
+      <div class="card-body us-table-wrap">
+        <table class="us-people">
+          <thead><tr>
+            <th>Сотрудник</th>
+            <th>Последний заход</th>
+            <th title="Дней, когда человек был в системе">Дней</th>
+            <th class="hide-m" title="Сколько раз открывал разделы">Открытий</th>
+            <th title="Обращения, сообщения, обходы, записи">Записей</th>
+            <th class="hide-m">Чаще всего</th>
+          </tr></thead>
+          <tbody>
+            ${peopleRows.map(p => {
+              const s = seenText(p.last_seen);
+              return `<tr class="${p.last_seen ? '' : 'never'}">
+                <td><div class="who">${esc(p.full_name || p.username)}</div>
+                    <div class="role">${esc(ROLE_NAMES[p.role] || p.role)} · ${esc(p.username)}</div></td>
+                <td class="${s.cls}">${s.text}</td>
+                <td class="mono">${p.days_active || '—'}</td>
+                <td class="mono hide-m">${p.views || '—'}</td>
+                <td class="mono">${p.actions || '—'}</td>
+                <td class="us-tags hide-m">${p.top_sections.map(esc).join(', ') || '—'}</td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="6" class="empty">Никого</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function setFilter(f) { peopleFilter = f; render(); }
+
+document.getElementById('periodChips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-days]');
+  if (!b) return;
+  days = Number(b.dataset.days);
+  document.querySelectorAll('#periodChips .us-chip').forEach(x => x.classList.toggle('active', x === b));
+  load();
+});
+
+load();
+</script>
+</body>
+</html>

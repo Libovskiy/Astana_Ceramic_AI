@@ -354,6 +354,13 @@ def get_user_by_session(token: str | None):
 
     conn.close()
 
+    # «Был в системе сегодня» — не чаще раза в 5 минут на человека
+    try:
+        from backend.services.usage_service import record_presence
+        record_presence(row["id"])
+    except Exception:
+        pass
+
     return dict(row)
 
 
