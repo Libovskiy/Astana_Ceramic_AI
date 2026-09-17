@@ -55,8 +55,25 @@ def require_sensor_key(x_sensor_key: Optional[str] = Header(None)):
 # При перезапуске сервера сбрасывается — это нормально.
 _live_cache: dict = {}  # {sensor_name: {value, updated_at}}
 
+# HTTPS-экземпляр (порт 8443, для микрофона) живых данных не получает:
+# расширение шлёт их на localhost:8000. Он спрашивает основной сервер,
+# а в базу не пишет — это делает основной.
+LIVE_PROXY = (os.environ.get("ACAI_LIVE_PROXY") or "").rstrip("/")
+
 # В базу из этого кэша пишет сервер сам, раз в 30 секунд.
-sensor_recorder.start(_live_cache)
+if not LIVE_PROXY:
+    sensor_recorder.start(_live_cache)
+
+
+def _from_main_server(path: str, session_token: Optional[str]):
+    import requests
+    try:
+        response = requests.get(f"{LIVE_PROXY}{path}", cookies={"session_token": session_token or ""}, timeout=3)
+        if response.ok:
+            return response.json()
+    except Exception as error:
+        print(f"[sensors] основной сервер не ответил: {error}")
+    return None
 
 
 def current_user(session_token: Optional[str] = Cookie(None)):
@@ -97,8 +114,10 @@ def live_push(payload: PushPayload, _ok: bool = Depends(require_sensor_key)):
 
 
 @router.get("/live")
-def live_get(user: dict = Depends(current_user)):
+def live_get(user: dict = Depends(current_user), session_token: Optional[str] = Cookie(None)):
     """Возвращает последние живые значения из кэша."""
+    if LIVE_PROXY:
+        return _from_main_server("/api/sensors/live", session_token) or {}
     return {k: v for k, v in _live_cache.items() if not k.startswith("_")}
 
 
@@ -118,8 +137,10 @@ def push_readings(payload: PushPayload, db: Session = Depends(get_db),
 
 
 @router.get("/status")
-def collector_status(user: dict = Depends(current_user)):
+def collector_status(user: dict = Depends(current_user), session_token: Optional[str] = Cookie(None)):
     """Идёт ли сбор: когда были живые данные и последняя запись в базу."""
+    if LIVE_PROXY:
+        return _from_main_server("/api/sensors/status", session_token) or {"live_age_seconds": None, "online": False}
     age = sensor_recorder.live_age_seconds(_live_cache)
     return {
         "live_age_seconds": None if age is None else round(age),

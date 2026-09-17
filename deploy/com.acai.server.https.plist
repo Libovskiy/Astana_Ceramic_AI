@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.acai.server.https</string>
+
+    <!-- Второй экземпляр сервера — тот же код и те же базы, но по HTTPS
+         на порту 8443. Нужен для микрофона (диктофон, голосовые):
+         телефон даёт сайту микрофон только по защищённому адресу.
+         Сертификат самоподписанный (certs/), при первом входе телефон
+         предупредит — «Подробнее» → «Перейти на сайт».
+         Обычный http://…:8000 работает как раньше.
+
+         Флаг reload намеренно не передаётся: перезагрузчик нужен
+         при разработке, в пилоте он только мешает (лишний процесс
+         и непредсказуемый рестарт при правке файла).
+         Хост 0.0.0.0 — чтобы заходить с телефонов в цеху,
+         а не только с самого Mac. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin/uvicorn</string>
+        <string>backend.api.main:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8443</string>
+        <string>--ssl-keyfile</string>
+        <string>/Users/champ_01/Documents/FactoryAssistant/certs/acai.key</string>
+        <string>--ssl-certfile</string>
+        <string>/Users/champ_01/Documents/FactoryAssistant/certs/acai.crt</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant</string>
+
+    <!-- Стартовать при входе в систему -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Поднимать обратно, если процесс упал.
+         Это главное, ради чего всё затевалось: без него первое
+         же падение = конец пилота, и никто об этом не узнает,
+         пока рабочий не придёт с вопросом "почему не грузится". -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Не долбиться в бесконечном цикле, если падает на старте -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/server_https.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/server_https.error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+        <!-- живые показания датчиков — у основного сервера -->
+        <key>ACAI_LIVE_PROXY</key>
+        <string>http://127.0.0.1:8000</string>
+    </dict>
+
+</dict>
+</plist>

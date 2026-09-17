@@ -68,9 +68,13 @@ ATTACHMENTS_DIR = BASE_DIR / "uploads" / "messenger"
 # домене, а PDF умеет выполнять скрипты.
 INLINE_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 INLINE_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+# Голосовые: Chrome пишет webm/opus, Safari на iPhone — mp4/aac
+INLINE_AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg",
+                      "audio/wav", "audio/x-wav", "audio/aac", "audio/x-m4a", "audio/m4a"}
 
 KIND_IMAGE = "image"
 KIND_VIDEO = "video"
+KIND_AUDIO = "audio"
 KIND_FILE = "file"
 
 # Длинная сторона картинки для показа в переписке. Оригинал остаётся
@@ -308,6 +312,19 @@ def list_conversations(me_id: int) -> list[dict]:
 
         if last_msg and last_msg["deleted_at"]:
             last_msg["body"] = "сообщение удалено"
+
+        elif last_msg and not (last_msg["body"] or "").strip():
+            # Фото или голосовое без подписи: в списке была пустая строка
+            att = conn.execute(
+                "SELECT kind, original_name FROM team_attachments WHERE message_id = ?",
+                (last_msg["id"],)
+            ).fetchone()
+            if att:
+                last_msg["body"] = {
+                    KIND_IMAGE: "📷 Фото",
+                    KIND_VIDEO: "🎬 Видео",
+                    KIND_AUDIO: "🎤 Голосовое сообщение",
+                }.get(att["kind"], f"📎 {att['original_name']}")
 
         out.append({
             "id": conv["id"],
@@ -886,6 +903,9 @@ def _classify(mime: str | None, name: str) -> str:
 
     if mime in INLINE_VIDEO_TYPES:
         return KIND_VIDEO
+
+    if mime in INLINE_AUDIO_TYPES:
+        return KIND_AUDIO
 
     return KIND_FILE
 

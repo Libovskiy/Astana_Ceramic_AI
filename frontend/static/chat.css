@@ -317,6 +317,24 @@ body {
     flex-shrink: 0;
 }
 
+/* Диктофон */
+.chat-mic {
+    border: 1px solid #dbe2ec;
+    background: #eef1f6;
+    color: #0f172a;
+    height: 44px;
+    min-width: 44px;
+    padding: 0 10px;
+    border-radius: 22px;
+    flex-shrink: 0;
+}
+
+.chat-new-input { position: relative; }
+.chat-new-input textarea { padding-right: 60px !important; }
+.chat-mic-new { position: absolute; right: 8px; bottom: 12px; }
+
+:root[data-theme="dark"] .chat-mic { background: #1d2535; border-color: #2c3850; color: #e2e8f0; }
+
 /* ================= НОВОЕ ОБРАЩЕНИЕ ================= */
 
 .chat-new-form {

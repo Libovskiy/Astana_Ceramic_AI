@@ -168,6 +168,9 @@ app.include_router(backup_router)
 from backend.api.sensor_routes import router as sensor_router
 app.include_router(sensor_router)
 
+from backend.api.voice_routes import router as voice_router
+app.include_router(voice_router)
+
 from backend.api.checklist_routes import router as checklist_router
 app.include_router(checklist_router)
 

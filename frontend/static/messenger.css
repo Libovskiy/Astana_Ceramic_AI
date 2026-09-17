@@ -415,3 +415,8 @@
     .mg-photo img, .mg-video { max-width: 240px; max-height: 300px; }
     .mg-attach { width: 46px; height: 46px; }
 }
+
+/* Голосовое сообщение */
+.mg-audio { display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+.mg-audio-icon { font-size: 16px; }
+.mg-audio audio { height: 38px; max-width: 240px; }

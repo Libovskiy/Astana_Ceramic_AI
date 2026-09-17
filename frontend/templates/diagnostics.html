@@ -121,6 +121,7 @@
 </div>
 
 <script src="/static/acai_layout.js?v=18"></script>
+<script src="/static/voice.js?v=1"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 const ZONES = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
@@ -280,15 +281,26 @@ function renderStep3() {
         ${QUICK_PROBLEMS.map(p => `<button class="quick-btn" onclick="quickSelect('${p}')">${p}</button>`).join('')}
       </div>
 
-      <textarea class="input" id="problemInput" rows="3"
+<div style="position:relative">
+            <textarea class="input" id="problemInput" rows="3"
         placeholder="Например: станок гудит и вибрирует, остановился через 5 минут работы..."
         style="margin-bottom:12px;font-size:14px"></textarea>
+      <button type="button" class="btn secondary" id="problemMic" title="Надиктовать голосом"
+        style="position:absolute;right:8px;bottom:20px;border-radius:20px;height:40px">🎤</button>
+      </div>
 
       <button class="btn primary lg" style="width:100%" onclick="submitProblem()">
         🔍 Запустить диагностику
       </button>
     </div>
   `;
+  bindProblemMic();
+}
+
+function bindProblemMic() {
+  const btn = document.getElementById('problemMic');
+  const inp = document.getElementById('problemInput');
+  if (btn && inp && window.ACAIVoice) ACAIVoice.dictateButton(btn, inp);
 }
 
 function quickSelect(text) {

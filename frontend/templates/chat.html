@@ -9,7 +9,7 @@
          acai.css. По умолчанию светлая (data-default-theme), тёмная —
          по кнопке, своя контрастная палитра в конце chat.css. -->
     <script src="/static/theme.js?v=1"></script>
-    <link rel="stylesheet" href="/static/chat.css?v=43">
+    <link rel="stylesheet" href="/static/chat.css?v=44">
 </head>
 <body>
 
@@ -91,6 +91,7 @@
                 rows="1"
                 placeholder="Напишите сообщение..."
             ></textarea>
+            <button type="button" id="chatMic" class="chat-mic" title="Надиктовать голосом">🎤</button>
             <button type="button" id="chatSend" class="chat-send" title="Отправить">➤</button>
         </div>
 
@@ -111,11 +112,14 @@
             <!-- Быстрый выбор: рабочему в перчатках проще нажать, чем
                  печатать. Нажатие подставляет текст, его можно дописать. -->
             <div id="chatQuickProblems" class="chat-quick-problems"></div>
-            <textarea
-                id="chatNewText"
-                rows="3"
-                placeholder="Например: плёнка рвётся при обмотке, подшипник греется и стучит"
-            ></textarea>
+            <div class="chat-new-input">
+                <textarea
+                    id="chatNewText"
+                    rows="3"
+                    placeholder="Например: плёнка рвётся при обмотке, подшипник греется и стучит"
+                ></textarea>
+                <button type="button" id="chatNewMic" class="chat-mic chat-mic-new" title="Надиктовать голосом">🎤</button>
+            </div>
         </div>
 
         <button type="button" id="chatNewSubmit" class="chat-submit">Отправить</button>
@@ -127,7 +131,8 @@
 </div>
 
 <script src="/static/notify.js?v=31"></script>
-<script src="/static/chat.js?v=34"></script>
+<script src="/static/voice.js?v=1"></script>
+<script src="/static/chat.js?v=35"></script>
 
 </body>
 </html>

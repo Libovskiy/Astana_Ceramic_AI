@@ -286,6 +286,13 @@ function attachmentHtml(a) {
     </a>`;
   }
 
+  if (a.kind === 'audio') {
+    return `<div class="mg-audio">
+      <span class="mg-audio-icon">🎤</span>
+      <audio controls preload="metadata" src="${a.url}"></audio>
+    </div>`;
+  }
+
   if (a.kind === 'video') {
     return `<video class="mg-video" controls preload="metadata" src="${a.url}"></video>`;
   }
@@ -835,4 +842,27 @@ window.renderList = renderList;
 
 boot();
 
+// ── Голосовые ─────────────────────────────────────────────
+// Chrome пишет webm без длительности: проигрыватель показывает «0:00»
+// и не даёт перемотать. Прыжок в самый конец заставляет браузер
+// дочитать файл и узнать длину, потом возвращаемся к началу.
+document.addEventListener('loadedmetadata', (e) => {
+  const a = e.target;
+  if (!(a instanceof HTMLAudioElement) || isFinite(a.duration)) return;
+  a.addEventListener('durationchange', function back() {
+    if (!isFinite(a.duration)) return;
+    a.removeEventListener('durationchange', back);
+    a.currentTime = 0;
+  });
+  a.currentTime = 1e101;
+}, true);
+
+// Запись уходит обычным вложением: у получателя — проигрыватель.
+if (window.ACAIVoice && document.getElementById('mgMic')) {
+  ACAIVoice.recordButton(document.getElementById('mgMic'), {
+    onDone: (file) => { if (current) return uploadFile(file, ''); }
+  });
+}
+
 })();
+

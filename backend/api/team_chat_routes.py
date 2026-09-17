@@ -172,7 +172,7 @@ def attachment(attachment_id: int, preview: int = 0, user: dict = Depends(curren
 
     data = _handle(svc.get_attachment, attachment_id, user["id"], bool(preview))
 
-    inline = data["kind"] in (svc.KIND_IMAGE, svc.KIND_VIDEO)
+    inline = data["kind"] in (svc.KIND_IMAGE, svc.KIND_VIDEO, svc.KIND_AUDIO)
 
     headers = {}
 

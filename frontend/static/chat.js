@@ -175,6 +175,12 @@ function bindEvents() {
     document.getElementById("chatResolve").addEventListener("click", resolveCase);
     document.getElementById("chatBack").addEventListener("click", backToList);
 
+    // Диктофон: голос -> текст в поле, отправляет человек сам
+    if (window.ACAIVoice) {
+        ACAIVoice.dictateButton(document.getElementById("chatMic"), document.getElementById("chatInput"));
+        ACAIVoice.dictateButton(document.getElementById("chatNewMic"), document.getElementById("chatNewText"));
+    }
+
     const themeButton = document.getElementById("chatTheme");
 
     if (themeButton && window.acaiTheme) {
