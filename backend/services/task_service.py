@@ -677,6 +677,11 @@ def assign_task(task_id, user_id, assigned_by):
         )
 
         conn.commit()
+        try:
+            from backend.services import telegram_service
+            telegram_service.task_assigned(task_id, user_id, assigned_by)
+        except Exception as error:
+            print(f"[task_service] Telegram: {error}")
 
     except Exception:
         conn.rollback()

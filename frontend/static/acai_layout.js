@@ -546,4 +546,98 @@ async function loadBell() {
     <div style="padding:26px 14px;text-align:center;font-size:12px;color:var(--text-dim)">
       Ничего не требует внимания
     </div>`;
+
+  panel.insertAdjacentHTML('beforeend', `
+    <button type="button" onclick="event.stopPropagation();openTelegramSettings()"
+      style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:none;
+             border-top:1px solid var(--border);background:var(--surface-2);color:var(--text);
+             cursor:pointer;font-size:12.5px;font-weight:600;text-align:left">
+      📲 Уведомления в Telegram
+      <span style="margin-left:auto;font-weight:400;color:var(--text-dim);white-space:nowrap">на телефон</span>
+    </button>`);
+}
+
+// ── TELEGRAM ─────────────────────────────────────────────
+// Срочное (эскалация, задача на вас, сообщение, пока вас нет на сайте)
+// приходит в Telegram. Привязка — одноразовой ссылкой на бота.
+async function openTelegramSettings() {
+  const panel = document.getElementById('bellPanel');
+  if (panel) panel.style.display = 'none';
+
+  let st;
+  try { st = await ACAI.get('/api/telegram/status'); }
+  catch { ACAI.toast('Не удалось проверить Telegram', 'danger'); return; }
+
+  const what = `
+    <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:10px 0 4px">
+      Что приходит:<br>
+      🔴 обращение передано специалисту (механикам или электрикам)<br>
+      🟡 ремонт завершён — ждёт подтверждения<br>
+      📌 на вас назначили задачу<br>
+      💭 вам написали, пока вас нет на сайте
+    </div>`;
+
+  let body;
+  if (!st.configured) {
+    body = `<div class="empty" style="padding:14px 0">Бот ещё не настроен. Попросите администратора добавить TELEGRAM_BOT_TOKEN.</div>
+      <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`;
+  } else if (st.linked) {
+    body = `
+      <div style="padding:12px;border-radius:10px;background:var(--surface-2);font-size:13px">
+        ✅ Подключено${st.tg_name ? ` — ${st.tg_name}` : ''}<br>
+        <span style="font-size:11px;color:var(--text-dim)">бот @${st.bot || '—'}</span>
+      </div>
+      ${what}
+      <div class="modal-foot">
+        <button class="btn danger" onclick="telegramUnlink()">Отключить</button>
+        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+      </div>`;
+  } else {
+    body = `
+      <div style="font-size:13px;line-height:1.5">
+        Нажмите кнопку — откроется Telegram. Там нажмите <b>«Старт»</b>, и уведомления будут приходить на этот телефон.
+      </div>
+      ${what}
+      <div class="modal-foot">
+        <button class="btn primary" id="tgLinkBtn" onclick="telegramLink()">Открыть бота</button>
+        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+      </div>
+      <div id="tgLinkHint" style="font-size:11px;color:var(--text-dim);margin-top:8px"></div>`;
+  }
+
+  ACAI.showModal(`<h3>📲 Уведомления в Telegram</h3>${body}`);
+}
+
+async function telegramLink() {
+  // Окно открываем сразу по нажатию: после ожидания ответа сервера
+  // телефон счёл бы его всплывающим и заблокировал.
+  const win = window.open('', '_blank');
+  try {
+    const r = await ACAI.post('/api/telegram/link', {});
+    if (win) win.location.href = r.url; else window.location.href = r.url;
+    const hint = document.getElementById('tgLinkHint');
+    if (hint) hint.innerHTML = `Не открылось? Откройте ссылку на телефоне: <a href="${r.url}" target="_blank">${r.url}</a> (действует 15 минут). После «Старт» закройте это окно.`;
+    // ждём, пока человек нажмёт «Старт» в боте
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      try {
+        const st = await ACAI.get('/api/telegram/status');
+        if (st.linked) { clearInterval(timer); ACAI.toast('Telegram подключён'); openTelegramSettings(); }
+      } catch {}
+      if (tries > 90 || !document.getElementById('tgLinkHint')) clearInterval(timer);
+    }, 3000);
+  } catch (e) {
+    if (win) win.close();
+    ACAI.toast(e.message || 'Не получилось', 'danger');
+  }
+}
+
+async function telegramUnlink() {
+  if (!confirm('Отключить уведомления в Telegram?')) return;
+  try {
+    await ACAI.post('/api/telegram/unlink', {});
+    ACAI.toast('Уведомления отключены');
+    ACAI.closeModal();
+  } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
 }

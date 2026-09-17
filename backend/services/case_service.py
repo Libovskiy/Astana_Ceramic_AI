@@ -265,6 +265,12 @@ def draft_close_case(case_id, drafted_by, draft_comment=None):
     conn.commit()
     conn.close()
 
+    try:
+        from backend.services import telegram_service
+        telegram_service.case_ready_for_approval(case_id)
+    except Exception as error:
+        print(f"[case_service] Telegram: {error}")
+
 
 def approve_close_case(case_id, approved_by, final_comment=None):
     """
@@ -461,6 +467,13 @@ def escalate_case(case_id):
 
     conn.commit()
     conn.close()
+
+    # Срочное: механик или электрик должен узнать, даже если сайт закрыт
+    try:
+        from backend.services import telegram_service
+        telegram_service.case_escalated(case_id)
+    except Exception as error:
+        print(f"[case_service] Telegram: {error}")
 
 
 def search_case_events(
@@ -788,6 +801,12 @@ def complete_repair(case_id, resolution_comment, completed_by):
 
     conn.commit()
     conn.close()
+
+    try:
+        from backend.services import telegram_service
+        telegram_service.case_ready_for_approval(case_id)
+    except Exception as error:
+        print(f"[case_service] Telegram: {error}")
 
 
 def get_work_queue(discipline=None):

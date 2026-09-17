@@ -249,8 +249,18 @@ init_shift_report_tables()
 from backend.services.team_chat_service import init_team_chat
 init_team_chat()
 
+import os as _os_env
 from backend.services import usage_service
 usage_service.init_usage()
+
+from backend.services import telegram_service
+telegram_service.init_telegram()
+
+# Бот слушает Telegram только в основном экземпляре (порт 8000):
+# HTTPS-экземпляр запущен с ACAI_LIVE_PROXY, и два слушателя забирали бы
+# одни и те же обновления друг у друга.
+if not _os_env.environ.get("ACAI_LIVE_PROXY"):
+    telegram_service.start()
 
 from backend.services.equipment_state_service import (
     init_state_events
@@ -2656,6 +2666,44 @@ def get_audit_log_route(
 # =========================================
 # AUDIT LOG PAGE
 # =========================================
+
+# ─── Telegram ─────────────────────────────────────────────
+
+@app.get("/api/telegram/status")
+def telegram_status(user: dict = Depends(get_current_user)):
+    return {"success": True, **telegram_service.status_for(user["id"])}
+
+
+@app.post("/api/telegram/link")
+def telegram_link(user: dict = Depends(get_current_user)):
+    try:
+        return {"success": True, **telegram_service.create_link(user["id"])}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/api/telegram/unlink")
+def telegram_unlink(user: dict = Depends(get_current_user)):
+    telegram_service.unlink(user["id"])
+    return {"success": True}
+
+
+@app.get("/api/telegram/overview")
+def telegram_overview(user: dict = Depends(require_roles("director", "chief_engineer"))):
+    """Кто подключил уведомления — для «Использования»."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """
+        SELECT u.full_name, u.username, u.role, t.linked_at
+        FROM telegram_links t JOIN users u ON u.id = t.user_id
+        ORDER BY t.linked_at DESC
+        """
+    ).fetchall()
+    conn.close()
+    return {"success": True, "configured": telegram_service.enabled(),
+            "bot": telegram_service.bot_username(), "linked": [dict(r) for r in rows]}
+
 
 @app.get("/usage")
 def usage_page(request: Request):
