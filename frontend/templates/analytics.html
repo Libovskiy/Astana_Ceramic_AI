@@ -41,6 +41,12 @@
         <button class="period-tab" data-period="month">30 дней</button>
       </div>
 
+      <!-- ВЫВОДЫ: сначала ответ, потом сырьё. Одна главная фраза и пара
+           строк; графики ниже — для тех, кто хочет проверить. -->
+      <div class="card" id="conclusions" style="margin-bottom:16px;padding:18px 20px">
+        <div style="font-size:14px;color:var(--text-dim)">Считаю…</div>
+      </div>
+
       <!-- МЕТРИКИ -->
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="keyMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
@@ -212,9 +218,70 @@ function lastSeen(key){
   return s.last?`последняя запись ${ACAI.shortDate(s.last)}`:'в системе ещё ни одной записи';
 }
 
+// Выводы одной-тремя фразами. Сначала то, что требует вмешательства,
+// потом справка. Где данных нет — так и говорим.
+function renderConclusions(s){
+  const box=document.getElementById('conclusions');
+  if(!box) return;
+  const dt=s.downtime||{};const m=s.maintenance||{};const c=s.checklist||{};const perf=s.performance||{};
+  const pw={today:'Сегодня',week:'За неделю',month:'За 30 дней'}[currentPeriod]||'За период';
+  const hm=(x)=>{x=Math.round(x||0);const h=Math.floor(x/60);return h?`${h} ч ${x%60} мин`:`${x} мин`;};
+  const lines=[];   // [важность 0..2, текст, ссылка]
+
+  const worst=(dt.by_equipment||[])[0];
+  if(!src('downtime').period && !src('cases').period){
+    lines.push([1,`${pw.toLowerCase()} ни одного обращения — простои не фиксировались.`,'/cases']);
+  }else if((dt.total_minutes||0)>0){
+    const many=(dt.by_equipment||[]).length>1;
+    const stillOpen=(dt.open_count||0)>0;
+    const allOpen=stillOpen && Math.round(dt.open_minutes||0)>=Math.round(dt.total_minutes||0);
+    let text;
+    if(!many && worst){
+      text=`${pw} простой ${hm(dt.total_minutes)} — ${worst.equipment_name}${allOpen?', стоит до сих пор':stillOpen?`, ещё идёт ${hm(dt.open_minutes)}`:''}.`;
+    }else{
+      text=`${pw} простоев ${hm(dt.total_minutes)}${worst?`, больше всего — ${worst.equipment_name} (${hm(worst.total_minutes)})`:''}${stillOpen?`; ещё идёт ${hm(dt.open_minutes)}`:''}.`;
+    }
+    lines.push([2,text,'/cases']);
+  }else{
+    lines.push([0,`${pw} простоев не было.`,null]);
+  }
+
+  if(m && m.due){
+    if(!src('maintenance').total) lines.push([1,`ТО не отмечается: по графику ${m.due} работ в этом месяце, отметок нет ни одной.`,'/maintenance']);
+    else if(m.overdue) lines.push([2,`ТО отстаёт: сделано ${m.done} из ${m.due}, не сделано ${m.overdue}.`,'/maintenance']);
+    else lines.push([0,`ТО по графику: сделано ${m.done} из ${m.due}.`,'/maintenance']);
+  }
+
+  if(!src('production').period) lines.push([1,`Выпуск не вносили — выполнение плана неизвестно.`,'/production']);
+  else if(perf.plan_completion_pct!=null) lines.push([perf.plan_completion_pct<70?2:0,`План выполнен на ${perf.plan_completion_pct}%.`,'/production']);
+
+  if(!c.rounds_count) lines.push([1,`Обходов смены не было.`,'/checklist']);
+  else if(c.bad_total) lines.push([2,`Обходы нашли ${c.bad_total} неисправн.: ${(c.top_problems||[]).slice(0,2).map(t=>t.equipment_name).join(', ')}.`,'/checklist']);
+
+  lines.sort((a,b)=>b[0]-a[0]);
+  const [head,...rest]=lines;
+  const colorOf=w=>w===2?'var(--danger)':w===1?'var(--warn)':'var(--text-dim)';
+  const link=(l,text)=>l?`<a href="${l}" style="color:inherit;text-decoration:none">${text} <span style="color:var(--text-dim)">›</span></a>`:text;
+  box.innerHTML=`
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <span style="width:10px;height:10px;border-radius:50%;margin-top:9px;flex-shrink:0;background:${head[0]?colorOf(head[0]):'var(--border)'}"></span>
+      <div style="font-size:20px;font-weight:700;line-height:1.35">${link(head[2],head[1])}</div>
+    </div>
+    ${rest.slice(0,3).map(l=>`
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-top:10px">
+        <span style="width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0;background:${l[0]?colorOf(l[0]):'var(--border)'}"></span>
+        <div style="font-size:15px;line-height:1.45">${link(l[2],l[1])}</div>
+      </div>`).join('')}`;
+}
+
 function renderMetrics(s){
   SOURCES=s.sources||{};
-  const perf=s.performance||{};const dt=s.downtime||{};const loss=s.biggest_loss||{};
+  renderConclusions(s);
+  const perf=s.performance||{};const dt=s.downtime||{};
+  // «Макс. простой» считал только закрытые — при идущем простое стоял прочерк
+  const worstNow=(dt.by_equipment||[])[0];
+  const loss=(s.biggest_loss&&s.biggest_loss.total_minutes)?s.biggest_loss
+            :(worstNow?{total_minutes:Math.round(worstNow.total_minutes),equipment_name:worstNow.equipment_name}:{});
   const pw=PERIOD_WORD[currentPeriod]||'за период';
   // простои фиксируются через обращения; нет ни обращений, ни простоев — значит не «ноль», а «не вносили»
   const noDowntimeData = !src('downtime').period && !src('cases').period;
@@ -240,27 +307,27 @@ function renderMetrics(s){
       <div class="metric-value" style="color:${noProduction?'var(--text-dim)':pc}">${!noProduction&&pp!=null?pp+'%':'—'}</div>
       ${noProduction?`<div class="metric-sub">выпуск ${pw} не вносили</div>`:''}
     </div>
-    <div class="metric ${noDowntimeData?'':(tm>0?'warn':'ok')}">
+    <div class="metric ${noDowntimeData?'':(tm>0?'warn':'')}">
       <div class="metric-label">Суммарный простой</div>
-      <div class="metric-value ${noDowntimeData?'':(tm>0?'warn':'ok')}" style="${noDowntimeData?'color:var(--text-dim)':''}">${noDowntimeData?'—':(tc||'0м')}</div>
+      <div class="metric-value ${noDowntimeData?'':(tm>0?'warn':'')}" style="${noDowntimeData?'color:var(--text-dim)':''}">${noDowntimeData?'—':(tc||'0м')}</div>
       <div class="metric-sub">${noDowntimeData?`${pw} ни одного обращения — простои не фиксировались`:dtNote}</div>
     </div>
-    <div class="metric ${loss.total_minutes>0?'warn':'ok'}">
+    <div class="metric ${loss.total_minutes>0?'warn':''}">
       <div class="metric-label">Макс. простой</div>
-      <div class="metric-value ${loss.total_minutes>0?'warn':'ok'}">${loss.total_minutes?loss.total_minutes+'м':'—'}</div>
+      <div class="metric-value ${loss.total_minutes>0?'warn':''}">${loss.total_minutes?loss.total_minutes+'м':'—'}</div>
       <div class="metric-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loss.equipment_name||'Нет данных'}</div>
     </div>
-    <div class="metric accent">
+    <div class="metric">
       <!-- Было «Дисциплина»: рядом с минутами читалось как оценка
            поведения, хотя речь про службы — механика и электрика. -->
       <div class="metric-label">Простой по службам</div>
       <div style="display:flex;gap:8px;margin-top:6px">
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--warn)'}">${noDowntimeData?'—':(dt.by_discipline?.mechanical||0)+'м'}</div>
+          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--text)'}">${noDowntimeData?'—':(dt.by_discipline?.mechanical||0)+'м'}</div>
           <div style="font-size:10px;color:var(--text-dim)">Механика</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--accent)'}">${noDowntimeData?'—':(dt.by_discipline?.electrical||0)+'м'}</div>
+          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--text)'}">${noDowntimeData?'—':(dt.by_discipline?.electrical||0)+'м'}</div>
           <div style="font-size:10px;color:var(--text-dim)">Электрика</div>
         </div>
       </div>
