@@ -25,6 +25,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DB_FILE = BASE_DIR / "factory.db"
+# История показаний датчиков — отдельная база. До 17.09.2026 в бэкап не
+# входила: учение по восстановлению (tests/test_restore.py) это нашло.
+MONITORING_DB_FILE = BASE_DIR / "monitoring.db"
 PHOTOS_DIR = BASE_DIR / "data" / "checklist_photos"
 # Вложения из переписки: фото шильдиков, видео узлов, акты осмотра.
 # Восстановить их неоткуда — в git они не попадают (и не должны).
@@ -45,13 +48,15 @@ def human(n: int) -> str:
     return f"{n:.1f} ТБ"
 
 
-def backup_db(stamp: str) -> Path:
-    if not DB_FILE.exists():
-        print(f"✗ {DB_FILE} не найдена")
-        sys.exit(1)
+def backup_db(stamp: str, source: Path = DB_FILE, prefix: str = "factory", required: bool = True) -> Path | None:
+    if not source.exists():
+        print(f"✗ {source} не найдена")
+        if required:
+            sys.exit(1)
+        return None
 
-    target = BACKUP_DIR / f"factory_{stamp}.db"
-    src = sqlite3.connect(str(DB_FILE))
+    target = BACKUP_DIR / f"{prefix}_{stamp}.db"
+    src = sqlite3.connect(str(source))
     dst = sqlite3.connect(str(target))
     try:
         src.backup(dst)      # согласованная копия даже при активной записи
@@ -69,10 +74,12 @@ def backup_db(stamp: str) -> Path:
 
     if verdict.lower() != "ok":
         target.unlink(missing_ok=True)
-        print(f"✗ копия базы повреждена: {verdict}")
-        sys.exit(1)
+        print(f"✗ копия базы {prefix} повреждена: {verdict}")
+        if required:
+            sys.exit(1)
+        return None
 
-    print(f"✓ база      {target.name}  ({human(target.stat().st_size)})")
+    print(f"✓ {prefix:<9} {target.name}  ({human(target.stat().st_size)})")
     return target
 
 
@@ -149,6 +156,8 @@ def main():
 
     print(f"Бэкап {datetime.now():%d.%m.%Y %H:%M}\n")
     backup_db(stamp)
+    # датчики — не повод ронять весь бэкап, если с их базой что-то не так
+    backup_db(stamp, MONITORING_DB_FILE, "monitoring", required=False)
     backup_dir(PHOTOS_DIR, stamp, "photos")
     backup_dir(CHAT_FILES_DIR, stamp, "chatfiles")
     backup_dir(CERTS_DIR, stamp, "certs")

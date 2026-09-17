@@ -22,6 +22,7 @@ ORDER = [
     "test_access_denied.py",
     "test_files.py",
     "test_routes_unique.py",
+    "test_restore.py",
 ]
 
 failed = []
