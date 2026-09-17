@@ -236,6 +236,49 @@ for method, path, body in (
 
 
 # ─────────────────────────────────────────────────────────
+print("\n4а. Фото и обходы смены")
+
+import io
+from PIL import Image
+from backend.api import checklist_routes
+
+check("проводят обход ровно те, кому открыта страница «Обход смены»",
+      set(checklist_routes.ROUND_ROLES) == set(PAGE_ROLES["/checklist"]),
+      set(checklist_routes.ROUND_ROLES) ^ set(PAGE_ROLES["/checklist"]))
+shown_on = set().union(*(PAGE_ROLES[p] for p in ("/checklist", "/equipment", "/cases", "/events")))
+check("смотрят фото все, у кого они показываются (обход, оборудование, обращения, события)",
+      set(checklist_routes.VIEW_ROLES) == shown_on, set(checklist_routes.VIEW_ROLES) ^ shown_on)
+
+buf = io.BytesIO()
+Image.new("RGB", (64, 64), (10, 200, 90)).save(buf, "JPEG")
+photo = users["shift_supervisor"].post("/api/checklist/photo", files={"file": ("f.jpg", buf.getvalue(), "image/jpeg")},
+                                      data={"equipment_id": sb.equipment_id}).json()["id"]
+
+wrong = []
+for role, client in users.items():
+    can_view = role in checklist_routes.VIEW_ROLES
+    can_round = role in checklist_routes.ROUND_ROLES
+    got = {
+        "фото": client.get(f"/api/checklist/photo/{photo}").status_code,
+        "фото станка": client.get(f"/api/checklist/photos?equipment_id={sb.equipment_id}").status_code,
+        "обходы": client.get("/api/checklist/rounds").status_code,
+        "загрузка": client.post("/api/checklist/photo", files={"file": ("f.jpg", b"x", "image/jpeg")},
+                                data={"equipment_id": sb.equipment_id}).status_code,
+        "сдать обход": client.post("/api/checklist/round", json={"items": []}).status_code,
+    }
+    for what, code in got.items():
+        allowed = can_round if what in ("загрузка", "сдать обход") else can_view
+        if allowed and code == 403:
+            wrong.append(f"{role}: {what} — должен, а 403")
+        if not allowed and code != 403:
+            wrong.append(f"{role}: {what} — не должен, а {code}")
+check(f"фото и обходы: {len(users)} ролей пускает ровно по спискам", not wrong, wrong)
+
+wk = sb.user("worker", equipment=[sb.equipment_id])
+check("рабочий фото обхода не открывает", wk.get(f"/api/checklist/photo/{photo}").status_code == 403)
+
+
+# ─────────────────────────────────────────────────────────
 print("\n5. Уволенный сотрудник")
 
 admin = sb.user("admin")

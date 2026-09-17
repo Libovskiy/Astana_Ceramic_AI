@@ -39,6 +39,34 @@ def current_user(session_token: str | None = Cookie(default=None)):
     return user
 
 
+# ── кто что может ─────────────────────────────────────────
+# Раньше фото и обходы открывал и загружал любой вошедший, хотя сама
+# страница «Обход смены» открыта не всем. Списки совпадают с PAGE_ROLES
+# в main.py (импортировать оттуда нельзя — циклический импорт);
+# совпадение проверяет tests/test_access_denied.py.
+
+# Проводят обход: страница /checklist
+ROUND_ROLES = ("director", "chief_engineer", "engineer", "shift_supervisor",
+               "chief_mechanic", "chief_electrician")
+
+# Смотрят фото и обходы: там, где фото показываются, — /checklist,
+# /equipment (карточка станка), /cases и /events (фото у обращений и
+# заявок с обхода; механику и электрику — по своим обращениям)
+VIEW_ROLES = ROUND_ROLES + ("mechanic", "electrician")
+
+
+def round_user(user: dict = Depends(current_user)):
+    if user["role"] != "admin" and user["role"] not in ROUND_ROLES:
+        raise HTTPException(status_code=403, detail="Обход смены проводят мастер и главные специалисты.")
+    return user
+
+
+def viewer(user: dict = Depends(current_user)):
+    if user["role"] != "admin" and user["role"] not in VIEW_ROLES:
+        raise HTTPException(status_code=403, detail="Фото обходов вам недоступны.")
+    return user
+
+
 def _db():
     conn = sqlite3.connect(DB_NAME, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -102,7 +130,7 @@ def _process(raw: bytes, ext: str):
 async def upload_checklist_photo(
     file: UploadFile = File(...),
     equipment_id: int = Form(...),
-    user: dict = Depends(current_user),
+    user: dict = Depends(round_user),
 ):
     # читаем кусками — чтобы 200-мегабайтный файл не лёг в память целиком
     raw = bytearray()
@@ -178,7 +206,7 @@ async def upload_checklist_photo(
 
 # ── отдача ────────────────────────────────────────────────
 @router.get("/photo/{photo_id}")
-def get_checklist_photo(photo_id: int, user: dict = Depends(current_user)):
+def get_checklist_photo(photo_id: int, user: dict = Depends(viewer)):
     conn = _db()
     row = conn.execute(
         "SELECT rel_path, mime FROM checklist_photos WHERE id = ?", (photo_id,)
@@ -205,7 +233,7 @@ def get_checklist_photo(photo_id: int, user: dict = Depends(current_user)):
 def photos_by_equipment(
     equipment_id: int,
     limit: int = 12,
-    user: dict = Depends(current_user),
+    user: dict = Depends(viewer),
 ):
     """
     Снимки с обходов по одной единице оборудования, свежие первыми.
@@ -230,7 +258,7 @@ def photos_by_equipment(
 
 # ── удаление до отправки обхода ───────────────────────────
 @router.delete("/photo/{photo_id}")
-def delete_checklist_photo(photo_id: int, user: dict = Depends(current_user)):
+def delete_checklist_photo(photo_id: int, user: dict = Depends(round_user)):
     conn = _db()
     try:
         row = conn.execute(
@@ -264,7 +292,7 @@ def delete_checklist_photo(photo_id: int, user: dict = Depends(current_user)):
 
 # ── сохранение обхода ─────────────────────────────────────
 @router.post("/round")
-def save_round(request: dict, user: dict = Depends(current_user)):
+def save_round(request: dict, user: dict = Depends(round_user)):
     items = request.get("items") or []
     if not items:
         raise HTTPException(status_code=400, detail="Пустой обход")
@@ -361,7 +389,7 @@ def save_round(request: dict, user: dict = Depends(current_user)):
 
 # ── привязка пункта обхода к обращению ────────────────────
 @router.post("/link-case")
-def link_case(request: dict, user: dict = Depends(current_user)):
+def link_case(request: dict, user: dict = Depends(round_user)):
     """
     Фронт создаёт обращение через /diagnose и возвращает сюда его id.
     Тогда фото с обхода видны прямо в карточке обращения.
@@ -392,7 +420,7 @@ def link_case(request: dict, user: dict = Depends(current_user)):
 
 # ── фото по обращению (для карточки на /cases) ────────────
 @router.get("/photos-by-case")
-def photos_by_case(case_ids: str, user: dict = Depends(current_user)):
+def photos_by_case(case_ids: str, user: dict = Depends(viewer)):
     """
     case_ids — id через запятую. Одним запросом на всю страницу,
     чтобы не дёргать сервер по разу на каждое обращение.
@@ -418,7 +446,7 @@ def photos_by_case(case_ids: str, user: dict = Depends(current_user)):
 
 # ── история обходов ───────────────────────────────────────
 @router.get("/rounds")
-def list_rounds(limit: int = 50, user: dict = Depends(current_user)):
+def list_rounds(limit: int = 50, user: dict = Depends(viewer)):
     conn = _db()
     rows = conn.execute(
         """SELECT r.*, (SELECT COUNT(*) FROM checklist_photos p WHERE p.round_id = r.id) AS photo_count
@@ -430,7 +458,7 @@ def list_rounds(limit: int = 50, user: dict = Depends(current_user)):
 
 
 @router.get("/rounds/{round_id}")
-def get_round(round_id: int, user: dict = Depends(current_user)):
+def get_round(round_id: int, user: dict = Depends(viewer)):
     conn = _db()
     head = conn.execute("SELECT * FROM checklist_rounds WHERE id = ?", (round_id,)).fetchone()
     if not head:
