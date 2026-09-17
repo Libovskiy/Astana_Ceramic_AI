@@ -62,6 +62,11 @@
   padding: 4px; border-radius: 4px; transition: color .15s;
 }
 .theme-btn:hover { color: var(--text); }
+.theme-btn-top {
+  width: 36px; height: 36px; margin-right: 8px; font-size: 16px;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface-2);
+}
 
 html, body {
   font-family: var(--sans);

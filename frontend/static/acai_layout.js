@@ -455,6 +455,16 @@ async function initBell() {
 
   topbar.insertBefore(wrap, topbar.firstChild);
 
+  // Кнопка темы в шапке рядом с колокольчиком: в меню она внизу, и на
+  // обычном экране до неё надо докручивать список разделов — её не находили.
+  const theme = document.createElement('button');
+  theme.type = 'button';
+  theme.className = 'theme-btn theme-btn-top';
+  theme.title = 'Светлая / тёмная тема';
+  theme.textContent = themeIcon();
+  theme.addEventListener('click', () => toggleTheme());
+  wrap.insertBefore(theme, wrap.firstChild);
+
   const button = wrap.querySelector('#bellBtn');
   const panel  = wrap.querySelector('#bellPanel');
 
