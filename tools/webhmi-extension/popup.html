@@ -3,18 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 220px; padding: 12px; font-family: Arial, sans-serif; font-size: 13px; }
+    body { width: 240px; padding: 12px; font-family: Arial, sans-serif; font-size: 13px; }
     h3 { margin: 0 0 8px; font-size: 14px; }
-    .status { padding: 6px 10px; border-radius: 6px; background: #e8f5e9; color: #2e7d32; }
+    .status { padding: 6px 10px; border-radius: 6px; background: #eee; color: #444; }
+    .ok  { background: #e8f5e9; color: #2e7d32; }
+    .bad { background: #fdecea; color: #c62828; }
     .note { color: #666; font-size: 11px; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h3>⚙️ ACAI Collector</h3>
-  <div class="status">✓ Работает</div>
-  <div class="note">
-    Данные отправляются каждые 30 сек<br>
-    пока открыта вкладка WebHMI.
+  <h3>⚙️ ACAI Collector v5</h3>
+  <div class="status" id="status">Проверяю…</div>
+  <div class="note" id="note">
+    Показания идут, пока открыта вкладка WebHMI (192.168.1.74) и выполнен вход в панель.
   </div>
+  <script src="popup.js"></script>
 </body>
 </html>

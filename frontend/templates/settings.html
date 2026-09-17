@@ -103,7 +103,7 @@ async function load(){
     const s=await ACAI.get('/api/sensors/latest');
     const keys=Object.keys(s);
     if(keys.length>0){
-      const ts=Object.values(s)[0].recorded_at;
+      const ts=Object.values(s).map(x=>String(x.recorded_at)).sort().pop();
       const sec=Math.floor((Date.now()-new Date(String(ts).replace(' ','T')).getTime())/1000);
       if(sec<120){document.getElementById('collectorStatus').textContent=`Данные ${sec}с назад`;document.getElementById('collectorBadge').className='badge ok';document.getElementById('collectorBadge').textContent='Активен';}
       else{document.getElementById('collectorStatus').textContent=`Нет данных ${Math.floor(sec/60)}м`;document.getElementById('collectorBadge').className='badge warn';document.getElementById('collectorBadge').textContent='Нет данных';}

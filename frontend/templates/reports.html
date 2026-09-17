@@ -182,14 +182,29 @@ async function showReport(type) {
     `);
   } else if (type==='sensors') {
     const r = await ACAI.get('/api/sensors/latest');
-    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария','моточасы_общие':'Моточасы',
+      'питатель_1_гц':'Питатель №1','питатель_2_гц':'Питатель №2','конвейер_1_гц':'Конвейер №1','конвейер_2_гц':'Конвейер №2','конвейер_3_гц':'Конвейер №3','конвейер_4_гц':'Конвейер №4','конвейер_5_гц':'Конвейер №5','конвейер_6_гц':'Конвейер №6','конвейер_7_гц':'Конвейер №7'};
+    // Только то, что панель сейчас отдаёт: старые регистры (сторона_1,
+    // конвейер_глины) остались в истории с 10.09 и выглядели бы как текущие.
+    const rows = Object.entries(r).filter(([k])=>LABELS[k]);
+    const fmtVal = (k,v) => {
+      if (k==='моточасы_общие') return v.value;
+      if (k==='авария_флаг') return v.value==='0' ? 'нет' : 'ЕСТЬ';
+      const n = parseFloat(v.value);
+      if (!isFinite(n)) return v.value;
+      return n.toFixed(1) + (k.includes('проц') ? '%' : k.includes('гц') ? ' Гц' : '');
+    };
+    const fmtAt = v => {
+      const d = new Date(String(v.recorded_at).replace(' ','T'));
+      return isNaN(d) ? '' : d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    };
     ACAI.showModal(`
       <h3>Показатели WebHMI</h3>
       <div>
-        ${Object.entries(r).map(([k,v])=>`
+        ${rows.map(([k,v])=>`
           <div class="stat-row">
-            <span class="stat-label">${LABELS[k]||k}</span>
-            <span class="stat-val">${parseFloat(v.value).toFixed(1)}${k.includes('проц')?'%':k.includes('гц')?' Гц':''}</span>
+            <span class="stat-label">${LABELS[k]}${k.includes('гц')?' (Гц)':''}</span>
+            <span class="stat-val">${fmtVal(k,v)} <span style="font-size:11px;color:var(--text-dim);font-weight:400">${fmtAt(v)}</span></span>
           </div>`).join('') || '<div class="empty">Нет данных — откройте вкладку WebHMI</div>'}
       </div>
       <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>

@@ -225,6 +225,11 @@ def get_notifications(user):
     except Exception as error:
         print(f"[notification_service] Бэкап пропущен: {error}")
 
+    try:
+        notifications.extend(_sensor_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] Датчики пропущены: {error}")
+
     # Сортируем ещё раз после добавления задач, ТО и бэкапа — раньше
     # сортировка шла до них, и просроченная задача оказывалась ниже
     # рядового напоминания.
@@ -561,3 +566,55 @@ def _task_notifications(user):
             })
 
     return out
+
+
+# =========================================================
+# СБОР ПОКАЗАНИЙ ОСТАНОВИЛСЯ
+# =========================================================
+
+SENSOR_ALERT_ROLES = ("admin", "chief_engineer", "chief_electrician")
+
+
+def _sensor_notifications(user):
+    """
+    Сбор показаний держится на вкладке WebHMI в браузере сервера. Её
+    закрывают, Chrome её усыпляет, панель разлогинивается — и история
+    молча пустеет: 17.09 с 9:36 до 10:59 не записалось ничего. Жёлтую
+    плашку на главной видно, только если туда зайти.
+    """
+    from datetime import datetime
+
+    from sqlalchemy import func
+
+    from backend import models
+    from backend.config import is_owner
+    from backend.database import SessionLocal
+    from backend.services.sensor_recorder import STALE_ALERT_MIN
+
+    if user.get("role") not in SENSOR_ALERT_ROLES and not is_owner(user):
+        return []
+
+    db = SessionLocal()
+    try:
+        last = db.query(func.max(models.SensorReading.recorded_at)).scalar()
+    finally:
+        db.close()
+
+    if last is None:
+        return []
+
+    minutes = int((datetime.now() - last).total_seconds() // 60)
+
+    if minutes < STALE_ALERT_MIN:
+        return []
+
+    when = f"{minutes // 60} ч {minutes % 60} мин" if minutes >= 60 else f"{minutes} мин"
+
+    return [{
+        "type": "sensors_stale",
+        "severity": "critical" if minutes >= 60 else "warning",
+        "icon": "📡",
+        "title": f"Показания датчиков не пишутся {when}",
+        "subtitle": "Откройте вкладку WebHMI на сервере и войдите в панель",
+        "url": "/settings",
+    }]

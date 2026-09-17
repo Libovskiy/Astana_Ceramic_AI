@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from backend.database import get_db
 from backend import models
 from backend.services.auth_service import get_user_by_session
+from backend.services import sensor_recorder
 
 router = APIRouter(prefix="/api/sensors", tags=["sensors"])
 
@@ -54,6 +55,9 @@ def require_sensor_key(x_sensor_key: Optional[str] = Header(None)):
 # При перезапуске сервера сбрасывается — это нормально.
 _live_cache: dict = {}  # {sensor_name: {value, updated_at}}
 
+# В базу из этого кэша пишет сервер сам, раз в 30 секунд.
+sensor_recorder.start(_live_cache)
+
 
 def current_user(session_token: Optional[str] = Cookie(None)):
     user = get_user_by_session(session_token)
@@ -85,13 +89,17 @@ def live_push(payload: PushPayload, _ok: bool = Depends(require_sensor_key)):
     ts = datetime.now().isoformat()   # время местное, не UTC
     for name, value in payload.readings.items():
         _live_cache[str(name)] = {"value": str(value), "updated_at": ts}
+    # Панель присылает только изменившиеся регистры, поэтому набор
+    # бывает пустым. Всё равно отмечаем, что панель на связи, иначе
+    # при ровной работе линии сбор выглядел бы остановленным.
+    _live_cache.setdefault("_heartbeat", {"value": "", "updated_at": ts})["updated_at"] = ts
     return {"ok": True}
 
 
 @router.get("/live")
 def live_get(user: dict = Depends(current_user)):
     """Возвращает последние живые значения из кэша."""
-    return _live_cache
+    return {k: v for k, v in _live_cache.items() if not k.startswith("_")}
 
 
 # ── Исторические данные (пишутся в БД каждые 30 сек) ─────
@@ -99,18 +107,24 @@ def live_get(user: dict = Depends(current_user)):
 @router.post("/push")
 def push_readings(payload: PushPayload, db: Session = Depends(get_db),
                   _ok: bool = Depends(require_sensor_key)):
-    """Принимает данные от Chrome-расширения и пишет в БД."""
+    """
+    Старый путь записи — от расширения версии до 5. Показания идут
+    через ту же проверку, что и серверная запись (sensor_recorder),
+    поэтому дублей нет.
+    """
     if not payload.readings:
         return {"ok": True, "saved": 0}
-    ts = datetime.now()   # время местное, не UTC
-    count = 0
-    for name, value in payload.readings.items():
-        db.add(models.SensorReading(
-            sensor_name=str(name), value=str(value), recorded_at=ts,
-        ))
-        count += 1
-    db.commit()
-    return {"ok": True, "saved": count}
+    return {"ok": True, "saved": sensor_recorder.save_due(payload.readings)}
+
+
+@router.get("/status")
+def collector_status(user: dict = Depends(current_user)):
+    """Идёт ли сбор: когда были живые данные и последняя запись в базу."""
+    age = sensor_recorder.live_age_seconds(_live_cache)
+    return {
+        "live_age_seconds": None if age is None else round(age),
+        "online": age is not None and age <= sensor_recorder.LIVE_FRESH_SEC,
+    }
 
 
 @router.get("/latest")
@@ -147,7 +161,7 @@ def sensor_history(
             models.SensorReading.recorded_at >= since,
         )
         .order_by(models.SensorReading.recorded_at.desc())
-        .limit(1000)
+        .limit(6000)   # сутки по 30 сек — 2880; с запасом на старое расширение
         .all()
     )
 
