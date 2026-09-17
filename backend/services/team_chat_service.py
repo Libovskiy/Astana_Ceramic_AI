@@ -841,6 +841,20 @@ def delete_message(message_id: int, me_id: int) -> None:
         )
         conn.commit()
 
+        # Удалённое вложение никому не показывается (get_attachment его не
+        # отдаёт), значит и на диске ему лежать незачем: голосовые и видео
+        # занимают место, а человек нажал «удалить» именно чтобы убрать.
+        for att in conn.execute(
+            "SELECT stored_path, preview_path FROM team_attachments WHERE message_id = ?",
+            (message_id,)
+        ).fetchall():
+            for relative in (att["stored_path"], att["preview_path"]):
+                if relative:
+                    try:
+                        (ATTACHMENTS_DIR / relative).unlink(missing_ok=True)
+                    except OSError as error:
+                        print(f"[team_chat] не удалён файл {relative}: {error}")
+
     finally:
         conn.close()
 

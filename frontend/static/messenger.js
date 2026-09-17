@@ -466,14 +466,19 @@ function uploadFile(file, caption) {
 }
 
 async function removeMessage(id) {
-  if (!confirm('Удалить сообщение? Собеседник увидит пометку «сообщение удалено».')) return;
+  if (!confirm('Удалить сообщение? Собеседник увидит пометку «сообщение удалено», файл или голосовое удалятся.')) return;
   try {
     const r = await fetch(`/api/messenger/messages/${id}`, { method: 'DELETE', credentials: 'include' });
     if (!r.ok) throw new Error();
     const row = document.querySelector(`.mg-row[data-id="${id}"] .mg-bubble`);
     if (row) {
+      // У голосового и фото без подписи текста нет — раньше здесь
+      // падало, и человек видел «Не удалось удалить», хотя сервер удалил.
+      row.querySelector('audio, video')?.pause();
+      row.querySelectorAll('.mg-audio, .mg-photo, .mg-video, .mg-file, .mg-text').forEach(el => el.remove());
+      row.classList.remove('has-media');
       row.classList.add('deleted');
-      row.querySelector('.mg-text').textContent = 'сообщение удалено';
+      row.insertAdjacentHTML('afterbegin', '<div class="mg-text">сообщение удалено</div>');
       row.querySelector('.mg-del')?.remove();
     }
     loadList(true);
