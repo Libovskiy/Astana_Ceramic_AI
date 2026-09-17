@@ -29,6 +29,11 @@ let lastMessageCount = 0;
 
 const POLL_MS = 12000;
 
+const QUICK_PROBLEMS = [
+    "Не запускается", "Остановился сам", "Сильный шум", "Вибрация",
+    "Перегрев", "Утечка масла", "Ошибка на панели", "Плохое качество продукции"
+];
+
 const STATUS_COLORS = {
     "Открыто": "#3b5bfd",
     "Требует специалиста": "#dc2626",
@@ -150,6 +155,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     bindEvents();
 
+    renderQuickProblems();
+
     await loadEquipment();
     await loadConversations();
 
@@ -262,6 +269,31 @@ async function loadEquipment() {
 }
 
 
+function renderQuickProblems() {
+
+    const box = document.getElementById("chatQuickProblems");
+
+    if (!box) return;
+
+    box.innerHTML = QUICK_PROBLEMS.map(text =>
+        `<button type="button" class="chat-quick-problem">${escapeHtml(text)}</button>`
+    ).join("");
+
+    box.querySelectorAll(".chat-quick-problem").forEach(button => {
+        button.addEventListener("click", function () {
+            const area = document.getElementById("chatNewText");
+            const picked = button.textContent;
+            area.value = picked === "Ошибка на панели" ? "Ошибка на панели, код: " : picked;
+            box.querySelectorAll(".chat-quick-problem").forEach(b =>
+                b.classList.toggle("chat-quick-problem-active", b === button));
+            area.focus();
+            area.setSelectionRange(area.value.length, area.value.length);
+        });
+    });
+
+}
+
+
 /* =========================================================
    СПИСОК ОБРАЩЕНИЙ
    ========================================================= */
@@ -363,6 +395,8 @@ function openNewForm() {
     document.getElementById("chatTitle").textContent = "Новое обращение";
     document.getElementById("chatNewError").textContent = "";
     document.getElementById("chatNewText").value = "";
+    document.querySelectorAll(".chat-quick-problem-active").forEach(b =>
+        b.classList.remove("chat-quick-problem-active"));
     document.getElementById("chatResolve").style.display = "none";
 
     show("new");
@@ -502,6 +536,8 @@ async function loadThread() {
 
         renderActions(data.actions || {}, caseData);
 
+        renderQuickReplies(messages, caseData, data.role);
+
         renderStages(data.stage);
 
         // Сводку проверенного показываем специалистам и
@@ -561,18 +597,97 @@ function renderMessages(messages) {
 }
 
 
-async function sendMessage() {
+/*
+ * Быстрые ответы под шагом ACAI — как было в «Диагностике»:
+ * рабочий сделал, что сказали, и одним нажатием отвечает.
+ * «Не помогло» даёт следующий шаг, а не всё решение разом.
+ */
+function renderQuickReplies(messages, caseData, role) {
+
+    const box = document.getElementById("chatQuick");
+
+    if (!box) return;
+
+    const last = messages[messages.length - 1];
+
+    const show =
+        role === "worker"
+        && caseData.status === "Открыто"
+        && last && last.role === "assistant"
+        && !sending;
+
+    const confirmOpen = document.getElementById("chatConfirm").style.display === "flex";
+
+    if (!show || confirmOpen) {
+        hideQuickReplies();
+        return;
+    }
+
+    if (box.dataset.forMessage === String(last.id || messages.length)) return;
+
+    box.dataset.forMessage = String(last.id || messages.length);
+    box.style.display = "flex";
+
+    box.innerHTML = `
+        <button type="button" class="quick-yes">✓ Помогло</button>
+        <button type="button" class="quick-next">✕ Не помогло</button>
+        <button type="button" class="quick-call">🙋 Позвать мастера</button>
+    `;
+
+    box.querySelector(".quick-yes").addEventListener("click", async function () {
+        hideQuickReplies();
+        await resolveCase(true);
+    });
+
+    box.querySelector(".quick-next").addEventListener("click", function () {
+        hideQuickReplies();
+        sendMessage("Не помогло");
+    });
+
+    box.querySelector(".quick-call").addEventListener("click", async function () {
+        hideQuickReplies();
+        try {
+            const response = await fetch(`/api/conversation/${activeCaseId}/escalate`, { method: "POST" });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) alert(data.detail || "Не удалось позвать специалиста.");
+        } catch (error) {
+            alert("Нет связи с сервером.");
+        }
+        await loadThread();
+        loadConversations();
+    });
+
+}
+
+
+function hideQuickReplies() {
+
+    const box = document.getElementById("chatQuick");
+
+    if (!box) return;
+
+    box.style.display = "none";
+    box.innerHTML = "";
+    delete box.dataset.forMessage;
+
+}
+
+
+async function sendMessage(presetText) {
 
     if (sending || !activeCaseId) return;
 
     const input = document.getElementById("chatInput");
-    const text = input.value.trim();
+    const text = typeof presetText === "string" ? presetText : input.value.trim();
 
     if (!text) return;
 
     sending = true;
-    input.value = "";
-    input.style.height = "auto";
+
+    if (typeof presetText !== "string") {
+        input.value = "";
+        input.style.height = "auto";
+    }
 
     // Показываем своё сообщение сразу — на заводском Wi-Fi ответ
     // идёт секунды, и иначе кажется, что кнопка не сработала.
@@ -607,6 +722,8 @@ async function sendMessage() {
 
         renderMessages(data.messages || []);
 
+        hideQuickReplies();
+
         if (data.reply && data.reply.type === "confirm_resolution") {
             askResolutionConfirm();
         }
@@ -616,6 +733,12 @@ async function sendMessage() {
         }
 
         loadConversations();
+
+        // Статус мог смениться (передали специалисту) — перечитываем,
+        // заодно появятся быстрые ответы под новым шагом.
+        if (!(data.reply && data.reply.type === "confirm_resolution")) {
+            loadThread();
+        }
 
     } catch (error) {
         typing.textContent = "Нет связи. Сообщение не отправлено.";
@@ -690,6 +813,8 @@ function backToList() {
 
     const bar = document.getElementById("chatActions");
     if (bar) bar.style.display = "none";
+
+    hideQuickReplies();
 
     ["chatStages", "chatChecked", "chatConfirm"].forEach(function (id) {
         const element = document.getElementById(id);

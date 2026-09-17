@@ -34,6 +34,7 @@ from backend.services.conversation_service import (
     get_messages,
     post_message,
     resolve_by_worker,
+    escalate_by_worker,
     get_conversations,
     get_case_card,
     generate_reply,
@@ -203,6 +204,22 @@ def resolve(case_id: int, user: dict = Depends(current_user)):
     _check_access(case_id, user)
 
     result = resolve_by_worker(case_id, user)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+
+    return result
+
+
+@router.post("/api/conversation/{case_id}/escalate")
+def escalate(case_id: int, user: dict = Depends(current_user)):
+
+    _check_access(case_id, user)
+
+    if user["role"] != "worker":
+        raise HTTPException(status_code=403, detail="Позвать специалиста может заявитель.")
+
+    result = escalate_by_worker(case_id, user)
 
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("message"))

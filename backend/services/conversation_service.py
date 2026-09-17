@@ -39,6 +39,7 @@ from backend.services.vector_service import search_documents
 from backend.services.filter_service import filter_results
 from backend.services.knowledge_service import get_relevant_resolutions
 from backend.services.procedures_service import find_matching_procedure
+from backend.services.plc_error_service import find_by_code, split_solution_steps
 from backend.services.ai_service import (
     suggest_next_action,
     detect_resolution,
@@ -301,6 +302,37 @@ def generate_reply(case_id):
 
     tried = _tried_actions(messages)
 
+    # -----------------------------------------
+    # 0. Код ошибки PLC — следующий шаг решения из базы
+    # -----------------------------------------
+
+    plc_matches = [m for m in find_by_code(question) if (m.get("solution") or "").strip()]
+
+    if plc_matches:
+
+        match = plc_matches[0]
+
+        remaining = [
+            step for step in split_solution_steps(match["solution"])
+            if step not in tried
+        ]
+
+        if remaining:
+
+            set_step(case_id, current_step + 1)
+
+            add_message(case_id, "assistant", remaining[0], author="ACAI")
+
+            return {
+                "type": "answer",
+                "message": remaining[0],
+                "step": current_step + 1,
+                "explanation": {
+                    "confidence": "Высокая",
+                    "basis": [f"Код ошибки PLC {match['code']}: {match['title']} (линия «{match['line']}»)"]
+                }
+            }
+
     procedure = find_matching_procedure(case.get("equipment_id"), question)
 
     if procedure:
@@ -407,6 +439,9 @@ def generate_reply(case_id):
     }
 
 
+NOT_HELPED_PHRASES = {"не помогло", "не помогло, что дальше?", "не помогло, что дальше"}
+
+
 # =========================================================
 # ВХОД: СООБЩЕНИЕ ОТ ЧЕЛОВЕКА
 # =========================================================
@@ -453,7 +488,11 @@ def post_message(case_id, user, text):
     # Проверяем на ЛЮБОЙ стадии, включая переданное специалисту:
     # если механик пришёл и починил, рабочий напишет об этом здесь же.
 
-    if not is_specialist:
+    # «Не помогло» с быстрой кнопки — точно не «заработало», лишний
+    # запрос к ИИ только задержит следующий шаг.
+    not_helped = text.lower().rstrip(".!") in NOT_HELPED_PHRASES
+
+    if not is_specialist and not not_helped:
 
         messages = get_messages(case_id)
 
@@ -559,6 +598,29 @@ def resolve_by_worker(case_id, user):
     try_auto_end_downtime_for_case(case_id, ended_by=user.get("full_name") or user.get("username"))
 
     return {"success": True, "resolved": True, "messages": get_messages(case_id)}
+
+
+def escalate_by_worker(case_id, user):
+    """Кнопка «Позвать мастера»: рабочий не хочет перебирать шаги."""
+
+    case = get_case(case_id)
+
+    if case is None:
+        return {"success": False, "message": "Обращение не найдено."}
+
+    if case["status"] != STATUS_OPEN:
+        return {"success": False, "message": "Обращение уже у специалиста или закрыто."}
+
+    add_message(
+        case_id, "worker", "Нужен специалист.",
+        author=user.get("full_name") or user.get("username"),
+        author_role=user["role"]
+    )
+
+    reply = _escalate(case_id, case, get_messages(case_id),
+                      "рабочий попросил специалиста", "Хорошо.")
+
+    return {"success": True, "reply": reply, "messages": get_messages(case_id)}
 
 
 # =========================================================

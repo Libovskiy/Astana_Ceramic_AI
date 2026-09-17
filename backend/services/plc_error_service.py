@@ -324,3 +324,40 @@ def find_by_code(text: str):
         if match_key(row["code"]) in candidates:
             matches.append(dict(row))
     return matches
+
+
+_STEP_RE = re.compile(r"\s*(?<![\w.])(\d{1,2})\)\s+")
+
+
+def split_solution_steps(text: str):
+    """
+    Решение в базе записано одним абзацем: «Причина. 1) … 2) … 3) …
+    Если не помогло — …». Рабочему у станка нужен один шаг за раз:
+    сделал, ответил «не помогло», получил следующий. Весь абзац сразу
+    он не читает, а пролистывает.
+
+    Причина (текст до «1)») идёт в первый шаг, хвост после последнего
+    шага — в последний. Нумерации нет — возвращаем текст одним шагом.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    parts = _STEP_RE.split(text)
+    # parts = [вступление, "1", шаг1, "2", шаг2, ...]
+    if len(parts) < 3:
+        return [text]
+
+    intro = parts[0].strip()
+    steps = []
+    for i in range(1, len(parts) - 1, 2):
+        body = parts[i + 1].strip()
+        if body:
+            steps.append(f"Шаг {parts[i]}: {body}")
+
+    if not steps:
+        return [text]
+
+    if intro:
+        steps[0] = f"{intro}\n{steps[0]}"
+    return steps

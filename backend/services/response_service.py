@@ -2,7 +2,7 @@ from backend.services.instruction_service import extract_actions
 from backend.services.ai_service import suggest_next_action
 from backend.services.knowledge_service import get_relevant_resolutions
 from backend.services.procedures_service import find_matching_procedure
-from backend.services.plc_error_service import find_by_code
+from backend.services.plc_error_service import find_by_code, split_solution_steps
 
 
 def build_answer(
@@ -55,11 +55,15 @@ def build_answer(
 
         match = plc_matches[0]
 
+        # По одному шагу: следующий рабочий получит, нажав «Не помогло»
+        # (conversation_service.generate_reply продолжит с шага 2).
+        steps = split_solution_steps(match["solution"])
+
         return {
             "case_id": case_id,
             "machine": machine.capitalize(),
-            "recommendation": match["solution"],
-            "actions": [{"text": match["solution"]}],
+            "recommendation": steps[0],
+            "actions": [{"text": step} for step in steps],
             "explanation": {
                 "confidence": "Высокая",
                 "basis": [f"Код ошибки PLC {match['code']}: {match['title']} (линия «{match['line']}»)"]

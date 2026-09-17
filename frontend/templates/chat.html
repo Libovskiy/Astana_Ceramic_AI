@@ -8,7 +8,7 @@
     <!-- Обращения — отдельная светлая страница со своими стилями, без
          общего acai.css: тёмная тема здесь делала переписку тусклой и
          хуже читаемой на телефоне в цеху. -->
-    <link rel="stylesheet" href="/static/chat.css?v=40">
+    <link rel="stylesheet" href="/static/chat.css?v=41">
 </head>
 <body>
 
@@ -80,6 +80,9 @@
         <!-- "Станок работает?" — закрывает человек, не ИИ -->
         <div class="chat-confirm" id="chatConfirm" style="display:none;"></div>
 
+        <!-- Быстрые ответы на шаг ACAI: помогло / следующий шаг / мастер -->
+        <div class="chat-quick" id="chatQuick" style="display:none;"></div>
+
         <div class="chat-composer" id="chatComposer">
             <textarea
                 id="chatInput"
@@ -103,6 +106,9 @@
 
         <div class="chat-new-step">
             <div class="chat-new-label">Что случилось?</div>
+            <!-- Быстрый выбор: рабочему в перчатках проще нажать, чем
+                 печатать. Нажатие подставляет текст, его можно дописать. -->
+            <div id="chatQuickProblems" class="chat-quick-problems"></div>
             <textarea
                 id="chatNewText"
                 rows="3"
@@ -119,7 +125,7 @@
 </div>
 
 <script src="/static/notify.js?v=31"></script>
-<script src="/static/chat.js?v=32"></script>
+<script src="/static/chat.js?v=33"></script>
 
 </body>
 </html>
