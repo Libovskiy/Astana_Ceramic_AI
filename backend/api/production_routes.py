@@ -1,0 +1,425 @@
+"""
+Производство: план, учёт выпуска, расчёт состава смеси.
+
+Вынесено из main.py без изменений поведения.
+"""
+
+from fastapi import APIRouter
+from backend.services.ai_service import suggest_mix_proportion
+from backend.services.audit_service import log_action
+from backend.services.mix_service import (
+    create_mix_entry,
+    find_similar_batches,
+    get_mix_entries,
+    update_outcome,
+)
+from backend.services.production_log_service import (
+    BRICK_TYPES,
+    check_plan_anomaly,
+    get_monthly_plans,
+    get_shift_chart_data,
+    get_shift_history,
+    get_today_production,
+    log_shift_production,
+    set_monthly_plan,
+)
+from fastapi import Depends
+from pydantic import BaseModel
+
+from backend.api.common import (
+    DASHBOARD_ALLOWED_ROLES,
+    get_current_user,
+    require_roles,
+)
+
+router = APIRouter()
+
+class MixCalculationRequest(BaseModel):
+
+    batch_weight_kg: float
+
+    clay_percent: float
+
+    note: str | None = None
+
+    shift: str | None = None
+
+    clay_source: str | None = None
+
+    clay_batch_number: str | None = None
+
+    clay_moisture_before: float | None = None
+
+    clay_moisture_after: float | None = None
+
+    sand_source: str | None = None
+
+    sand_batch_number: str | None = None
+
+    sand_moisture: float | None = None
+
+
+class SimilarBatchesRequest(BaseModel):
+
+    clay_source: str
+
+    sand_source: str
+
+
+class MixSuggestRequest(BaseModel):
+
+    note: str | None = None
+
+
+class MixOutcomeRequest(BaseModel):
+
+    outcome: str
+
+
+class ProductionPlanRequest(BaseModel):
+
+    brick_type: str
+
+    monthly_target: int
+
+    confirmed: bool = False
+
+
+class ProductionLogRequest(BaseModel):
+
+    log_date: str
+
+    shift: str
+
+    brick_type: str
+
+    pallets: int
+
+
+# =========================================
+# MIX LOG (технолог — расчёт глина/песок)
+# =========================================
+
+MIX_WRITE_ROLES = ("technologist", "lab_technician")
+MIX_READ_ROLES = (
+    "technologist", "lab_technician", "director", "chief_engineer",
+    "analyst"
+)
+
+
+@router.post("/api/mix")
+def create_mix_entry_route(
+    request: MixCalculationRequest,
+    user: dict = Depends(require_roles(*MIX_WRITE_ROLES))
+):
+
+    try:
+
+        entry = create_mix_entry(
+            created_by=user["full_name"] or user["username"],
+            batch_weight_kg=request.batch_weight_kg,
+            clay_percent=request.clay_percent,
+            note=request.note,
+            shift=request.shift,
+            clay_source=request.clay_source,
+            clay_batch_number=request.clay_batch_number,
+            clay_moisture_before=request.clay_moisture_before,
+            clay_moisture_after=request.clay_moisture_after,
+            sand_source=request.sand_source,
+            sand_batch_number=request.sand_batch_number,
+            sand_moisture=request.sand_moisture
+        )
+
+    except ValueError as error:
+
+        return {
+            "success": False,
+            "message": str(error)
+        }
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="mix_entry_created",
+        target=f"mix:{entry['id']}",
+        details=f"{request.batch_weight_kg}кг, глина {request.clay_percent}%"
+    )
+
+    return {
+        "success": True,
+        "entry": entry
+    }
+
+
+@router.get("/api/mix")
+def get_mix_entries_route(
+    user: dict = Depends(require_roles(*MIX_READ_ROLES))
+):
+
+    return {
+        "success": True,
+        "entries": get_mix_entries()
+    }
+
+
+@router.post("/api/mix/suggest")
+def suggest_mix_route(
+    request: MixSuggestRequest,
+    user: dict = Depends(require_roles(*MIX_WRITE_ROLES))
+):
+    """
+    ИИ-подсказка процента глины по заметке + истории замесов с
+    результатами. Реализация принципа "ИИ предлагает, а не просто
+    записывает" применительно к модулю технолога.
+    """
+
+    history = get_mix_entries(limit=20)
+
+    suggested_percent = suggest_mix_proportion(
+        note=request.note,
+        history=history
+    )
+
+    if suggested_percent is None:
+        return {
+            "success": False,
+            "message": (
+                "ИИ не может дать рекомендацию — либо не настроен ключ "
+                "OpenAI, либо пока недостаточно данных в истории. "
+                "Решите пропорцию самостоятельно."
+            )
+        }
+
+    return {
+        "success": True,
+        "suggested_clay_percent": suggested_percent
+    }
+
+
+@router.post("/api/mix/{entry_id}/outcome")
+def update_mix_outcome_route(
+    entry_id: int,
+    request: MixOutcomeRequest,
+    user: dict = Depends(require_roles(*MIX_WRITE_ROLES))
+):
+
+    updated = update_outcome(entry_id, request.outcome)
+
+    if not updated:
+        return {
+            "success": False,
+            "message": "Запись не найдена."
+        }
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="mix_outcome_set",
+        target=f"mix:{entry_id}",
+        details=request.outcome
+    )
+
+    return {
+        "success": True
+    }
+
+
+@router.post("/api/mix/similar")
+def find_similar_batches_route(
+    request: SimilarBatchesRequest,
+    user: dict = Depends(require_roles(*MIX_WRITE_ROLES))
+):
+    """
+    "Похожие партии" — по точному совпадению источника глины и
+    источника песка. Возвращает историю + честную статистику
+    (без "делай X" от ИИ, только "было раньше так").
+    """
+
+    result = find_similar_batches(
+        clay_source=request.clay_source,
+        sand_source=request.sand_source
+    )
+
+    return {
+        "success": True,
+        "entries": result["entries"],
+        "stats": result["stats"]
+    }
+
+
+# =========================================
+# PRODUCTION LOG (учёт выпуска по поддонам)
+# =========================================
+# Кто вводит поддоны: начальник смены и выше (гл. инженер,
+# директор, админ) — как согласовано с пользователем.
+# Кто меняет месячный план: гл. инженер/директор/админ — начальник
+# смены плана не задаёт, только отчитывается по факту.
+
+PRODUCTION_LOG_ROLES = ("shift_supervisor", "chief_engineer", "director", "admin")
+PRODUCTION_PLAN_ROLES = ("chief_engineer", "director", "admin")
+
+
+@router.get("/api/production/meta")
+def production_meta(user: dict = Depends(get_current_user)):
+    """
+    Что этой должности доступно на странице «Производство».
+
+    Раньше страница показывала всем всё подряд и ловила отказы:
+    рабочий видел «Не удалось загрузить историю» — как будто система
+    сломалась, хотя ему просто не положено. Теперь она спрашивает
+    заранее и не рисует то, чем человек всё равно не воспользуется.
+
+    Списки ролей берутся отсюда же, из одного места с проверками —
+    чтобы не разъехались, как это уже было с меню и страницами.
+    """
+
+    role = user["role"]
+    is_admin = role == "admin"
+
+    return {
+        "success": True,
+        "role": role,
+        "can_read_plan": is_admin or role in DASHBOARD_ALLOWED_ROLES,
+        "can_edit_plan": is_admin or role in PRODUCTION_PLAN_ROLES,
+        "can_log_output": is_admin or role in PRODUCTION_LOG_ROLES,
+    }
+
+
+
+@router.get("/api/production/plan")
+def get_production_plan_route(
+    user: dict = Depends(require_roles(*DASHBOARD_ALLOWED_ROLES))
+):
+
+    return {
+        "success": True,
+        "plans": get_monthly_plans(),
+        "brick_types": list(BRICK_TYPES.keys())
+    }
+
+
+@router.post("/api/production/plan")
+def set_production_plan_route(
+    request: ProductionPlanRequest,
+    user: dict = Depends(require_roles(*PRODUCTION_PLAN_ROLES))
+):
+
+    anomaly = check_plan_anomaly(request.brick_type, request.monthly_target)
+
+    # Не блокируем жёстко — пользователь может действительно менять
+    # план так резко. Но при подозрительном отклонении требуем явное
+    # подтверждение (confirmed=true), а не сохраняем молча.
+    if anomaly["severity"] != "ok" and not request.confirmed:
+
+        return {
+            "success": False,
+            "needs_confirmation": True,
+            "anomaly": anomaly
+        }
+
+    try:
+
+        set_monthly_plan(
+            request.brick_type,
+            request.monthly_target,
+            updated_by=user["full_name"] or user["username"]
+        )
+
+    except ValueError as error:
+
+        return {
+            "success": False,
+            "message": str(error)
+        }
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="production_plan_updated",
+        target=request.brick_type,
+        details=f"{request.monthly_target} шт/мес" + (
+            f" (подтверждено при отклонении {anomaly['change_percent']:+d}%)"
+            if anomaly["severity"] != "ok"
+            else ""
+        )
+    )
+
+    return {
+        "success": True,
+        "plans": get_monthly_plans()
+    }
+
+
+@router.post("/api/production/log")
+def log_production_route(
+    request: ProductionLogRequest,
+    user: dict = Depends(require_roles(*PRODUCTION_LOG_ROLES))
+):
+
+    try:
+
+        pieces = log_shift_production(
+            log_date=request.log_date,
+            shift=request.shift,
+            brick_type=request.brick_type,
+            pallets=request.pallets,
+            entered_by=user["full_name"] or user["username"]
+        )
+
+    except ValueError as error:
+
+        return {
+            "success": False,
+            "message": str(error)
+        }
+
+    log_action(
+        username=user["username"],
+        role=user["role"],
+        action="production_logged",
+        target=f"{request.shift}:{request.brick_type}",
+        details=f"{request.pallets} поддонов = {pieces} шт"
+    )
+
+    return {
+        "success": True,
+        "pieces": pieces,
+        "today": get_today_production()
+    }
+
+
+@router.get("/api/production/today")
+def get_production_today_route(
+    user: dict = Depends(require_roles(*DASHBOARD_ALLOWED_ROLES))
+):
+
+    return {
+        "success": True,
+        **get_today_production()
+    }
+
+
+@router.get("/api/production/history")
+def get_production_history_route(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user: dict = Depends(require_roles(*DASHBOARD_ALLOWED_ROLES))
+):
+
+    return {
+        "success": True,
+        **get_shift_history(date_from=date_from, date_to=date_to)
+    }
+
+
+@router.get("/api/production/shift-chart")
+def get_production_shift_chart_route(
+    log_date: str,
+    shift: str,
+    user: dict = Depends(require_roles(*DASHBOARD_ALLOWED_ROLES))
+):
+
+    return {
+        "success": True,
+        **get_shift_chart_data(log_date=log_date, shift=shift)
+    }
