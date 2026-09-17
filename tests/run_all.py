@@ -23,6 +23,7 @@ ORDER = [
     "test_files.py",
     "test_routes_unique.py",
     "test_restore.py",
+    "test_layout_init.py",
 ]
 
 failed = []
