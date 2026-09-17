@@ -417,14 +417,11 @@ def chat(
 
     if not answer_data["recommendation"]:
 
-        from backend.services.case_service import escalate_case
+        from backend.services.conversation_service import escalate_unknown
 
-        escalate_case(result["case_id"])
-
-        message = (
-            "ACAI не нашёл подходящего решения. "
-            "Требуется более опытный специалист."
-        )
+        lead = answer_data.get("unknown") or "Не могу предложить надёжное решение по этой неисправности."
+        reply = escalate_unknown(result["case_id"], request.message, lead, user)
+        message = (reply or {}).get("message") or lead
 
         return {
             "case_id": result["case_id"],
@@ -595,14 +592,13 @@ def diagnose(
 
     if not answer_data["recommendation"]:
 
-        from backend.services.case_service import escalate_case
+        from backend.services.conversation_service import escalate_unknown
 
-        escalate_case(result["case_id"])
-
-        message = (
-            "ACAI не нашёл подходящего решения. "
-            "Требуется более опытный специалист."
-        )
+        # Честно: «по этому станку нет руководства — зову специалиста»,
+        # а не общий совет. Жалоба и причина остаются в переписке.
+        lead = answer_data.get("unknown") or "Не могу предложить надёжное решение по этой неисправности."
+        reply = escalate_unknown(result["case_id"], request.question, lead, user)
+        message = (reply or {}).get("message") or lead
 
         return {
             "success": True,

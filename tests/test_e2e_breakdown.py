@@ -148,4 +148,30 @@ expected = split_solution_steps(find_by_code(second_code)[0]["solution"])[1]
 got = (r.json().get("reply") or {}).get("message") if r.status_code == 200 else None
 check("C: «Не помогло» → шаг 2 по последней названной ошибке, не по старой", got == expected, f"{got!r} ≠ {expected!r}")
 
+print("\nD. Станок без руководства — честное «не знаю», а не общие советы")
+
+# В песочнице база знаний пустая: руководства нет ни у одного станка
+worker_d = sb.user("worker", equipment=[sb.equipment_id])
+open_cases = sb.db().execute("SELECT id FROM cases WHERE equipment_id = ? AND status != 'Закрыто'", (sb.equipment_id,)).fetchall()
+conn = sb.db()
+for row in open_cases:   # новое обращение, а не дописка в B/A
+    conn.execute("UPDATE cases SET status = 'Закрыто' WHERE id = ?", (row["id"],))
+conn.commit()
+conn.close()
+
+r = worker_d.post("/diagnose", json={"equipment_id": sb.equipment_id, "question": "сильно гудит и греется"})
+data = r.json() if r.status_code == 200 else {}
+case_d = data.get("case_id")
+check("D: обращение создано и сразу передано специалисту",
+      data.get("escalated") is True and case_d and case_row(case_d)["status"] == "Требует специалиста", r.text[:300])
+check("D: рабочему сказано прямо: руководства нет, гадать не буду",
+      "нет руководства" in (data.get("recommendation") or "") and "гадать не буду" in (data.get("recommendation") or ""),
+      data.get("recommendation"))
+msgs = messages(worker_d, case_d)
+check("D: в переписке видна жалоба рабочего", any(m["role"] == "worker" and "гудит" in m["message"] for m in msgs), msgs)
+check("D: и честная причина передачи", any(m["role"] == "system" and "нет руководства" in m["message"] for m in msgs), msgs)
+check("D: ни одного «совета» от ИИ", not any(m["role"] == "assistant" for m in msgs), msgs)
+check("D: обращение в очереди механика",
+      case_d in [i.get("id") or i.get("case_id") for i in mechanic.get("/api/work-queue").json().get("queue", [])])
+
 finish("Сквозной сценарий поломки")

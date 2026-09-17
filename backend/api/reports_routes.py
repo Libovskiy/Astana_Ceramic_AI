@@ -61,6 +61,7 @@ def reports_summary(
     from backend.services.analytics_service import (
         get_maintenance_summary,
         get_checklist_summary,
+        get_data_sources,
     )
 
     return {
@@ -71,6 +72,8 @@ def reports_summary(
         "biggest_loss": biggest_loss,
         "maintenance": get_maintenance_summary(),
         "checklist": get_checklist_summary(days=days),
+        # вносились ли данные — чтобы страница не рисовала «0» там, где «никто не вносил»
+        "sources": get_data_sources(days=days),
     }
 
 

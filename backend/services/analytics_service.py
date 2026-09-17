@@ -392,3 +392,52 @@ def get_checklist_summary(days=7):
         "last_round": rounds_list[0] if rounds_list else None,
         "top_problems": top[:6],
     }
+
+
+
+# =========================================================
+# ВНОСИЛИСЬ ЛИ ДАННЫЕ ВООБЩЕ
+# =========================================================
+
+def get_data_sources(days: int = 7) -> dict:
+    """
+    По каждому источнику: сколько записей за период, сколько всего и когда
+    последняя.
+
+    Нужно, чтобы отличать «ноль» от «никто не вносил». Пустой график
+    простоев читается как «простоев нет», хотя на деле за неделю не было
+    ни одного обращения. 0% ТО выглядит как провал механиков, хотя в
+    системе не было ни одной отметки. Страница решает по этим цифрам,
+    писать «0» или «данных нет».
+    """
+    from datetime import datetime, timedelta
+
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    sources = {
+        "cases": ("cases", "created_at", None),
+        "downtime": ("downtime_log", "started_at", None),
+        "production": ("shift_production_log", "created_at", None),
+        "shift_reports": ("shift_reports", "submitted_at", "submitted_at IS NOT NULL"),
+        "maintenance": ("maintenance_log", "done_at", None),
+        "rounds": ("checklist_rounds", "started_at", None),
+    }
+
+    conn = get_connection()
+    result = {}
+    try:
+        for key, (table, column, extra) in sources.items():
+            where = f" WHERE {extra}" if extra else ""
+            and_extra = f" AND {extra}" if extra else ""
+            try:
+                total, last = conn.execute(f"SELECT COUNT(*), MAX({column}) FROM {table}{where}").fetchone()
+                period = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {column} >= ?{and_extra}", (since,)
+                ).fetchone()[0]
+            except Exception:
+                total, last, period = 0, None, 0
+            result[key] = {"period": period, "total": total, "last": last}
+    finally:
+        conn.close()
+
+    return result

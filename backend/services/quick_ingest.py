@@ -129,4 +129,10 @@ def index_uploaded_pdf(file_path: Path, machine_folder: str) -> dict:
     except Exception as error:
         return {"error": f"база знаний недоступна: {error}"}
 
+    try:
+        from backend.services.vector_service import forget_documented_folders
+        forget_documented_folders()   # у станка появилась документация
+    except Exception:
+        pass
+
     return {"chunks": len(prepared)}

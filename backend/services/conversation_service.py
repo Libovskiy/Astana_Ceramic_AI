@@ -35,7 +35,7 @@ from backend.services.case_service import (
     STATUS_CLOSED,
     STATUS_DRAFT_CLOSED
 )
-from backend.services.vector_service import search_documents
+from backend.services.vector_service import search_documents, own_machine_documents
 from backend.services.filter_service import filter_results
 from backend.services.knowledge_service import get_relevant_resolutions
 from backend.services.procedures_service import find_matching_procedure
@@ -383,10 +383,19 @@ def generate_reply(case_id):
 
     filtered = filter_results(results)
 
-    context_chunks = filtered.get("documents", [])
+    from backend.services.response_service import honest_unknown, machine_title
+    title = machine_title(case.get("machine"), case.get("equipment_id"))
+
+    # только руководство этого станка — чужое в совет не идёт
+    context_chunks, own_metadatas, has_documentation = own_machine_documents(title or case.get("machine"), filtered)
+    filtered = {"documents": context_chunks, "metadatas": own_metadatas}
     doc_context = "\n\n".join(context_chunks[:3])
 
     hints = get_relevant_resolutions(case.get("machine") or "", question)
+
+    if not context_chunks and not hints:
+        return _escalate(case_id, case, messages, "нет своей документации и решений",
+                         honest_unknown(title, has_documentation))
 
     # Всю переписку отдаём как часть проблемы — именно это делает
     # разговор разговором, а не серией независимых вопросов.
@@ -429,7 +438,7 @@ def generate_reply(case_id):
             for item in filtered.get("metadatas", [])[:3]
             if item.get("file")
         }
-        basis.append("Документация: " + ", ".join(sorted(files)) if files else "Документация станка")
+        basis.append("Руководство: " + ", ".join(sorted(files)) if files else "Руководство по этому станку")
 
     if hints:
         confidence = "Высокая"
@@ -618,6 +627,29 @@ def resolve_by_worker(case_id, user):
     try_auto_end_downtime_for_case(case_id, ended_by=user.get("full_name") or user.get("username"))
 
     return {"success": True, "resolved": True, "messages": get_messages(case_id)}
+
+
+def escalate_unknown(case_id, worker_text, lead, user=None):
+    """
+    Первый же ответ — «не знаю»: жалоба рабочего и честная причина
+    остаются в переписке, обращение уходит специалисту по дисциплине.
+    Раньше в этом месте обращение переводилось молча, и в «Обращениях»
+    рабочий видел пустую переписку.
+    """
+    case = get_case(case_id)
+    if case is None:
+        return None
+
+    messages = get_messages(case_id)
+    if worker_text and not any(m["role"] == "worker" and m["message"] == worker_text for m in messages):
+        add_message(
+            case_id, "worker", worker_text,
+            author=(user or {}).get("full_name") or (user or {}).get("username"),
+            author_role=(user or {}).get("role"),
+        )
+        messages = get_messages(case_id)
+
+    return _escalate(case_id, case, messages, "нет своей документации и решений", lead)
 
 
 def escalate_by_worker(case_id, user):

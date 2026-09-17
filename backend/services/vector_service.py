@@ -195,6 +195,15 @@ def reload_folders():
 # СТАНОК -> ПАПКИ
 # =========================================================
 
+# Станки, чью папку по названию не угадать. Только проверенные пары:
+# у «Упаковочной машины» (Messersi) папка называется «упаковка на линию
+# мessersi» — с латинскими и русскими буквами вперемешку, и без этой
+# строки ей честно отвечалось «руководства нет», хотя оно есть.
+DOCS_FOLDER_OVERRIDES = {
+    "упаковочная машина": ["упаковка на линию мessersi"],
+}
+
+
 def resolve_docs_folders(machine) -> list:
 
     if not machine:
@@ -204,6 +213,12 @@ def resolve_docs_folders(machine) -> list:
 
     if not folders:
         return []
+
+    override = DOCS_FOLDER_OVERRIDES.get(str(machine).strip().lower())
+    if override:
+        present = [folder for folder in override if folder in folders]
+        if present:
+            return present
 
     target = _normalize(machine)
     target_tokens = _tokens(machine)
@@ -460,3 +475,61 @@ def search_documents(machine: str, question: str, limit: int = 5):
     except Exception as error:
         print(f"[vector_service] Ошибка поиска: {error}")
         return _empty_result()
+
+
+# =========================================================
+# ЧЕСТНОСТЬ: ТОЛЬКО СВОЯ ДОКУМЕНТАЦИЯ
+# =========================================================
+#
+# search_documents, не найдя у станка своей папки, ищет по ВСЕЙ
+# документации. Для поиска на странице это удобно, а для ответа рабочему
+# — нет: ИИ получал фрагменты руководства чужого станка, и в обращении
+# писалось «Средняя уверенность · найдено в документации станка».
+# Правдоподобный совет по чужому паспорту хуже честного «не знаю».
+
+_documented_folders = None
+
+
+def _folders_with_chunks() -> set:
+    """Папки, из которых в базе знаний реально есть фрагменты (кэш на процесс)."""
+    global _documented_folders
+    if _documented_folders is not None:
+        return _documented_folders
+    collection = get_collection()
+    if collection is None:
+        return set()
+    try:
+        metadatas = collection.get(include=["metadatas"]).get("metadatas") or []
+        _documented_folders = {m.get("machine") for m in metadatas if m and m.get("machine")}
+    except Exception as error:
+        print(f"[vector_service] Не прочитал список документированных станков: {error}")
+        return set()
+    return _documented_folders
+
+
+def forget_documented_folders():
+    """Сбросить кэш — после загрузки нового руководства."""
+    global _documented_folders
+    _documented_folders = None
+
+
+def documentation_for(machine) -> list:
+    """Папки документации ЭТОГО станка, по которым есть что искать. Пусто — руководства нет."""
+    with_chunks = _folders_with_chunks()
+    return [folder for folder in resolve_docs_folders(machine) if folder in with_chunks]
+
+
+def own_machine_documents(machine, results) -> tuple:
+    """
+    Из найденного оставить только фрагменты руководства этого станка.
+
+    results — плоский ответ filter_results: {"documents": [...], "metadatas": [...]}.
+    Возвращает (documents, metadatas, has_documentation).
+    """
+    folders = set(documentation_for(machine))
+    documents = (results or {}).get("documents") or []
+    metadatas = (results or {}).get("metadatas") or []
+    if not folders:
+        return [], [], False
+    kept = [(d, m) for d, m in zip(documents, metadatas) if (m or {}).get("machine") in folders]
+    return [d for d, _ in kept], [m for _, m in kept], True

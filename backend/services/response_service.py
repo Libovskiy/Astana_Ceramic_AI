@@ -3,6 +3,35 @@ from backend.services.ai_service import suggest_next_action
 from backend.services.knowledge_service import get_relevant_resolutions
 from backend.services.procedures_service import find_matching_procedure
 from backend.services.plc_error_service import find_by_code, split_solution_steps
+from backend.services.vector_service import own_machine_documents
+
+
+def honest_unknown(machine_title, has_documentation):
+    """
+    Что сказать рабочему, когда опереться не на что.
+
+    Лучше сразу «не знаю, зову мастера», чем общий совет, который звучит
+    уверенно, а к этому станку отношения не имеет: одна такая фраза
+    бережёт доверие сильнее десяти правдоподобных ответов.
+    """
+    name = f"«{machine_title}»" if machine_title else "этому станку"
+    if not has_documentation:
+        return (f"По станку {name} у меня нет руководства и подтверждённых решений, "
+                f"поэтому гадать не буду.")
+    return (f"В руководстве по станку {name} не нашёл ничего про эту неисправность, "
+            f"поэтому гадать не буду.")
+
+
+def machine_title(machine, equipment_id=None):
+    if equipment_id:
+        try:
+            from backend.services.equipment_service import get_equipment
+            equipment = get_equipment(equipment_id)
+            if equipment and equipment.get("name"):
+                return equipment["name"]
+        except Exception:
+            pass
+    return (machine or "").strip()
 
 
 def build_answer(
@@ -129,10 +158,25 @@ def build_answer(
     #    пробуем ИИ, подкидывая контекст документации + базу знаний.
     # -------------------------------------
 
-    context_chunks = results.get("documents", []) if results else []
+    title = machine_title(machine, equipment_id)
+
+    # Только руководство ЭТОГО станка: без своей папки поиск отдаёт чужие
+    context_chunks, _, has_documentation = own_machine_documents(title or machine, results)
     doc_context = "\n\n".join(context_chunks[:3])
 
     knowledge_hints = get_relevant_resolutions(machine, question)
+
+    # Опереться не на что — честно говорим и зовём специалиста, а не
+    # выдаём общие советы с видом знатока
+    if not context_chunks and not knowledge_hints:
+        return {
+            "case_id": case_id,
+            "machine": machine.capitalize(),
+            "recommendation": None,
+            "actions": [],
+            "explanation": None,
+            "unknown": honest_unknown(title, has_documentation),
+        }
 
     suggestion = suggest_next_action(
         machine=machine,
@@ -153,7 +197,7 @@ def build_answer(
 
         if context_chunks:
             basis.append(
-                f"Найдено в документации станка ({min(len(context_chunks), 3)} фрагм.)"
+                f"Руководство по этому станку ({min(len(context_chunks), 3)} фрагм.)"
             )
 
         if knowledge_hints:

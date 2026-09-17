@@ -189,14 +189,36 @@ async function loadAnalytics(){
   ]);
   const s=summary.value;const d=dash.value;const lv=live.value||{};
   if(s?.success)renderMetrics(s);
-  if(d){renderTopProblems(d);renderDowntimeList(s?.downtime);}
+  if(d){renderTopProblems(d);}
+  renderDowntimeList(s?.downtime);
   renderSensorsNow(lv);
   loadSensorHistory();
   loadDowntimeChart();
 }
 
+// Честность: «0» и «никто не вносил» — разные вещи. Пустой график
+// простоев читается как «простоев нет», хотя за период могло не быть ни
+// одного обращения. Эти помощники решают, что писать.
+let SOURCES={};
+const PERIOD_WORD={today:'сегодня',week:'за неделю',month:'за месяц'};
+function src(key){return SOURCES[key]||{period:0,total:0,last:null};}
+function noDataNote(text){
+  return `<div class="empty" style="line-height:1.5">
+    <div style="font-size:13px;font-weight:600;color:var(--text)">Данных нет</div>
+    <div style="font-size:12px;margin-top:4px">${text}</div></div>`;
+}
+function lastSeen(key){
+  const s=src(key);
+  return s.last?`последняя запись ${ACAI.shortDate(s.last)}`:'в системе ещё ни одной записи';
+}
+
 function renderMetrics(s){
+  SOURCES=s.sources||{};
   const perf=s.performance||{};const dt=s.downtime||{};const loss=s.biggest_loss||{};
+  const pw=PERIOD_WORD[currentPeriod]||'за период';
+  // простои фиксируются через обращения; нет ни обращений, ни простоев — значит не «ноль», а «не вносили»
+  const noDowntimeData = !src('downtime').period && !src('cases').period;
+  const noProduction = !src('production').period;
   const pp=perf.plan_completion_pct;
   const pc=pp==null?'var(--text-dim)':pp>=90?'var(--ok)':pp>=70?'var(--warn)':'var(--danger)';
   const fmt=(m)=>{m=Math.round(m||0);return m>=60?`${Math.floor(m/60)}ч ${m%60}м`:`${m}м`;};
@@ -213,14 +235,15 @@ function renderMetrics(s){
   renderMaintenance(s.maintenance);
   renderChecklist(s.checklist);
   document.getElementById('keyMetrics').innerHTML=`
-    <div class="metric ${pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
+    <div class="metric ${!noProduction&&pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
       <div class="metric-label">Выполнение плана</div>
-      <div class="metric-value" style="color:${pc}">${pp!=null?pp+'%':'—'}</div>
+      <div class="metric-value" style="color:${noProduction?'var(--text-dim)':pc}">${!noProduction&&pp!=null?pp+'%':'—'}</div>
+      ${noProduction?`<div class="metric-sub">выпуск ${pw} не вносили</div>`:''}
     </div>
-    <div class="metric ${tm>0?'warn':'ok'}">
+    <div class="metric ${noDowntimeData?'':(tm>0?'warn':'ok')}">
       <div class="metric-label">Суммарный простой</div>
-      <div class="metric-value ${tm>0?'warn':'ok'}">${tc||'0м'}</div>
-      <div class="metric-sub">${dtNote}</div>
+      <div class="metric-value ${noDowntimeData?'':(tm>0?'warn':'ok')}" style="${noDowntimeData?'color:var(--text-dim)':''}">${noDowntimeData?'—':(tc||'0м')}</div>
+      <div class="metric-sub">${noDowntimeData?`${pw} ни одного обращения — простои не фиксировались`:dtNote}</div>
     </div>
     <div class="metric ${loss.total_minutes>0?'warn':'ok'}">
       <div class="metric-label">Макс. простой</div>
@@ -233,11 +256,11 @@ function renderMetrics(s){
       <div class="metric-label">Простой по службам</div>
       <div style="display:flex;gap:8px;margin-top:6px">
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--warn)">${dt.by_discipline?.mechanical||0}м</div>
+          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--warn)'}">${noDowntimeData?'—':(dt.by_discipline?.mechanical||0)+'м'}</div>
           <div style="font-size:10px;color:var(--text-dim)">Механика</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:700;color:var(--accent)">${dt.by_discipline?.electrical||0}м</div>
+          <div style="font-size:18px;font-weight:700;color:${noDowntimeData?'var(--text-dim)':'var(--accent)'}">${noDowntimeData?'—':(dt.by_discipline?.electrical||0)+'м'}</div>
           <div style="font-size:10px;color:var(--text-dim)">Электрика</div>
         </div>
       </div>
@@ -254,7 +277,7 @@ function renderTopProblems(d){
         <div class="top-bar"><div class="top-fill" style="width:${Math.round(p.count/max*100)}%;background:${colors[i]||'var(--accent)'}"></div></div>
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);width:24px;text-align:right">${p.count}</span>
       </div>`).join('')
-    :'<div class="empty">Нет данных</div>';
+    :noDataNote(`Обращений о поломках не было — ${lastSeen('cases')}.`);
 }
 
 // Простои, которые идут дольше смены. Не прячем и не обрезаем их:
@@ -294,6 +317,15 @@ function renderMaintenance(m){
   if(note && m.schedule_started_at)
     note.textContent = 'график ведётся с ' + ACAI.shortDate(m.schedule_started_at);
 
+  // Ни одной отметки ТО в системе — 0% значило бы «механики ничего не
+  // делали», а на деле «никто не отмечал». Показываем это прямо.
+  if(!src('maintenance').total){
+    box.innerHTML = noDataNote(`По графику на этот месяц ${m.due} работ, но отметок о выполнении ТО
+      в системе ещё не было ни одной. Процент появится с первой отметкой — сейчас он значил бы
+      «не отмечали», а не «не делали».`);
+    return;
+  }
+
   const pct=m.percent==null?0:m.percent;
   const color=pct>=90?'var(--ok)':pct>=50?'var(--warn)':'var(--danger)';
 
@@ -326,7 +358,7 @@ function renderChecklist(c){
   const note=document.getElementById('clNote');
   if(!box) return;
   if(!c || !c.rounds_count){
-    box.innerHTML='<div class="empty">За период обходов не было</div>';
+    box.innerHTML=noDataNote(`Обходы смены ${PERIOD_WORD[currentPeriod]||'за период'} не проводились — ${lastSeen('rounds')}.`);
     if(note) note.textContent='';
     return;
   }
@@ -378,7 +410,9 @@ function renderDowntimeList(dt){
         <span style="font-size:11px;color:var(--text-dim)">${item.incidents_count||0}×</span>
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--warn)">${item.total_minutes>=60?Math.floor(item.total_minutes/60)+'ч '+item.total_minutes%60+'м':item.total_minutes+'м'}</span>
       </div>`).join('')
-    :'<div class="empty">Простоев не было ✓</div>';
+    :(!src('downtime').period && !src('cases').period
+        ? noDataNote(`Ни одного обращения — простои не фиксировались, это не значит, что их не было.`)
+        : '<div class="empty">Простоев не было ✓</div>');
 }
 
 async function loadSensorHistory(){
@@ -444,7 +478,7 @@ async function loadDowntimeChart(){
   try{
     const r=await ACAI.get('/api/production/history');
     const rows=(r.rows||r.history||[]).slice(0,7).reverse();
-    if(!rows.length){document.getElementById('downtimeChart').innerHTML='<div class="empty">Нет данных</div>';return;}
+    if(!rows.length){document.getElementById('downtimeChart').innerHTML=noDataNote(`График строится по сменному учёту выпуска — его ещё не вносили.`);return;}
     const data=rows.map(row=>({
       v:row.total_downtime_minutes||0,
       t:row.log_date?row.log_date.slice(5):'—'
@@ -522,6 +556,16 @@ async function loadShiftAnalytics(){
   const t=a.totals||{};
 
   renderPending(t.pending_list || [], t.pending_reports || 0);
+
+  // Ни одной вагонетки за период — нули в выпуске и «брака нет» были бы
+  // неправдой. Пишем, что отчётов не было.
+  if(!(t.cars_count||0)){
+    document.getElementById('saTotals').innerHTML='';
+    document.getElementById('saBreakdown').innerHTML='';
+    document.getElementById('saReasons').innerHTML=noDataNote(
+      `За этот период ни одного сменного отчёта упаковки с вагонетками — выпуск и брак неизвестны.`);
+    return;
+  }
 
   document.getElementById('saTotals').innerHTML=`
     ${saMetric('Вагонеток',t.cars_count||0)}
