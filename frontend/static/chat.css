@@ -67,7 +67,7 @@ body {
 
 .chat-subtitle {
     font-size: 12px;
-    color: #64748b;
+    color: #475569;
 }
 
 .chat-header-right {
@@ -171,14 +171,14 @@ body {
 }
 
 .chat-item-time {
-    font-size: 11px;
-    color: #94a3b8;
+    font-size: 12px;
+    color: #5b6576;
     white-space: nowrap;
 }
 
 .chat-item-last {
     font-size: 13px;
-    color: #64748b;
+    color: #475569;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -186,7 +186,7 @@ body {
 
 .chat-item-status {
     margin-top: 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -251,8 +251,8 @@ body {
 .msg-text { white-space: pre-wrap; word-break: break-word; }
 
 .msg-time {
-    font-size: 10px;
-    opacity: 0.6;
+    font-size: 12px;
+    opacity: 0.75;
     text-align: right;
     margin-top: 3px;
 }
@@ -262,7 +262,7 @@ body {
     max-width: 90%;
     text-align: center;
     font-size: 13px;
-    color: #64748b;
+    color: #475569;
     background: #eef1f6;
     padding: 7px 14px;
     border-radius: 10px;
@@ -395,7 +395,7 @@ body {
 
 .chat-equipment-name { font-weight: 600; }
 
-.chat-equipment-status { font-size: 12px; color: #64748b; }
+.chat-equipment-status { font-size: 12px; color: #475569; }
 
 .chat-new-form textarea {
     width: 100%;
@@ -431,7 +431,7 @@ body {
 .chat-empty {
     padding: 28px 16px;
     text-align: center;
-    color: #94a3b8;
+    color: #5b6576;
     font-size: 14px;
 }
 
@@ -535,7 +535,7 @@ body[data-screen="list"] .chat-new-form { display: none; }
 }
 
 .card-table td:first-child {
-    color: #64748b;
+    color: #475569;
     width: 42%;
 }
 
@@ -543,7 +543,7 @@ body[data-screen="list"] .chat-new-form { display: none; }
     display: flex;
     gap: 10px;
     font-size: 12px;
-    color: #64748b;
+    color: #475569;
     padding: 4px 0;
     border-bottom: 1px solid #f8fafc;
 }
@@ -588,7 +588,7 @@ body[data-screen="list"] .chat-new-form { display: none; }
 
 .act-assigned {
     font-size: 12px;
-    color: #64748b;
+    color: #475569;
 }
 
 .act-draft-note {
@@ -655,8 +655,8 @@ body[data-screen="list"] .chat-new-form { display: none; }
 .stage-icon { font-size: 17px; }
 
 .stage-label {
-    font-size: 10px;
-    color: #64748b;
+    font-size: 11px;
+    color: #475569;
     margin-top: 3px;
     line-height: 1.2;
 }

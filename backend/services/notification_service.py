@@ -148,7 +148,10 @@ def get_notifications(user):
                 else "Требует специалиста"
             ),
             "subtitle": case.get("equipment_name") or case.get("machine") or "Оборудование",
-            "url": f"/equipment?open={equipment_id}" if equipment_id else "/events"
+            # прямо в обращение, а не в карточку станка или общий список:
+            # сводка → список → сама запись
+            "url": f"/chat?case={case['id']}",
+            "case_id": case["id"],
         })
 
     # -----------------------------------------
@@ -170,11 +173,13 @@ def get_notifications(user):
 
             notifications.append({
                 "type": "pending_confirmation",
-                "severity": "info",
+                # для того, кто подтверждает, это его решение, а не справка
+                "severity": "warning",
                 "icon": "📋",
-                "title": "Ожидает подтверждения",
+                "title": "Ремонт сделан — подтвердите закрытие",
                 "subtitle": case.get("equipment_name") or case.get("machine") or "Обращение",
-                "url": f"/equipment?open={equipment_id}" if equipment_id else "/events"
+                "url": f"/chat?case={case['id']}",
+                "case_id": case["id"],
             })
 
     # -----------------------------------------

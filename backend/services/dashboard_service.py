@@ -442,6 +442,31 @@ def get_dashboard_data():
         "open_problem_cases":
             open_problem_cases,
 
+        # Плоские поля для главной. Страница читала open_cases,
+        # closed_cases, active_downtimes и total_downtime_today_minutes
+        # с верхнего уровня, а сервер отдавал их только внутри
+        # statistics (и не все) — главная всегда показывала нули и
+        # «простоев нет», хотя станок стоял часами.
+        "open_cases":
+            len(open_problem_cases),
+
+        "total_cases":
+            total_cases,
+
+        "closed_cases":
+            sum(1 for case in cases
+                if case["status"] == "Закрыто"
+                and str(case.get("closed_at") or "").startswith(datetime.now().strftime("%Y-%m-%d"))),
+
+        "active_downtimes":
+            active_downtimes,
+
+        "active_downtimes_count":
+            len(active_downtimes),
+
+        "total_downtime_today_minutes":
+            get_total_downtime_today(),
+
         "open_problems_by_equipment":
             open_problems_by_equipment,
 

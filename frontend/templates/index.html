@@ -6,8 +6,32 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=17">
+<link rel="stylesheet" href="/static/acai.css?v=18">
 <style>
+/* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
+.verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
+.verdict.calm{padding:22px 24px;}
+.verdict.calm .v-title{font-size:26px;font-weight:700;letter-spacing:-.01em;}
+.verdict .v-sub{font-size:14px;color:var(--text-dim);margin-top:6px;line-height:1.45;}
+.verdict.alert{border:2px solid var(--danger);overflow:hidden;}
+.verdict.alert.only-warn{border-color:var(--warn);}
+.v-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 10px;}
+.v-head .v-title{font-size:22px;font-weight:700;}
+.v-all{border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.v-row{display:flex;align-items:center;gap:12px;padding:14px 20px;border-top:1px solid var(--border);color:var(--text);text-decoration:none;}
+.v-row:hover{background:var(--surface-2);}
+.v-mark{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.v-row .v-what{font-size:16px;font-weight:600;}
+.v-row .v-where{font-size:14px;color:var(--text-dim);margin-top:2px;}
+.v-row .v-go{margin-left:auto;font-size:22px;color:var(--text-dim);}
+@media (max-width:600px){
+  .verdict.calm{padding:18px;}
+  .verdict.calm .v-title{font-size:22px;}
+  .v-head{padding:14px 16px 8px;}
+  .v-head .v-title{font-size:19px;}
+  .v-row{padding:14px 16px;}
+}
+
 .sensor-strip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .ss-item{display:flex;align-items:center;gap:6px;}
 .ss-label{font-size:11px;color:var(--text-dim);}
@@ -31,7 +55,8 @@
   position:relative;
 }
 .prod-zone:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.4);}
-.prod-zone.ok{background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);}
+/* норма — спокойная, цвет только у отклонений */
+.prod-zone.ok{background:var(--surface-2);border:1px solid var(--border);}
 .prod-zone.warn{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);}
 .prod-zone.danger{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.3);}
 
@@ -42,7 +67,7 @@
 .zone-bar-fill{height:100%;border-radius:2px;transition:width 1s;}
 .zone-status{font-size:10px;font-weight:600;}
 .zone-pulse{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;}
-.zone-pulse.ok{background:var(--ok);}
+.zone-pulse.ok{display:none;}
 .zone-pulse.warn{background:var(--warn);animation:zpulse 1.5s infinite;}
 .zone-pulse.danger{background:var(--danger);animation:zpulse 1s infinite;}
 @keyframes zpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
@@ -100,6 +125,13 @@
     </header>
     <div class="page">
 
+      <!-- Директор открывает главную с одним вопросом: всё ли в порядке.
+           Ответ — первым: «Завод работает» или 2–3 строки «что решить»,
+           каждая ведёт прямо в запись. Цифры и цепочка — ниже. -->
+      <div class="verdict calm" id="verdict">
+        <div class="v-title" style="color:var(--text-dim)">Проверяю…</div>
+      </div>
+
       <div class="metrics" id="metrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:14px">
         <div class="metric"><div class="metric-label">Загрузка...</div><div class="metric-value" style="color:var(--text-dim)">—</div></div>
       </div>
@@ -124,7 +156,7 @@
         <div style="display:flex;flex-direction:column;gap:12px">
           <div class="card">
             <div class="card-head">
-              <h2>Требует решения</h2>
+              <h2>Открытые обращения</h2>
               <span id="openCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">0</span>
             </div>
             <div class="card-body" id="caseList" style="padding:10px 12px"></div>
@@ -170,7 +202,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=21"></script>
+<script src="/static/acai_layout.js?v=22"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -332,7 +364,8 @@ const ZONE_SVGS = {
 
 const ZONES_ORDER = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
 
-function getColor(cls){ return cls==='danger'?'#ef4444':cls==='warn'?'#f59e0b':'#22c55e'; }
+// норма — серая: зелёная цепочка из пяти цехов отвлекает от единственного красного
+function getColor(cls){ return cls==='danger'?'#ef4444':cls==='warn'?'#f59e0b':'#94a3b8'; }
 
 function renderProdMap(equipment, liveData){
   const byZone={};
@@ -398,7 +431,7 @@ function renderProdMap(equipment, liveData){
           <div class="zone-bar-fill" style="width:${pct}%;background:${color}"></div>
         </div>
         <div class="zone-status" style="color:${color}">
-          ${s.err>0?`⚠ ${s.err} ошибок`:cls==='danger'?'⚠ Низкая загрузка':s.warn>0?`! ${s.warn} внимание`:cls==='warn'?'! Ниже нормы':s.total>0?'✓ Норма':''}
+          ${s.err>0?`⚠ ${s.err} ошибок`:cls==='danger'?'⚠ Низкая загрузка':s.warn>0?`! ${s.warn} внимание`:cls==='warn'?'! Ниже нормы':s.total>0?'норма':''}
         </div>
         <div style="font-size:10px;color:var(--text-dim)">${s.total} ед.</div>
       </div>
@@ -446,12 +479,12 @@ function renderSensors(lv){
     // Частота — не процент: нулевая означает, что привод стоит,
     // и красить её как «низкую загрузку» неверно.
     const c = bogus ? 'var(--text-dim)'
-            : a  ? (v>0?'var(--danger)':'var(--ok)')
-            : hz ? (v>0?'var(--ok)':'var(--text-dim)')
-            : v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
+            : a  ? (v>0?'var(--danger)':'var(--text-dim)')
+            : hz ? (v>0?'var(--text)':'var(--text-dim)')
+            : v<50?'var(--danger)':v<80?'var(--warn)':'var(--text)';
 
     const p=(pctKey && !bogus)?Math.min(v,100):0;
-    const text = a  ? (v>0?'⚠ АВАРИЯ':'✓')
+    const text = a  ? (v>0?'⚠ АВАРИЯ':'нет')
                : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
                : bogus ? v.toFixed(1)+'% ⚠'
                : v.toFixed(1)+'%';
@@ -476,18 +509,26 @@ async function renderDashboard(){
   const w=eq.filter(e=>e.status==='Работает').length;
   const wa=eq.filter(e=>e.status==='Внимание').length;
   const er=eq.filter(e=>e.status==='Ошибка').length;
+  const escalated=(d.open_problem_cases||[]).filter(c=>c.status==='Требует специалиста').length;
+  const activeDt=d.active_downtimes_count||0;
+  // Цвет — только отклонение: ошибки/внимание, ждут специалиста, идёт простой.
+  // «Работает» и «Закрыто» — всегда серые, это норма.
+  const probCls=er>0?'danger':wa>0?'warn':'';
+  const casesCls=escalated>0?'danger':'';
+  const dtCls=activeDt>0?'warn':'';
   document.getElementById('metrics').innerHTML=`
-    <div class="metric ok"><div class="metric-label">Работает</div><div class="metric-value ok">${w}</div><div class="metric-sub">из ${eq.length} ед.</div></div>
-    <div class="metric ${er>0?'danger':wa>0?'warn':'ok'}"><div class="metric-label">Проблемы</div><div class="metric-value ${er>0?'danger':wa>0?'warn':'ok'}">${er+wa}</div><div class="metric-sub">${er} ошибок · ${wa} внимание</div></div>
-    <div class="metric ${(d.open_cases||0)>0?'danger':'ok'}"><div class="metric-label">Обращений</div><div class="metric-value ${(d.open_cases||0)>0?'danger':'ok'}">${d.open_cases||0}</div><div class="metric-sub">всего ${d.total_cases||0}</div></div>
-    <div class="metric accent"><div class="metric-label">Закрыто</div><div class="metric-value accent">${d.closed_cases||0}</div><div class="metric-sub">сегодня</div></div>
-    <div class="metric ${(d.active_downtimes_count||0)>0?'warn':'ok'}"><div class="metric-label">Простоев</div><div class="metric-value ${(d.active_downtimes_count||0)>0?'warn':'ok'}">${d.active_downtimes_count||0}</div><div class="metric-sub">${d.total_downtime_today_minutes||0} мин</div></div>`;
+    <div class="metric"><div class="metric-label">Работает</div><div class="metric-value">${w}</div><div class="metric-sub">из ${eq.length} ед.</div></div>
+    <div class="metric ${probCls}"><div class="metric-label">Проблемы</div><div class="metric-value ${probCls}">${er+wa}</div><div class="metric-sub">${er} ошибок · ${wa} внимание</div></div>
+    <div class="metric ${casesCls}"><div class="metric-label">Обращений</div><div class="metric-value ${casesCls}">${d.open_cases||0}</div><div class="metric-sub">${escalated?`${escalated} ждут специалиста`:`всего ${d.total_cases||0}`}</div></div>
+    <div class="metric"><div class="metric-label">Закрыто</div><div class="metric-value">${d.closed_cases||0}</div><div class="metric-sub">сегодня</div></div>
+    <div class="metric ${dtCls}"><div class="metric-label">Простоев</div><div class="metric-value ${dtCls}">${activeDt}</div><div class="metric-sub">${d.total_downtime_today_minutes||0} мин</div></div>`;
+  renderVerdict(d, w, eq.length);
   renderProdMap(eq,_live);
   const open=d.open_problem_cases||[];
   document.getElementById('openCount').textContent=open.length;
   document.getElementById('caseList').innerHTML=open.length
-    ?open.slice(0,4).map(c=>{const cls=c.status==='Требует специалиста'?'esc':c.status==='Черновик закрытия'?'draft':'open';const color=cls==='esc'?'var(--danger)':cls==='draft'?'var(--warn)':'var(--accent)';const badge=cls==='esc'?'Эскалация':cls==='draft'?'Черновик':'Открыто';return`<div class="case-row ${cls}" onclick="window.location='/cases'"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:12px;font-weight:600">${c.equipment_name||c.machine||'—'}</span><span style="font-size:10px;font-weight:700;color:${color}">${badge}</span></div><div style="font-size:11px;color:var(--text-dim)">${c.symptom||c.worker_question||'—'}</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">${ACAI.timeAgo(c.created_at)}</div></div>`;}).join('')
-    :'<div class="empty">Нет открытых обращений ✓</div>';
+    ?open.slice(0,4).map(c=>{const cls=c.status==='Требует специалиста'?'esc':c.status==='Черновик закрытия'?'draft':'open';const color=cls==='esc'?'var(--danger)':cls==='draft'?'var(--warn)':'var(--text-dim)';const badge=cls==='esc'?'Ждём специалиста':cls==='draft'?'Подтвердить закрытие':'ИИ ведёт рабочего';return`<div class="case-row ${cls}" onclick="window.location='/chat?case=${c.id}'"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:12px;font-weight:600">${c.equipment_name||c.machine||'—'}</span><span style="font-size:10px;font-weight:700;color:${color}">${badge}</span></div><div style="font-size:11px;color:var(--text-dim)">${c.symptom||c.worker_question||'—'}</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">${ACAI.timeAgo(c.created_at)}</div></div>`;}).join('')
+    :'<div class="empty">Открытых обращений нет</div>';
   const probs=d.top_problems||[];const maxC=probs[0]?.count||1;
   document.getElementById('problemList').innerHTML=probs.length
     ?probs.slice(0,5).map((p,i)=>`<div class="prob-row"><span style="font-size:11px;color:var(--text-dim);width:16px;text-align:right;flex-shrink:0">${i+1}</span><span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.symptom||'—'}</span><div style="width:70px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0"><div style="width:${Math.round(p.count/maxC*100)}%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0;width:20px;text-align:right">${p.count}</span></div>`).join('')
@@ -508,6 +549,46 @@ async function renderDashboard(){
       </div>`).join('')
     // без ✓: пусто может значить и «не было», и «не фиксировали» — обращений сегодня нет
     :'<div class="empty">Сегодня простоев не фиксировали</div>';
+}
+
+// ── ОТВЕТ: ВСЁ ЛИ В ПОРЯДКЕ ───────────────────────────────
+// Лесенка: сводка («требует решения: 3») → список (колокольчик) →
+// запись (обращение, станок). На каждом шаге понятно, куда идёшь.
+async function renderVerdict(d, working, total){
+  const box=document.getElementById('verdict');
+  if(!box) return;
+  let items=[];
+  try{ items=(await ACAI.get('/api/notifications')).notifications||[]; }catch{ return; }
+  const urgent=items.filter(x=>x.severity==='critical'||x.severity==='warning');
+  const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  if(!urgent.length){
+    box.className='verdict calm';
+    const open=d.open_cases||0;
+    box.innerHTML=`<div class="v-title">Завод работает</div>
+      <div class="v-sub">Ничего не требует решения · ${working} из ${total} единиц оборудования в работе${open?` · обращений в работе: ${open}`:''}</div>`;
+    return;
+  }
+
+  const critical=urgent.some(x=>x.severity==='critical');
+  box.className='verdict alert'+(critical?'':' only-warn');
+  const n=urgent.length;
+  const word=(n%10===1&&n%100!==11)?'вопрос':(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?'вопроса':'вопросов';
+  const rows=urgent.slice(0,3).map(x=>`
+    <a class="v-row" href="${esc(bellLink(x))}">
+      <span class="v-mark" style="background:${x.severity==='critical'?'var(--danger)':'var(--warn)'}"></span>
+      <span style="min-width:0">
+        <div class="v-what">${esc(x.title)}</div>
+        <div class="v-where">${esc(x.subtitle||x.message||'')}</div>
+      </span>
+      <span class="v-go">›</span>
+    </a>`).join('');
+  box.innerHTML=`
+    <div class="v-head">
+      <span class="v-title">Требует решения: ${n} ${word}</span>
+      ${n>3?`<button class="v-all" onclick="document.getElementById('bellBtn')?.click()">Все ${n} →</button>`:''}
+    </div>
+    ${rows}`;
 }
 
 // ── КАЛЕНДАРЬ ─────────────────────────────────────────────
@@ -894,7 +975,8 @@ async function askAi(){
       box.id = BOX_ID;
       box.style.cssText = 'padding:10px 14px;border-radius:10px;margin-bottom:14px;font-size:12px';
       const page = document.querySelector('.page');
-      if (page) page.insertBefore(box, page.firstChild);
+      const verdict = document.getElementById('verdict');
+      if (page) page.insertBefore(box, verdict ? verdict.nextSibling : page.firstChild);
       else return;
     }
 

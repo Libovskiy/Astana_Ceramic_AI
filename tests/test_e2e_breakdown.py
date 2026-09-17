@@ -81,6 +81,12 @@ chief = sb.user("chief_engineer")
 
 case_b = start_case(worker_b, "B")
 
+dash = chief.get("/dashboard").json()
+check("B: главная видит открытое обращение и идущий простой (не нули)",
+      dash.get("open_cases", 0) >= 1 and dash.get("active_downtimes_count", 0) >= 1
+      and any(d.get("case_id") == case_b for d in dash.get("active_downtimes", [])),
+      {k: dash.get(k) for k in ("open_cases", "active_downtimes_count", "total_downtime_today_minutes")})
+
 r = worker_b.post(f"/api/conversation/{case_b}/escalate")
 check("B: «Позвать мастера» передаёт специалисту",
       r.status_code == 200 and case_row(case_b)["status"] == "Требует специалиста", r.text[:200])

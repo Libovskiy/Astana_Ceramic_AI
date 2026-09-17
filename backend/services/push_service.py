@@ -327,7 +327,7 @@ def _case_escalated_now(case_id: int) -> None:
         tuple(roles) + ESCALATION_ALWAYS,
         f"🔴 Нужен {who}: {_machine(case)}",
         f"{problem}\nОбращение №{case['id']} — ждут специалиста.",
-        url="/chat", tag=f"case-{case_id}", urgent=True,
+        url=f"/chat?case={case_id}", tag=f"case-{case_id}", urgent=True,
     )
 
 
@@ -343,7 +343,7 @@ def _case_taken_now(case_id: int, by_name: str) -> None:
         _case_author_ids(case_id),
         f"🔧 {by_name} взял ваше обращение",
         f"{_machine(case)} — №{case_id}. Специалист идёт.",
-        url="/chat", tag=f"case-{case_id}",
+        url=f"/chat?case={case_id}", tag=f"case-{case_id}",
     )
 
 
@@ -351,7 +351,7 @@ def case_specialist_reply(case_id: int, by_name: str, text: str) -> None:
     _defer(0.5, lambda: send_to_users(
         _case_author_ids(case_id),
         f"💬 {by_name} ответил по обращению №{case_id}",
-        text[:300], url="/chat", tag=f"case-{case_id}",
+        text[:300], url=f"/chat?case={case_id}", tag=f"case-{case_id}",
     ))
 
 
@@ -368,7 +368,7 @@ def _case_ready_now(case_id: int) -> None:
         APPROVER_ROLES,
         f"🟡 Подтвердите закрытие: {_machine(case)}",
         f"Ремонт: {case['draft_closed_by'] or '—'}" + (f" — «{comment[:200]}»" if comment else "") + f"\nОбращение №{case_id}",
-        url="/chat", tag=f"case-{case_id}",
+        url=f"/chat?case={case_id}", tag=f"case-{case_id}",
     )
 
 

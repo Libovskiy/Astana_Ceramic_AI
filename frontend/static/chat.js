@@ -162,6 +162,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     show("list");
 
+    // /chat?case=57 — открыть сразу это обращение (из колокольчика,
+    // с главной, из уведомления на телефоне)
+    const wanted = Number(new URLSearchParams(window.location.search).get("case"));
+    if (wanted) {
+        await openThread(wanted);
+    }
+
     setInterval(loadConversations, POLL_MS);
 
 });

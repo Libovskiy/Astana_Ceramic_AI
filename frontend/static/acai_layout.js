@@ -447,8 +447,10 @@ const BELL_LINKS = {
   maintenance_due:      '/maintenance',
 };
 
+// Сервер знает точный адрес (станок, обращение) — идём туда. Раньше
+// поле url не читалось, и любое оповещение уводило в общий список.
 function bellLink(item) {
-  return item.link || BELL_LINKS[item.type] || '/cases';
+  return item.url || item.link || BELL_LINKS[item.type] || '/cases';
 }
 
 // Разрешение на уведомления уже дано — подгружаем push.js, он сам
