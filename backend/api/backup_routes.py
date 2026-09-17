@@ -22,18 +22,24 @@ def owner_only(user):
         raise HTTPException(status_code=403, detail="Резервными копиями управляет только владелец системы.")
 
 
+def owner(user: dict = Depends(current_user)):
+    """Отказ до разбора запроса: не-владелец не должен узнавать даже формат тела."""
+    owner_only(user)
+    return user
+
+
 class RestoreRequest(BaseModel):
     filename: str
 
 
 @router.get("")
-def backups(user: dict = Depends(current_user)):
+def backups(user: dict = Depends(owner)):
     owner_only(user)
     return {"success": True, "backups": list_backups()}
 
 
 @router.post("/create")
-def backup_now(user: dict = Depends(current_user)):
+def backup_now(user: dict = Depends(owner)):
     owner_only(user)
     try:
         result = create_backup(reason="manual")
@@ -45,7 +51,7 @@ def backup_now(user: dict = Depends(current_user)):
 
 
 @router.post("/restore")
-def restore(request: RestoreRequest, user: dict = Depends(current_user)):
+def restore(request: RestoreRequest, user: dict = Depends(owner)):
     owner_only(user)
     try:
         result = restore_backup(request.filename, user)

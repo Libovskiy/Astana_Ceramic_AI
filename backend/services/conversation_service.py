@@ -306,7 +306,19 @@ def generate_reply(case_id):
     # 0. Код ошибки PLC — следующий шаг решения из базы
     # -----------------------------------------
 
-    plc_matches = [m for m in find_by_code(question) if (m.get("solution") or "").strip()]
+    # Код берём из ПОСЛЕДНЕЙ жалобы, где он назван, а не из первой
+    # жалобы обращения: новая жалоба по тому же станку дописывается в
+    # уже открытое обращение, и по старому коду рабочий получал шаги
+    # чужой ошибки («сообщил A1 — после «Не помогло» пришёл шаг по А102»).
+    plc_matches = []
+    for item in reversed(messages):
+        if item["role"] != "worker":
+            continue
+        plc_matches = [m for m in find_by_code(item["message"]) if (m.get("solution") or "").strip()]
+        if plc_matches:
+            break
+    if not plc_matches:
+        plc_matches = [m for m in find_by_code(question) if (m.get("solution") or "").strip()]
 
     if plc_matches:
 

@@ -288,7 +288,9 @@ def approve_close_case(case_id, approved_by, final_comment=None):
             status = ?,
             closed_at = ?,
             closed_by = ?,
-            resolution_comment = COALESCE(?, draft_resolution_comment),
+            -- пустой комментарий = «согласен с текстом ремонта», а не
+            -- «стереть его»: иначе решение не попадало в базу знаний
+            resolution_comment = COALESCE(NULLIF(TRIM(?), ''), draft_resolution_comment),
             resolved_by = ?
         WHERE id = ?
     """, (

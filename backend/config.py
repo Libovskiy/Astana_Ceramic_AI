@@ -68,7 +68,9 @@ INCIDENT_SEVERITIES = ["low", "medium", "high", "critical"]
 # =========================================
 import os as _os
 
-DB_NAME = str(BASE_DIR / "factory.db")
+# ACAI_DB — другой файл базы. Нужен сквозным проверкам (tests/): они
+# работают на копии, чтобы не создавать обращения и простои в живой базе.
+DB_NAME = _os.getenv("ACAI_DB") or str(BASE_DIR / "factory.db")
 
 ENVIRONMENT = _os.getenv("ENVIRONMENT", "development")
 
