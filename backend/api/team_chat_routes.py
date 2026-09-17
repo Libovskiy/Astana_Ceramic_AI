@@ -231,3 +231,17 @@ def rename(conversation_id: int, payload: TitlePayload, user: dict = Depends(cur
 def leave(conversation_id: int, user: dict = Depends(current_user)):
     _handle(svc.leave, conversation_id, user["id"])
     return {"success": True}
+
+
+@router.post("/conversations/{conversation_id}/clear")
+def clear(conversation_id: int, user: dict = Depends(current_user)):
+    """Удалить личный чат у себя."""
+    _handle(svc.clear_chat, conversation_id, user["id"])
+    return {"success": True}
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_group(conversation_id: int, user: dict = Depends(current_user)):
+    """Удалить группу для всех участников."""
+    _handle(svc.delete_group, conversation_id, user["id"])
+    return {"success": True}

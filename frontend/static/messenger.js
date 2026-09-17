@@ -124,7 +124,7 @@ async function pullMessages(first) {
       $('mgHead').style.display = 'none';
       $('mgComposer').style.display = 'none';
       $('mgMessages').innerHTML =
-        '<div class="mg-empty">Эта переписка больше недоступна.<br>Возможно, вас убрали из группы.</div>';
+        '<div class="mg-empty">Эта переписка больше недоступна.<br>Возможно, группу удалили или вас из неё убрали.</div>';
       showList();
       loadList(true);
     }
@@ -641,6 +641,7 @@ function openGroupSettings() {
     <div class="mg-picker">${canAdd || '<div class="mg-empty">Все уже здесь</div>'}</div>
     <div class="modal-foot">
       <button class="btn danger" onclick="leaveGroup()">Выйти из группы</button>
+      ${current.can_delete_group ? '<button class="btn danger" onclick="deleteGroup()">Удалить группу</button>' : ''}
       <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
     </div>
   `);
@@ -687,18 +688,69 @@ async function saveTitle() {
   } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
 }
 
+function closeCurrent(message) {
+  ACAI.closeModal();
+  current = null;
+  stopThreadPolling();
+  $('mgHead').style.display = 'none';
+  $('mgComposer').style.display = 'none';
+  $('mgMessages').innerHTML = '<div class="mg-empty">Выберите переписку слева</div>';
+  showList();
+  loadList(true);
+  if (message) ACAI.toast(message);
+}
+
 async function leaveGroup() {
-  if (!confirm('Выйти из группы? Переписка пропадёт из списка.')) return;
+  if (!confirm('Выйти из группы? Переписка пропадёт из вашего списка, у остальных останется.')) return;
   try {
     await ACAI.post(`/api/messenger/conversations/${current.id}/leave`, {});
-    ACAI.closeModal();
-    current = null;
-    stopThreadPolling();
-    $('mgHead').style.display = 'none';
-    $('mgComposer').style.display = 'none';
-    $('mgMessages').innerHTML = '<div class="mg-empty">Выберите переписку слева</div>';
-    showList();
-    loadList();
+    closeCurrent('Вы вышли из группы');
+  } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
+}
+
+// ── Меню переписки: как в WhatsApp ────────────────────────
+
+function openChatMenu() {
+  if (!current) return;
+
+  const group = current.kind === 'group';
+
+  const items = group ? `
+      <button class="btn secondary" onclick="ACAI.closeModal();openGroupSettings()">👥 Участники и название</button>
+      <button class="btn secondary" onclick="leaveGroup()">🚪 Выйти из группы</button>
+      ${current.can_delete_group ? `
+        <button class="btn danger" onclick="deleteGroup()">🗑 Удалить группу для всех</button>
+        <div class="mg-menu-note">Группа пропадёт у всех участников вместе с сообщениями и файлами.</div>` : `
+        <div class="mg-menu-note">Удалить группу для всех может её создатель или администратор.</div>`}
+    ` : `
+      <button class="btn danger" onclick="clearChat()">🗑 Удалить чат</button>
+      <div class="mg-menu-note">Переписка пропадёт только у вас. У собеседника она останется, а если он напишет снова — чат вернётся без старых сообщений.</div>
+    `;
+
+  ACAI.showModal(`
+    <h3>${esc(current.title || '')}</h3>
+    <div class="mg-menu">${items}</div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+    </div>
+  `);
+}
+
+async function clearChat() {
+  if (!confirm('Удалить чат? Сообщения пропадут у вас, у собеседника останутся.')) return;
+  try {
+    await ACAI.post(`/api/messenger/conversations/${current.id}/clear`, {});
+    closeCurrent('Чат удалён');
+  } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
+}
+
+async function deleteGroup() {
+  if (!confirm(`Удалить группу «${current.title}» для всех? Сообщения и файлы пропадут у всех участников. Отменить нельзя.`)) return;
+  try {
+    const r = await fetch(`/api/messenger/conversations/${current.id}`, { method: 'DELETE', credentials: 'include' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || 'Не получилось');
+    closeCurrent('Группа удалена');
   } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
 }
 
@@ -835,6 +887,9 @@ window.startDm = startDm;
 window.send = send;
 window.removeMessage = removeMessage;
 window.openGroupSettings = openGroupSettings;
+window.openChatMenu = openChatMenu;
+window.clearChat = clearChat;
+window.deleteGroup = deleteGroup;
 window.invite = invite;
 window.kick = kick;
 window.saveTitle = saveTitle;

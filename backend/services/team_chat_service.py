@@ -185,6 +185,12 @@ def init_team_chat():
         ON team_attachments(message_id)
     """)
 
+    # «Удалить чат» как в WhatsApp: у себя скрываем всё до этого id.
+    # Собеседнику переписка остаётся, новое сообщение вернёт чат в список.
+    member_columns = {row[1] for row in cur.execute("PRAGMA table_info(team_members)")}
+    if "cleared_before_id" not in member_columns:
+        cur.execute("ALTER TABLE team_members ADD COLUMN cleared_before_id INTEGER NOT NULL DEFAULT 0")
+
     conn.commit()
     conn.close()
 
@@ -276,7 +282,7 @@ def list_conversations(me_id: int) -> list[dict]:
 
     rows = conn.execute(
         """
-        SELECT c.*, m.last_read_message_id
+        SELECT c.*, m.last_read_message_id, m.cleared_before_id
         FROM team_conversations c
         JOIN team_members m ON m.conversation_id = c.id
         WHERE m.user_id = ?
@@ -294,18 +300,22 @@ def list_conversations(me_id: int) -> list[dict]:
             """
             SELECT id, user_id, body, created_at, deleted_at
             FROM team_messages
-            WHERE conversation_id = ?
+            WHERE conversation_id = ? AND id > ?
             ORDER BY id DESC LIMIT 1
             """,
-            (conv["id"],)
+            (conv["id"], conv["cleared_before_id"])
         ).fetchone()
+
+        # Чат удалён у себя и с тех пор никто не писал — в списке его нет
+        if last is None and conv["cleared_before_id"]:
+            continue
 
         unread = conn.execute(
             """
             SELECT COUNT(*) FROM team_messages
             WHERE conversation_id = ? AND id > ? AND user_id != ?
             """,
-            (conv["id"], conv["last_read_message_id"], me_id)
+            (conv["id"], max(conv["last_read_message_id"], conv["cleared_before_id"]), me_id)
         ).fetchone()[0]
 
         last_msg = dict(last) if last else None
@@ -356,7 +366,7 @@ def unread_total(me_id: int) -> int:
         JOIN team_members mem
           ON mem.conversation_id = msg.conversation_id
          AND mem.user_id = ?
-        WHERE msg.id > mem.last_read_message_id
+        WHERE msg.id > MAX(mem.last_read_message_id, mem.cleared_before_id)
           AND msg.user_id != ?
         """,
         (me_id, me_id)
@@ -593,6 +603,107 @@ def leave(conversation_id: int, me_id: int) -> None:
         conn.close()
 
 
+def _cleared_before(conn, conversation_id: int, user_id: int) -> int:
+    row = conn.execute(
+        "SELECT cleared_before_id FROM team_members WHERE conversation_id = ? AND user_id = ?",
+        (conversation_id, user_id)
+    ).fetchone()
+    return row["cleared_before_id"] if row else 0
+
+
+def _can_delete_group(conn, conv: dict, me_id: int) -> bool:
+    """Группу для всех удаляет её создатель или администратор."""
+    if conv.get("created_by") == me_id:
+        return True
+    from backend.config import is_owner
+    user = conn.execute("SELECT id, username, role FROM users WHERE id = ?", (me_id,)).fetchone()
+    return bool(user) and (user["role"] == "admin" or is_owner(dict(user)))
+
+
+def _remove_files(conn, message_ids_sql: str, params: tuple) -> None:
+    for att in conn.execute(
+        f"SELECT stored_path, preview_path FROM team_attachments WHERE message_id IN ({message_ids_sql})",
+        params
+    ).fetchall():
+        for relative in (att["stored_path"], att["preview_path"]):
+            if relative:
+                try:
+                    (ATTACHMENTS_DIR / relative).unlink(missing_ok=True)
+                except OSError as error:
+                    print(f"[team_chat] не удалён файл {relative}: {error}")
+
+
+def clear_chat(conversation_id: int, me_id: int) -> None:
+    """
+    «Удалить чат» в личной переписке — только у себя, как в WhatsApp.
+    У собеседника всё остаётся: это и его переписка тоже. Если он
+    напишет снова, чат вернётся в список уже без старой истории.
+    """
+
+    conn = get_connection()
+
+    try:
+        conv = conn.execute(
+            "SELECT kind FROM team_conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+
+        if not conv:
+            raise ValueError("Переписка не найдена.")
+
+        if not _is_member(conn, conversation_id, me_id):
+            raise PermissionError("Вы не участник этой переписки.")
+
+        if conv["kind"] != KIND_DM:
+            raise ValueError("Группу не удаляют, а выходят из неё.")
+
+        # id сквозной по всем перепискам, поэтому берём общий максимум:
+        # так и пустой чат скрывается, и любое новое сообщение его вернёт.
+        top = conn.execute("SELECT COALESCE(MAX(id), 0) FROM team_messages").fetchone()[0] or 1
+
+        conn.execute(
+            """
+            UPDATE team_members
+            SET cleared_before_id = ?, last_read_message_id = MAX(last_read_message_id, ?)
+            WHERE conversation_id = ? AND user_id = ?
+            """,
+            (top, top, conversation_id, me_id)
+        )
+        conn.commit()
+
+    finally:
+        conn.close()
+
+
+def delete_group(conversation_id: int, me_id: int) -> None:
+    """
+    Удалить группу для всех: пропадает у каждого участника вместе с
+    сообщениями и файлами. Только создатель или администратор — иначе
+    любой участник мог бы стереть рабочую переписку бригады.
+    """
+
+    conn = get_connection()
+
+    try:
+        conv = _require_group_member(conn, conversation_id, me_id)
+
+        if not _can_delete_group(conn, conv, me_id):
+            raise PermissionError("Удалить группу может её создатель или администратор. Вы можете выйти из группы.")
+
+        _remove_files(conn, "SELECT id FROM team_messages WHERE conversation_id = ?", (conversation_id,))
+
+        conn.execute(
+            "DELETE FROM team_attachments WHERE message_id IN (SELECT id FROM team_messages WHERE conversation_id = ?)",
+            (conversation_id,)
+        )
+        conn.execute("DELETE FROM team_messages WHERE conversation_id = ?", (conversation_id,))
+        conn.execute("DELETE FROM team_members WHERE conversation_id = ?", (conversation_id,))
+        conn.execute("DELETE FROM team_conversations WHERE id = ?", (conversation_id,))
+        conn.commit()
+
+    finally:
+        conn.close()
+
+
 # =========================================================
 # СООБЩЕНИЯ
 # =========================================================
@@ -683,6 +794,8 @@ def get_messages(conversation_id: int, me_id: int,
         if not _is_member(conn, conversation_id, me_id):
             raise PermissionError("Вы не участник этой переписки.")
 
+        cleared = _cleared_before(conn, conversation_id, me_id)
+
         limit = max(1, min(int(limit or 50), 200))
 
         if before_id:
@@ -694,11 +807,11 @@ def get_messages(conversation_id: int, me_id: int,
                        u.full_name, u.username, u.role
                 FROM team_messages m
                 JOIN users u ON u.id = m.user_id
-                WHERE m.conversation_id = ? AND m.id < ?
+                WHERE m.conversation_id = ? AND m.id < ? AND m.id > ?
                 ORDER BY m.id DESC
                 LIMIT ?
                 """,
-                (conversation_id, before_id, limit)
+                (conversation_id, before_id, cleared, limit)
             ).fetchall()
             rows = list(reversed(rows))
 
@@ -713,7 +826,7 @@ def get_messages(conversation_id: int, me_id: int,
                 ORDER BY m.id
                 LIMIT ?
                 """,
-                (conversation_id, after_id, limit)
+                (conversation_id, max(after_id, cleared), limit)
             ).fetchall()
 
         else:
@@ -725,11 +838,11 @@ def get_messages(conversation_id: int, me_id: int,
                        u.full_name, u.username, u.role
                 FROM team_messages m
                 JOIN users u ON u.id = m.user_id
-                WHERE m.conversation_id = ?
+                WHERE m.conversation_id = ? AND m.id > ?
                 ORDER BY m.id DESC
                 LIMIT ?
                 """,
-                (conversation_id, limit)
+                (conversation_id, cleared, limit)
             ).fetchall()
             rows = list(reversed(rows))
 
@@ -740,8 +853,8 @@ def get_messages(conversation_id: int, me_id: int,
         has_more = False
         if oldest is not None:
             has_more = conn.execute(
-                "SELECT 1 FROM team_messages WHERE conversation_id = ? AND id < ? LIMIT 1",
-                (conversation_id, oldest)
+                "SELECT 1 FROM team_messages WHERE conversation_id = ? AND id < ? AND id > ? LIMIT 1",
+                (conversation_id, oldest, cleared)
             ).fetchone() is not None
 
         members = _members_of(conn, conversation_id)
@@ -753,6 +866,7 @@ def get_messages(conversation_id: int, me_id: int,
                 "title": _conversation_title(dict(conv), members, me_id),
                 "members": members,
                 "members_count": len(members),
+                "can_delete_group": conv["kind"] == KIND_GROUP and _can_delete_group(conn, dict(conv), me_id),
             },
             "messages": messages,
             "has_more": has_more,
@@ -1104,6 +1218,9 @@ def get_attachment(attachment_id: int, me_id: int, preview: bool = False) -> dic
 
         if row["deleted_at"]:
             raise ValueError("Сообщение удалено.")
+
+        if row["message_id"] <= _cleared_before(conn, row["conversation_id"], me_id):
+            raise ValueError("Переписка удалена.")
 
         relative = row["preview_path"] if (preview and row["preview_path"]) else row["stored_path"]
         path = ATTACHMENTS_DIR / relative
