@@ -117,88 +117,13 @@
   </div>
 </div>
 
-<div id="stageModal" class="modal hidden">
-  <div class="modal-overlay"></div>
-  <div class="modal-window production-details-modal">
-    <button type="button" class="modal-close" id="closeStageModal">×</button>
-    <div class="modal-icon" id="modalStageIcon">▤</div>
-    <h2 id="modalStageTitle">Производственный участок</h2>
-    <p id="modalStageDescription">Информация об участке.</p>
-
-    <div class="production-detail-status">
-      <span>Состояние</span>
-      <strong id="modalStageStatus">—</strong>
-    </div>
-
-    <div class="production-detail-card">
-      <div class="production-detail-header">
-        <span>Здоровье оборудования</span>
-        <strong id="modalStageHealth">—</strong>
-      </div>
-      <div class="production-progress-bar">
-        <div id="modalStageHealthBar" class="production-progress-value" style="width: 0%"></div>
-      </div>
-    </div>
-
-    <div class="production-detail-card">
-      <div class="production-detail-header">
-        <span>Эксплуатация</span>
-        <strong id="modalStageReadiness">—</strong>
-      </div>
-      <div class="production-progress-bar">
-        <div id="modalStageReadinessBar" class="production-progress-value" style="width: 0%"></div>
-      </div>
-    </div>
-
-    <div class="production-detail-card" style="grid-column: 1 / -1;">
-      <span class="production-detail-label">Оборудование этапа</span>
-
-      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
-        <span class="production-detail-label">Части оборудования</span>
-        <div id="modalStagePartsList" style="margin-top: 10px; max-height: 220px; overflow-y: auto;">—</div>
-      </div>
-
-      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
-        <span class="production-detail-label">Документы</span>
-        <div id="modalStageDocumentsList" style="margin-top: 10px; max-height: 220px; overflow-y: auto;">—</div>
-      </div>
-
-      <div class="production-detail-card" style="grid-column: 1 / -1; margin-top: 12px;">
-        <span class="production-detail-label">Активные простои</span>
-        <div id="modalStageDowntimeList" style="margin-top: 10px; max-height: 180px; overflow-y: auto;">—</div>
-      </div>
-    </div>
-
-    <button type="button" id="modalMaintenanceButton" class="btn ok btn-block" style="display: none; margin-top: 16px;">
-      Отметить обслуживание выполненным
-    </button>
-  </div>
-</div>
-
-<div id="productionMapModal" class="modal hidden">
-  <div class="modal-overlay"></div>
-  <div class="modal-window production-map-window">
-    <button type="button" class="modal-close" id="closeProductionMap">×</button>
-    <h2>Производственная карта</h2>
-    <p>Последовательность основных этапов производства.</p>
-
-    <div class="production-map">
-      <div class="map-stage"><span>01</span><strong>Масса</strong></div>
-      <div class="map-arrow">→</div>
-      <div class="map-stage"><span>02</span><strong>Формовка</strong></div>
-      <div class="map-arrow">→</div>
-      <div class="map-stage"><span>03</span><strong>Сушка</strong></div>
-      <div class="map-arrow">→</div>
-      <div class="map-stage"><span>04</span><strong>Печь</strong></div>
-      <div class="map-arrow">→</div>
-      <div class="map-stage"><span>05</span><strong>Упаковка</strong></div>
-    </div>
-  </div>
-</div>
+<!-- Окна «Производственный участок» и «Карта производства» убраны
+     вместе с секцией «Производственный процесс»: открывавший их код
+     удалён из production.js, разметка оставалась пустым грузом. -->
 
 <script src="/static/acai_layout.js?v=16"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
-<script src="/static/production.js?v=36"></script>
+<script src="/static/production.js?v=37"></script>
 <script src="/static/shift-report.js?v=4"></script>
 <script>initLayout().then(() => initShiftReport());</script>
 

@@ -159,15 +159,14 @@ app.include_router(structure_router)
 from backend.api.backup_routes import router as backup_router
 app.include_router(backup_router)
 
-# ─── Модуль мониторинга ───────────────────────────────────────────
+# ─── Датчики WebHMI ───────────────────────────────────────────────
+# Здесь же раньше подключались /api/stages, /api/notes и /api/audit —
+# остатки отдельной подсистемы «мониторинга» с JWT-авторизацией. Их
+# звал только monitoring.js, который не подключала ни одна страница, а
+# выдать JWT было нечем: create_access_token нигде не вызывалась.
+# Эндпоинты висели недостижимыми для всех и убраны.
 from backend.api.sensor_routes import router as sensor_router
-from backend.api.stage_routes import router as stage_router
-from backend.api.note_routes import router as note_router
-from backend.api.audit_routes import router as audit_router
 app.include_router(sensor_router)
-app.include_router(stage_router)
-app.include_router(note_router)
-app.include_router(audit_router)
 
 from backend.api.checklist_routes import router as checklist_router
 app.include_router(checklist_router)

@@ -39,17 +39,16 @@ uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
 - `backend/services/` — бизнес-логика (аналитика, аудит, поиск по базе
   знаний, симптомы/диагностика, регламенты, простои, бэкапы и т.д.),
   роутеры сами по себе тонкие и дёргают сервисы.
-- `backend/models.py`, `backend/schemas.py`, `backend/database.py`,
-  `backend/auth.py` — модели SQLAlchemy, Pydantic-схемы, аутентификация
-  и роли. **Важно:** большинство роутеров работают напрямую с
-  `factory.db` через `sqlite3`, но `audit_routes.py`, `sensor_routes.py`,
-  `stage_routes.py` и `note_routes.py` — через SQLAlchemy-модели из
-  `backend/database.py`, а та подключена к **`monitoring.db`**
-  (`backend/config.py: DATABASE_URL`). Это две разные базы одновременно,
-  обе живут в корне и обе нужны сайту.
+- `backend/models.py`, `backend/schemas.py`, `backend/database.py` —
+  модели SQLAlchemy. **Важно:** почти всё работает напрямую с
+  `factory.db` через `sqlite3`, и вход — по сессионной cookie
+  (`backend/services/auth_service.py`). Исключение одно — показания
+  датчиков: `sensor_routes.py` пишет через SQLAlchemy в **`monitoring.db`**
+  (`backend/config.py: DATABASE_URL`). Это две разные базы, обе живут
+  в корне и обе нужны сайту.
 - `frontend/templates/` — Jinja2-страницы (аналитика, аудит, обращения,
   чек-листы, оборудование, база знаний/чат с ИИ, регламенты, лаборатория,
-  ТО, отчёты, мобильная версия и т.д.), `frontend/static/` — общие
+  ТО, отчёты, переписка и т.д.), `frontend/static/` — общие
   `acai.css`/`acai_layout.js` плюс страничные скрипты/стили.
 - `docs/` — файлы регламентов/паспортов оборудования (сырые байты;
   метаданные и статус подтверждения — в БД). В git не попадает.
@@ -58,6 +57,9 @@ uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
 - `project-docs/` — служебная markdown/txt-документация проекта (не
   путать с `docs/` — та для паспортов оборудования и в git не попадает).
 - `deploy/` — копии launchd-плистов для справки (см. про запуск выше).
+- `tools/webhmi-extension/` — расширение Chrome, которое собирает
+  показания с панели WebHMI и шлёт их на сервер. Без него нет данных
+  с датчиков. Установка и ключ — в его `README.md`.
 
 ## Роли
 

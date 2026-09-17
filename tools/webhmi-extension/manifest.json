@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "ACAI WebHMI Collector",
+  "version": "1.0",
+  "description": "Собирает данные с WebHMI и отправляет на ACAI сервер",
+  "permissions": ["cookies", "scripting", "alarms"],
+  "host_permissions": [
+    "http://192.168.1.74/*",
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://192.168.1.74/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ACAI Collector"
+  }
+}
