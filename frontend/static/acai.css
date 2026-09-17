@@ -20,7 +20,48 @@
   --sans: 'Inter', sans-serif;
   --radius: 12px;
   --nav-w: 220px;
+
+  /* рисунки станков на главной */
+  --ill-1: #0f1520; --ill-2: #1a2030; --ill-3: #141c28;
+  --ill-4: #1e2840; --ill-5: #2a3550; --ill-6: #243040;
+  --ill-hole: #0a1018; --ill-kiln: #080604; --ill-kiln-2: #151008;
+
+  --shadow: 0 4px 20px rgba(0,0,0,.4);
+  --backdrop: rgba(0,0,0,.6);
+  color-scheme: dark;
 }
+
+/* ── СВЕТЛАЯ ТЕМА ──
+   Статусные цвета темнее, чем в тёмной: ярко-зелёный и жёлтый текст
+   на белом почти не читается. */
+:root[data-theme="light"] {
+  --bg:        #f3f5f9;
+  --surface:   #ffffff;
+  --surface-2: #eef1f6;
+  --border:    #dde2ea;
+  --text:      #111827;
+  --text-dim:  #5b6576;
+  --ok:        #15803d;
+  --warn:      #b45309;
+  --danger:    #dc2626;
+  --accent:    #2563eb;
+
+  --ill-1: #cfd8e6; --ill-2: #e6ebf3; --ill-3: #d9e0eb;
+  --ill-4: #dfe6f0; --ill-5: #c7d1e0; --ill-6: #d3dbe7;
+  --ill-hole: #b9c4d4; --ill-kiln: #d8cfc4; --ill-kiln-2: #e5ddd2;
+
+  --shadow: 0 6px 24px rgba(15,23,42,.12);
+  --backdrop: rgba(15,23,42,.35);
+  color-scheme: light;
+}
+
+/* Переключатель темы — в карточке пользователя внизу меню */
+.theme-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-dim); font-size: 15px; line-height: 1;
+  padding: 4px; border-radius: 4px; transition: color .15s;
+}
+.theme-btn:hover { color: var(--text); }
 
 html, body {
   font-family: var(--sans);
@@ -112,7 +153,7 @@ html, body {
 /* Должности на заводе длинные («Оператор 1, Массаподготовка и
    формовка, бригада А») — без обрезки карточка внизу меню
    разъезжалась на четыре строки. Полное имя остаётся в подсказке. */
-.user-card > div:not(.user-avatar) { min-width: 0; }
+.user-card > div:not(.user-avatar) { min-width: 0; flex: 1; }
 .user-name {
   font-size: 12px; font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -122,7 +163,7 @@ html, body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .logout-btn {
-  margin-left: auto; background: none; border: none;
+  margin-left: 0; background: none; border: none;
   color: var(--text-dim); cursor: pointer; font-size: 16px;
   padding: 4px; border-radius: 4px;
   transition: color .15s;
@@ -247,7 +288,7 @@ html, body {
 
 /* ── МОДАЛКА ── */
 .overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  position: fixed; inset: 0; background: var(--backdrop);
   display: flex; align-items: center; justify-content: center;
   z-index: 200;
 }

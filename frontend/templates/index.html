@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACAI — Astana Ceramic</title>
+<script src="/static/theme.js?v=1"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=15">
+<link rel="stylesheet" href="/static/acai.css?v=16">
 <style>
 .sensor-strip{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .ss-item{display:flex;align-items:center;gap:6px;}
@@ -169,7 +170,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=16"></script>
+<script src="/static/acai_layout.js?v=17"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -178,25 +179,25 @@ document.getElementById('topbarDate').textContent=new Date().toLocaleDateString(
 function svgMassa(color){
   return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
     <!-- здание изометрия -->
-    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
-    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
-    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
-    <polygon points="20,60 60,40 100,60 60,80" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" style="fill:var(--ill-2)" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" style="fill:var(--ill-1)" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" style="fill:var(--ill-3)" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 60,80" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
     <!-- крыша акцент -->
     <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".15"/>
     <!-- дробилка -->
-    <rect x="42" y="55" width="16" height="18" rx="3" fill="#2a3550" stroke="${color}" stroke-width="1"/>
+    <rect x="42" y="55" width="16" height="18" rx="3" style="fill:var(--ill-5)" stroke="${color}" stroke-width="1"/>
     <rect x="45" y="58" width="10" height="4" rx="1" fill="${color}" opacity=".6"/>
     <!-- бункер -->
-    <polygon points="48,48 72,48 68,56 52,56" fill="#243040" stroke="${color}" stroke-width="1"/>
+    <polygon points="48,48 72,48 68,56 52,56" style="fill:var(--ill-6)" stroke="${color}" stroke-width="1"/>
     <!-- конвейер анимированный -->
     <line x1="20" y1="85" x2="100" y2="85" stroke="${color}" stroke-width="2" opacity=".3"/>
     <rect x="20" y="83" width="8" height="4" rx="2" fill="${color}" opacity=".7">
       <animateTransform attributeName="transform" type="translate" from="0,0" to="80,0" dur="2s" repeatCount="indefinite"/>
     </rect>
     <!-- труба -->
-    <rect x="72" y="30" width="6" height="20" rx="2" fill="#1e2840" stroke="${color}" stroke-width="1"/>
-    <ellipse cx="75" cy="30" rx="4" ry="2" fill="#2a3550" stroke="${color}" stroke-width="1"/>
+    <rect x="72" y="30" width="6" height="20" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="75" cy="30" rx="4" ry="2" style="fill:var(--ill-5)" stroke="${color}" stroke-width="1"/>
     <!-- пар -->
     <circle cx="75" cy="24" r="3" fill="white" opacity=".2">
       <animate attributeName="cy" from="24" to="18" dur="1.5s" repeatCount="indefinite"/>
@@ -211,13 +212,13 @@ function svgMassa(color){
 
 function svgFormovka(color){
   return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
-    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
-    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" style="fill:var(--ill-2)" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" style="fill:var(--ill-1)" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" style="fill:var(--ill-3)" stroke="${color}" stroke-width="1"/>
     <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".12"/>
     <!-- пресс экструдер -->
-    <rect x="35" y="58" width="50" height="14" rx="3" fill="#1e2840" stroke="${color}" stroke-width="1"/>
-    <rect x="38" y="61" width="44" height="8" rx="2" fill="#243050" stroke="${color}" stroke-width=".5"/>
+    <rect x="35" y="58" width="50" height="14" rx="3" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
+    <rect x="38" y="61" width="44" height="8" rx="2" style="fill:var(--ill-6)" stroke="${color}" stroke-width=".5"/>
     <!-- форсунка -->
     <rect x="82" y="63" width="8" height="4" rx="2" fill="${color}" opacity=".8"/>
     <!-- кирпичики выходят -->
@@ -226,34 +227,34 @@ function svgFormovka(color){
       <animate attributeName="opacity" from=".9" to="0" dur="1.2s" repeatCount="indefinite"/>
     </rect>
     <!-- мотор -->
-    <circle cx="45" cy="65" r="5" fill="#1a2540" stroke="${color}" stroke-width="1"/>
+    <circle cx="45" cy="65" r="5" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
     <circle cx="45" cy="65" r="2" fill="${color}" opacity=".6">
       <animateTransform attributeName="transform" type="rotate" from="0,45,65" to="360,45,65" dur="0.8s" repeatCount="indefinite"/>
     </circle>
     <!-- крыша -->
-    <rect x="50" y="40" width="8" height="20" rx="2" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <rect x="50" y="40" width="8" height="20" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
   </svg>`;
 }
 
 function svgSushka(color){
   return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
-    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
-    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" style="fill:var(--ill-2)" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" style="fill:var(--ill-1)" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" style="fill:var(--ill-3)" stroke="${color}" stroke-width="1"/>
     <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".1"/>
     <!-- туннель сушилки -->
-    <rect x="25" y="62" width="70" height="20" rx="4" fill="#0d1520" stroke="${color}" stroke-width="1"/>
-    <ellipse cx="25" cy="72" rx="6" ry="10" fill="#0a1018" stroke="${color}" stroke-width="1"/>
-    <ellipse cx="95" cy="72" rx="6" ry="10" fill="#0a1018" stroke="${color}" stroke-width="1"/>
+    <rect x="25" y="62" width="70" height="20" rx="4" style="fill:var(--ill-hole)" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="25" cy="72" rx="6" ry="10" style="fill:var(--ill-hole)" stroke="${color}" stroke-width="1"/>
+    <ellipse cx="95" cy="72" rx="6" ry="10" style="fill:var(--ill-hole)" stroke="${color}" stroke-width="1"/>
     <!-- вагонетки -->
-    <rect x="30" y="70" width="12" height="8" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8">
+    <rect x="30" y="70" width="12" height="8" rx="2" style="fill:var(--ill-5)" stroke="${color}" stroke-width=".8">
       <animateTransform attributeName="transform" type="translate" from="-10,0" to="60,0" dur="4s" repeatCount="indefinite"/>
     </rect>
     <!-- жаровые трубы -->
-    <rect x="38" y="55" width="4" height="10" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
-    <rect x="50" y="52" width="4" height="13" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
-    <rect x="62" y="55" width="4" height="10" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
-    <rect x="74" y="52" width="4" height="13" rx="2" fill="#1e2840" stroke="${color}" stroke-width=".8"/>
+    <rect x="38" y="55" width="4" height="10" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width=".8"/>
+    <rect x="50" y="52" width="4" height="13" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width=".8"/>
+    <rect x="62" y="55" width="4" height="10" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width=".8"/>
+    <rect x="74" y="52" width="4" height="13" rx="2" style="fill:var(--ill-4)" stroke="${color}" stroke-width=".8"/>
     <!-- тепло волны -->
     <path d="M40,50 Q45,44 50,50 Q55,44 60,50" stroke="${color}" stroke-width="1" fill="none" opacity=".5">
       <animate attributeName="opacity" values=".5;.1;.5" dur="1.5s" repeatCount="indefinite"/>
@@ -263,22 +264,22 @@ function svgSushka(color){
 
 function svgObzhig(color){
   return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a1510" stroke="${color}" stroke-width="1.5"/>
-    <polygon points="20,60 60,40 60,70 20,90" fill="#100f08" stroke="${color}" stroke-width="1"/>
-    <polygon points="60,40 100,60 100,90 60,70" fill="#141208" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" style="fill:var(--ill-kiln-2)" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" style="fill:var(--ill-kiln)" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" style="fill:var(--ill-kiln)" stroke="${color}" stroke-width="1"/>
     <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".15"/>
     <!-- туннельная печь -->
-    <rect x="22" y="63" width="76" height="22" rx="5" fill="#0d0a05" stroke="${color}" stroke-width="1.5"/>
-    <ellipse cx="22" cy="74" rx="7" ry="11" fill="#080604" stroke="${color}" stroke-width="1.5"/>
-    <ellipse cx="98" cy="74" rx="7" ry="11" fill="#080604" stroke="${color}" stroke-width="1.5"/>
+    <rect x="22" y="63" width="76" height="22" rx="5" style="fill:var(--ill-kiln)" stroke="${color}" stroke-width="1.5"/>
+    <ellipse cx="22" cy="74" rx="7" ry="11" style="fill:var(--ill-kiln)" stroke="${color}" stroke-width="1.5"/>
+    <ellipse cx="98" cy="74" rx="7" ry="11" style="fill:var(--ill-kiln)" stroke="${color}" stroke-width="1.5"/>
     <!-- огонь внутри -->
     <ellipse cx="60" cy="74" rx="25" ry="8" fill="${color}" opacity=".2"/>
     <path d="M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78" fill="${color}" opacity=".6">
       <animate attributeName="d" values="M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78;M45,78 Q52,70 55,76 Q60,67 64,73 Q67,65 70,71 Q73,79 75,78;M45,78 Q50,68 55,74 Q58,66 62,72 Q66,64 70,70 Q72,78 75,78" dur="0.5s" repeatCount="indefinite"/>
     </path>
     <!-- трубы дымовые -->
-    <rect x="30" y="38" width="8" height="26" rx="3" fill="#151008" stroke="${color}" stroke-width="1"/>
-    <rect x="82" y="38" width="8" height="26" rx="3" fill="#151008" stroke="${color}" stroke-width="1"/>
+    <rect x="30" y="38" width="8" height="26" rx="3" style="fill:var(--ill-kiln-2)" stroke="${color}" stroke-width="1"/>
+    <rect x="82" y="38" width="8" height="26" rx="3" style="fill:var(--ill-kiln-2)" stroke="${color}" stroke-width="1"/>
     <!-- дым -->
     <circle cx="34" cy="33" r="5" fill="#888" opacity=".15">
       <animate attributeName="cy" from="33" to="20" dur="2s" repeatCount="indefinite"/>
@@ -297,23 +298,23 @@ function svgObzhig(color){
 
 function svgUpakovka(color){
   return `<svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" fill="#1a2030" stroke="${color}" stroke-width="1.5"/>
-    <polygon points="20,60 60,40 60,70 20,90" fill="#0f1520" stroke="${color}" stroke-width="1"/>
-    <polygon points="60,40 100,60 100,90 60,70" fill="#141c28" stroke="${color}" stroke-width="1"/>
+    <polygon points="20,60 60,40 100,60 100,90 60,110 20,90" style="fill:var(--ill-2)" stroke="${color}" stroke-width="1.5"/>
+    <polygon points="20,60 60,40 60,70 20,90" style="fill:var(--ill-1)" stroke="${color}" stroke-width="1"/>
+    <polygon points="60,40 100,60 100,90 60,70" style="fill:var(--ill-3)" stroke="${color}" stroke-width="1"/>
     <polygon points="20,60 60,40 100,60 60,80" fill="${color}" opacity=".1"/>
     <!-- паллеты с кирпичом -->
-    <rect x="28" y="76" width="18" height="10" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8"/>
-    <rect x="30" y="68" width="14" height="9" rx="1" fill="#243040" stroke="${color}" stroke-width=".8"/>
+    <rect x="28" y="76" width="18" height="10" rx="2" style="fill:var(--ill-5)" stroke="${color}" stroke-width=".8"/>
+    <rect x="30" y="68" width="14" height="9" rx="1" style="fill:var(--ill-6)" stroke="${color}" stroke-width=".8"/>
     <rect x="32" y="62" width="10" height="7" rx="1" fill="${color}" opacity=".4" stroke="${color}" stroke-width=".5"/>
     <!-- вторая паллета -->
-    <rect x="55" y="74" width="18" height="10" rx="2" fill="#2a3550" stroke="${color}" stroke-width=".8"/>
-    <rect x="57" y="66" width="14" height="9" rx="1" fill="#243040" stroke="${color}" stroke-width=".8"/>
+    <rect x="55" y="74" width="18" height="10" rx="2" style="fill:var(--ill-5)" stroke="${color}" stroke-width=".8"/>
+    <rect x="57" y="66" width="14" height="9" rx="1" style="fill:var(--ill-6)" stroke="${color}" stroke-width=".8"/>
     <rect x="59" y="60" width="10" height="7" rx="1" fill="${color}" opacity=".4" stroke="${color}" stroke-width=".5"/>
     <!-- упаковочная машина -->
-    <rect x="42" y="55" width="16" height="22" rx="3" fill="#1e2840" stroke="${color}" stroke-width="1"/>
+    <rect x="42" y="55" width="16" height="22" rx="3" style="fill:var(--ill-4)" stroke="${color}" stroke-width="1"/>
     <rect x="45" y="58" width="10" height="4" rx="1" fill="${color}" opacity=".5"/>
     <!-- лента -->
-    <rect x="22" y="82" width="76" height="4" rx="2" fill="#243040" stroke="${color}" stroke-width=".5"/>
+    <rect x="22" y="82" width="76" height="4" rx="2" style="fill:var(--ill-6)" stroke="${color}" stroke-width=".5"/>
     <rect x="22" y="83" width="10" height="2" rx="1" fill="${color}" opacity=".5">
       <animateTransform attributeName="transform" type="translate" from="0,0" to="76,0" dur="1.5s" repeatCount="indefinite"/>
       <animate attributeName="opacity" from=".5" to="0" dur="1.5s" repeatCount="indefinite"/>

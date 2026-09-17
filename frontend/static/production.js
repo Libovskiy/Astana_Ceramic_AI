@@ -231,7 +231,7 @@ async function loadPlanSummary(monthlyPlans) {
             <h4 style="margin-bottom: 12px;">План месяца → произведено сегодня → осталось</h4>
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
-                    <tr style="text-align: left; border-bottom: 2px solid #eee;">
+                    <tr style="text-align: left; border-bottom: 2px solid var(--border);">
                         <th style="padding: 8px; font-size: 12px; color: #888;">Вид</th>
                         <th style="padding: 8px; font-size: 12px; color: #888;">План месяца</th>
                         <th style="padding: 8px; font-size: 12px; color: #888;">Произведено сегодня</th>
@@ -247,7 +247,7 @@ async function loadPlanSummary(monthlyPlans) {
                         const color = item.percent >= 100 ? "#16a34a" : item.percent >= 50 ? "#3b5bfd" : "#d97706";
 
                         return `
-                            <tr style="border-bottom: 1px solid #f5f5f5;">
+                            <tr style="border-bottom: 1px solid var(--border);">
                                 <td style="padding: 8px; font-size: 13px; font-weight: 600;">${BRICK_TYPE_LABELS[brickType] || brickType}</td>
                                 <td style="padding: 8px; font-size: 13px; color: #888;">${formatNumber(monthlyTarget)}</td>
                                 <td style="padding: 8px; font-size: 13px;">${formatNumber(item.produced)}</td>
@@ -388,7 +388,7 @@ async function loadShiftHistory() {
         container.innerHTML = `
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
-                    <tr style="text-align: left; border-bottom: 2px solid #eee;">
+                    <tr style="text-align: left; border-bottom: 2px solid var(--border);">
                         <th style="padding: 8px; font-size: 12px; color: #888;">Дата</th>
                         <th style="padding: 8px; font-size: 12px; color: #888;">Смена</th>
                         <th style="padding: 8px; font-size: 12px; color: #888;">Произведено</th>
@@ -400,7 +400,7 @@ async function loadShiftHistory() {
                     ${data.entries.map(entry => {
                         const color = entry.percent >= 100 ? "#16a34a" : entry.percent >= 70 ? "#d97706" : "#dc2626";
                         return `
-                            <tr style="border-bottom: 1px solid #f5f5f5;">
+                            <tr style="border-bottom: 1px solid var(--border);">
                                 <td style="padding: 8px; font-size: 13px;">${entry.date}</td>
                                 <td style="padding: 8px; font-size: 13px;">${escapeHtml(entry.shift)}</td>
                                 <td style="padding: 8px; font-size: 13px;">${formatNumber(entry.produced)}</td>

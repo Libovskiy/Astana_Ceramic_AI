@@ -753,8 +753,8 @@ body[data-screen="list"] .chat-new-form { display: none; }
         line-height: 1;
     }
 
-    #chatSound::after { content: none; }
-    #chatSound { font-size: 17px !important; }
+    #chatSound::after, #chatTheme::after { content: none; }
+    #chatSound, #chatTheme { font-size: 17px !important; }
 
     #chatHome::after { content: "▤"; }
     #chatCardButton::after { content: "🕘"; }
@@ -779,6 +779,9 @@ body[data-screen="list"] .chat-new-form { display: none; }
        обращений «Разделы» доступны: рабочему через них идти в сменный
        отчёт. */
     body[data-screen="thread"] #chatHome { display: none !important; }
+
+    /* Тему переключают из списка — в переписке шапка и так тесная */
+    body[data-screen="thread"] #chatTheme { display: none !important; }
 
 }
 
@@ -837,3 +840,95 @@ body[data-screen="list"] .chat-new-form { display: none; }
     .chat-quick button { flex: 1 1 45%; font-size: 14px; }
     .chat-quick .quick-call { flex-basis: 100%; }
 }
+
+/* =========================================================
+   ТЁМНАЯ ТЕМА
+   Прошлая тёмная версия была тусклой: серый текст на сером.
+   Здесь текст почти белый, пузыри и кнопки контрастные —
+   переписку должно быть видно на телефоне в цеху.
+   ========================================================= */
+
+:root[data-theme="dark"] body { background: #0b0e14; color: #f1f5f9; }
+
+:root[data-theme="dark"] .chat-app,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .chat-composer,
+:root[data-theme="dark"] .chat-card,
+:root[data-theme="dark"] .chat-stages { background: #121722; }
+
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .chat-card,
+:root[data-theme="dark"] .chat-stages { border-bottom-color: #263045; }
+:root[data-theme="dark"] .chat-list { border-right-color: #263045; }
+:root[data-theme="dark"] .chat-composer,
+:root[data-theme="dark"] .chat-basis,
+:root[data-theme="dark"] .chat-actions,
+:root[data-theme="dark"] .chat-quick { border-top-color: #263045; }
+
+:root[data-theme="dark"] .chat-subtitle,
+:root[data-theme="dark"] .chat-item-last,
+:root[data-theme="dark"] .chat-equipment-status,
+:root[data-theme="dark"] .msg-system,
+:root[data-theme="dark"] .card-table td:first-child,
+:root[data-theme="dark"] .card-audit-row,
+:root[data-theme="dark"] .act-assigned,
+:root[data-theme="dark"] .stage-label { color: #a3b0c2; }
+
+:root[data-theme="dark"] .chat-item-time,
+:root[data-theme="dark"] .chat-empty { color: #8492a6; }
+
+:root[data-theme="dark"] .chat-action,
+:root[data-theme="dark"] .chat-tab { background: #1d2535; color: #e2e8f0; }
+:root[data-theme="dark"] .chat-tab-active { background: #3b5bfd; color: #fff; }
+:root[data-theme="dark"] .chat-back,
+:root[data-theme="dark"] .stage-now .stage-label { color: #8ea2ff; }
+
+:root[data-theme="dark"] .chat-item,
+:root[data-theme="dark"] .chat-equipment { background: #182030; border-color: #263045; color: #f1f5f9; }
+:root[data-theme="dark"] .chat-item-active,
+:root[data-theme="dark"] .chat-equipment-active { background: #1c2a4d; border-color: #5b76ff; }
+
+:root[data-theme="dark"] .chat-messages { background: #0b0e14; }
+:root[data-theme="dark"] .msg-assistant { background: #1a2233; border-color: #2c3850; color: #f1f5f9; }
+:root[data-theme="dark"] .msg-specialist { background: #0f2f24; border-color: #1f6b50; color: #d1fae5; }
+:root[data-theme="dark"] .msg-system { background: #182030; }
+:root[data-theme="dark"] .chat-basis { background: #121722; color: #b6c2d3; }
+
+:root[data-theme="dark"] .chat-composer textarea,
+:root[data-theme="dark"] .chat-new-form textarea,
+:root[data-theme="dark"] .chat-dates input { background: #0f141e; border-color: #2c3850; color: #f1f5f9; }
+:root[data-theme="dark"] .chat-composer textarea::placeholder,
+:root[data-theme="dark"] .chat-new-form textarea::placeholder { color: #75839a; }
+
+:root[data-theme="dark"] .card-table td { border-bottom-color: #1f2839; }
+:root[data-theme="dark"] .card-audit-row { border-bottom-color: #182030; }
+
+:root[data-theme="dark"] .chat-actions { background: #10151f; }
+:root[data-theme="dark"] .act-take { background: #232c5c; color: #c7d2fe; }
+:root[data-theme="dark"] .act-done { background: #0f3a2b; color: #a7f3d0; }
+:root[data-theme="dark"] .act-draft,
+:root[data-theme="dark"] .act-draft-note { background: #3a2a0c; color: #fcd34d; }
+
+:root[data-theme="dark"] .chat-checked { background: #2a2110; border-bottom-color: #5c4712; }
+:root[data-theme="dark"] .checked-title,
+:root[data-theme="dark"] .checked-pending,
+:root[data-theme="dark"] .checked-by { color: #fcd34d; }
+:root[data-theme="dark"] .checked-row { border-bottom-color: #3d3014; }
+:root[data-theme="dark"] .checked-action { color: #f1f5f9; }
+:root[data-theme="dark"] .checked-result { color: #c3cddb; }
+
+:root[data-theme="dark"] .chat-confirm { background: #0f2a1e; border-top-color: #1f6b50; }
+:root[data-theme="dark"] .confirm-no,
+:root[data-theme="dark"] .quick-next { background: #1a2233; color: #fca5a5; border-color: #7f1d1d; }
+
+:root[data-theme="dark"] .chat-action-danger,
+:root[data-theme="dark"] #chatLogout { background: #3b1518; color: #fca5a5; }
+:root[data-theme="dark"] #chatResolve,
+:root[data-theme="dark"] .chat-action-done { background: #0f3a2b; color: #86efac; }
+:root[data-theme="dark"] .chat-new-error,
+:root[data-theme="dark"] .chat-error { color: #f87171; }
+
+:root[data-theme="dark"] .chat-quick { background: #10151f; }
+:root[data-theme="dark"] .chat-quick-problem,
+:root[data-theme="dark"] .quick-call { background: #182030; border-color: #2c3850; color: #e2e8f0; }
+:root[data-theme="dark"] .chat-quick-problem-active { background: #3b5bfd; border-color: #3b5bfd; color: #fff; }

@@ -186,7 +186,7 @@ const ACAI = {
     t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:300;
       background:var(--surface);border:1px solid var(--border);border-radius:10px;
       padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:8px;
-      box-shadow:0 4px 20px rgba(0,0,0,.4);animation:slideIn .2s ease;`;
+      box-shadow:var(--shadow);animation:slideIn .2s ease;`;
     const colors = {ok:'var(--ok)',warn:'var(--warn)',danger:'var(--danger)'};
     t.innerHTML = `<span style="color:${colors[type]||colors.ok}">${type==='ok'?'✓':type==='warn'?'⚠':'✕'}</span>${msg}`;
     document.body.appendChild(t);
@@ -298,10 +298,23 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
           <div class="user-name" title="${(user?.full_name || '').replace(/"/g,'&quot;')}">${user?.full_name || '—'}</div>
           <div class="user-role">${roleLabel}</div>
         </div>
+        <button class="theme-btn" onclick="toggleTheme(this)" title="Светлая / тёмная тема">${themeIcon()}</button>
         <button class="logout-btn" onclick="logout()" title="Выйти">↪</button>
       </div>
     </div>
   `;
+}
+
+// ── ТЕМА ─────────────────────────────────────────────────
+// Сама тема ставится в theme.js в <head>; здесь только кнопка.
+function themeIcon() {
+  return window.acaiTheme && window.acaiTheme.get() === 'light' ? '🌙' : '☀️';
+}
+
+function toggleTheme(button) {
+  if (!window.acaiTheme) return;
+  window.acaiTheme.toggle();
+  document.querySelectorAll('.theme-btn').forEach(b => { b.textContent = themeIcon(); });
 }
 
 async function logout() {
@@ -437,7 +450,7 @@ async function initBell() {
     <div id="bellPanel" style="display:none;position:absolute;top:44px;right:0;width:340px;
          max-height:60vh;overflow-y:auto;background:var(--surface);
          border:1px solid var(--border);border-radius:12px;
-         box-shadow:0 18px 40px rgba(0,0,0,.45);z-index:70"></div>
+         box-shadow:var(--shadow);z-index:70"></div>
   `;
 
   topbar.insertBefore(wrap, topbar.firstChild);

@@ -132,7 +132,7 @@ async function renderWorkQueueSummary(queue) {
             <div style="font-size: 12px; color: #888;">критичных</div>
         </div>
         <div style="background: #eff6ff; padding: 10px 16px; border-radius: 10px;">
-            <div style="font-size: 20px; font-weight: 700; color: #3b5bfd;">${inProgressCount}</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--accent);">${inProgressCount}</div>
             <div style="font-size: 12px; color: #888;">в работе</div>
         </div>
         <div style="background: #fffbeb; padding: 10px 16px; border-radius: 10px;">
@@ -597,7 +597,7 @@ window.showEquipmentPassport = async function (equipmentId) {
 
         const documentsHtml = (documentsData.success && documentsData.documents.length)
             ? documentsData.documents.map(doc => `
-                <a href="${doc.url}" target="_blank" style="display: block; padding: 8px 0; color: #3b5bfd; text-decoration: none; border-bottom: 1px solid #f0f0f0; font-size: 14px;">
+                <a href="${doc.url}" target="_blank" style="display: block; padding: 8px 0; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 14px;">
                     📄 ${escapeHtml(doc.name)}
                 </a>
             `).join("")
@@ -611,14 +611,14 @@ window.showEquipmentPassport = async function (equipmentId) {
     ? casesData.events.map(caseItem => `
         <div style="
             padding: 10px 0;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid var(--border);
             font-size: 13px;
         ">
             <div style="font-weight: 600;">
                 Обращение #${caseItem.id ?? "—"}
             </div>
 
-            <div style="margin-top: 4px; color: #666;">
+            <div style="margin-top: 4px; color: var(--text-dim);">
                 ${escapeHtml(
                     caseItem.title ||
                     caseItem.problem ||
@@ -655,7 +655,7 @@ window.showEquipmentPassport = async function (equipmentId) {
             ? `
                 <div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 10px;">
                     <div style="font-weight: 600; font-size: 13px;">🔴 Простой идёт с ${formatDate(activeDowntime.started_at)}</div>
-                    <div style="font-size: 12px; color: #666; margin-top: 2px;">Причина: ${escapeHtml(activeDowntime.reason || "не указана")}</div>
+                    <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Причина: ${escapeHtml(activeDowntime.reason || "не указана")}</div>
                     <button type="button" onclick="endDowntimeFromPassport(${activeDowntime.id}, ${equipmentId})" class="btn btn-success btn-block btn-sm" style="margin-top: 10px;">Завершить простой</button>
                 </div>
             `
@@ -906,7 +906,7 @@ function createJournalEventRow(event) {
     if (event.type === "maintenance") {
 
         return `
-            <div style="padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+            <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
                 <span style="color: #16a34a; font-size: 13px;">🔧 Обслуживание выполнено</span>
                 <div style="font-size: 12px; color: #888;">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
@@ -915,7 +915,7 @@ function createJournalEventRow(event) {
     }
 
     return `
-        <div style="padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+        <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
             <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
             <div style="font-size: 12px; color: #888;">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>

@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-default-theme="light">
 <head>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACAI — Обращения</title>
-    <!-- Обращения — отдельная светлая страница со своими стилями, без
-         общего acai.css: тёмная тема здесь делала переписку тусклой и
-         хуже читаемой на телефоне в цеху. -->
-    <link rel="stylesheet" href="/static/chat.css?v=41">
+    <!-- Обращения — отдельная страница со своими стилями, без общего
+         acai.css. По умолчанию светлая (data-default-theme), тёмная —
+         по кнопке, своя контрастная палитра в конце chat.css. -->
+    <script src="/static/theme.js?v=1"></script>
+    <link rel="stylesheet" href="/static/chat.css?v=43">
 </head>
 <body>
 
@@ -30,6 +31,7 @@
                  (см. HOME_BY_ROLE в chat.js). Рабочему она нужна:
                  упаковочные бригады заполняют сменный отчёт, а он
                  живёт на отдельной странице. -->
+            <button type="button" id="chatTheme" class="chat-action" title="Светлая / тёмная тема">🌙</button>
             <button type="button" id="chatSound" class="chat-action" title="Звук уведомлений">🔊</button>
             <a href="/" id="chatHome" class="chat-action" style="display:none;" title="Другие разделы">Разделы</a>
             <button type="button" id="chatCardButton" class="chat-action" style="display:none;"
@@ -125,7 +127,7 @@
 </div>
 
 <script src="/static/notify.js?v=31"></script>
-<script src="/static/chat.js?v=33"></script>
+<script src="/static/chat.js?v=34"></script>
 
 </body>
 </html>

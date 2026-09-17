@@ -611,7 +611,7 @@ function createJournalEventRow(event) {
     if (event.type === "maintenance") {
 
         return `
-            <div style="padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+            <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
                 <span style="color: #16a34a; font-size: 13px;">🔧 Обслуживание выполнено</span>
                 <div style="font-size: 12px; color: #888;">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
@@ -620,7 +620,7 @@ function createJournalEventRow(event) {
     }
 
     return `
-        <div style="padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+        <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
             <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
             <div style="font-size: 12px; color: #888;">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>

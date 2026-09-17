@@ -175,6 +175,17 @@ function bindEvents() {
     document.getElementById("chatResolve").addEventListener("click", resolveCase);
     document.getElementById("chatBack").addEventListener("click", backToList);
 
+    const themeButton = document.getElementById("chatTheme");
+
+    if (themeButton && window.acaiTheme) {
+        const icon = () => window.acaiTheme.get() === "light" ? "🌙" : "☀️";
+        themeButton.textContent = icon();
+        themeButton.addEventListener("click", function () {
+            window.acaiTheme.toggle();
+            themeButton.textContent = icon();
+        });
+    }
+
     const sound = document.getElementById("chatSound");
 
     if (sound) {
