@@ -9,7 +9,7 @@
          acai.css. По умолчанию светлая (data-default-theme), тёмная —
          по кнопке, своя контрастная палитра в конце chat.css. -->
     <script src="/static/theme.js?v=2"></script>
-    <link rel="stylesheet" href="/static/chat.css?v=46">
+    <link rel="stylesheet" href="/static/chat.css?v=47">
 </head>
 <body>
 
@@ -65,6 +65,10 @@
 
     <!-- ============ ПЕРЕПИСКА ============ -->
     <section class="chat-thread" id="chatThread">
+
+        <!-- Чей ход — одной плашкой: «ждём механика», «механик ответил»,
+             «ваш ход». Чтобы не догадываться по переписке. -->
+        <div class="chat-turn" id="chatTurn" style="display:none;"></div>
 
         <div class="chat-card" id="chatCard" style="display:none;"></div>
 
@@ -138,7 +142,7 @@
 <script src="/static/notify.js?v=31"></script>
 <script src="/static/voice.js?v=1"></script>
 <script src="/static/push.js?v=1"></script>
-<script src="/static/chat.js?v=37"></script>
+<script src="/static/chat.js?v=39"></script>
 
 </body>
 </html>

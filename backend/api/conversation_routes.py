@@ -170,6 +170,7 @@ def read_conversation(case_id: int, user: dict = Depends(current_user)):
             "equipment_id": case.get("equipment_id"),
             "created_at": case.get("created_at"),
             "assigned_to": case.get("assigned_to"),
+            "required_discipline": case.get("required_discipline"),
             "draft_closed_by": case.get("draft_closed_by"),
             "draft_resolution_comment": case.get("draft_resolution_comment")
         },

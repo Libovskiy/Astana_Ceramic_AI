@@ -413,12 +413,13 @@ def detect_discipline(machine, dialogue, equipment_discipline=None):
     зовём обоих, как раньше).
     """
 
-    if client is None:
-        return None
-
-    # У станка одна дисциплина — гадать не о чем.
+    # У станка одна дисциплина — гадать не о чем, и ИИ для этого не нужен
+    # (без ключа чисто механический станок звал «специалиста вообще»).
     if equipment_discipline in ("mechanical", "electrical"):
         return equipment_discipline
+
+    if client is None:
+        return None
 
     try:
 

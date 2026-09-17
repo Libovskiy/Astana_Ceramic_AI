@@ -1002,7 +1002,16 @@ def get_conversations(user, scope="active", limit=50, date_from=None, date_to=No
               ORDER BY chat_history.id DESC LIMIT 1) AS last_message,
             (SELECT created_at FROM chat_history
               WHERE chat_history.case_id = cases.id
-              ORDER BY chat_history.id DESC LIMIT 1) AS last_at
+              ORDER BY chat_history.id DESC LIMIT 1) AS last_at,
+            -- для плашки «чей ход» и выделения непрочитанного
+            (SELECT id FROM chat_history
+              WHERE chat_history.case_id = cases.id
+              ORDER BY chat_history.id DESC LIMIT 1) AS last_message_id,
+            (SELECT role FROM chat_history
+              WHERE chat_history.case_id = cases.id
+              ORDER BY chat_history.id DESC LIMIT 1) AS last_role,
+            cases.assigned_to,
+            cases.required_discipline
         FROM cases
         LEFT JOIN equipment ON equipment.id = cases.equipment_id
         WHERE cases.status IN ({placeholders}) {extra}

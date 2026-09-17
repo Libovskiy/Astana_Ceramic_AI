@@ -331,6 +331,108 @@ function renderQuickProblems() {
 
 
 /* =========================================================
+   ЧЕЙ ХОД
+   Статус «Требует специалиста» ничего не говорит рабочему у станка.
+   Ему нужно «ждём механика» или «механик ответил», специалисту —
+   «ваш ход». Цвет — только когда ход ваш; ожидание спокойное.
+   ========================================================= */
+
+const REPAIR_ROLES = ["chief_mechanic", "mechanic", "chief_electrician", "electrician", "chief_engineer", "engineer", "admin"];
+const APPROVE_ROLES = ["chief_engineer", "director", "admin"];
+const DISCIPLINE_WHO = { mechanical: "механика", electrical: "электрика" };
+const DISCIPLINE_ROLES = {
+    mechanical: ["chief_mechanic", "mechanic"],
+    electrical: ["chief_electrician", "electrician"]
+};
+
+function turnOf(item) {
+    const role = user ? user.role : "";
+    const me = user ? (user.full_name || user.username) : "";
+    const assigned = item.assigned_to || "специалист";
+    const who = DISCIPLINE_WHO[item.required_discipline] || "специалиста";
+    const lastRole = item.last_role;
+
+    switch (item.status) {
+        case "Открыто":
+            if (role === "worker") {
+                return lastRole === "worker"
+                    ? { text: "ACAI отвечает…", mine: false }
+                    : { text: "Ваш ход: сделайте шаг и ответьте", mine: true };
+            }
+            return { text: "ИИ ведёт рабочего", mine: false };
+
+        case "Требует специалиста": {
+            const mineDiscipline = (DISCIPLINE_ROLES[item.required_discipline] || REPAIR_ROLES).includes(role);
+            if (role !== "worker" && mineDiscipline && REPAIR_ROLES.includes(role)) {
+                return { text: "Ваш ход: возьмите в работу", mine: true };
+            }
+            return { text: `Ждём ${who}`, mine: false };
+        }
+
+        case "В работе":
+            if (role === "worker") {
+                return lastRole === "specialist"
+                    ? { text: `${assigned} ответил`, mine: true }
+                    : { text: `${assigned} взял — идёт к вам`, mine: false };
+            }
+            if (item.assigned_to && item.assigned_to === me) {
+                return lastRole === "worker"
+                    ? { text: "Рабочий ответил — ваш ход", mine: true }
+                    : { text: "Ваш ход: ремонт", mine: true };
+            }
+            return { text: `В работе у ${assigned}`, mine: false };
+
+        case "Черновик закрытия":
+            if (APPROVE_ROLES.includes(role)) return { text: "Ваш ход: подтвердите закрытие", mine: true };
+            return { text: "Ремонт сделан — ждём подтверждения", mine: false };
+
+        case "Закрыто":
+            return { text: "Закрыто", mine: false };
+
+        default:
+            return { text: item.status || "", mine: false };
+    }
+}
+
+// Непрочитанное: последнее сообщение новее того, что человек видел,
+// и написано не им самим. Помним на этом телефоне.
+function seenKey(caseId) { return `acai_case_seen_${caseId}`; }
+
+function isUnread(item) {
+    if (!item.last_message_id) return false;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(seenKey(item.id)) || 0); } catch (e) { return false; }
+    if (item.last_message_id <= seen) return false;
+
+    // Рабочему важно всё, что написали ему: ИИ, специалист, система.
+    if (user && user.role === "worker") return item.last_role !== "worker";
+
+    // Специалисту разговор ИИ с рабочим — не новость. Новое для него —
+    // когда позвали специалиста или рабочий ответил в уже взятом обращении.
+    if (item.status === "Открыто" || item.status === "Закрыто") return false;
+    if (item.status === "Требует специалиста") return !seen;
+    return item.last_role === "worker";
+}
+
+function markSeen(caseId, messages) {
+    const last = (messages || []).reduce((max, m) => Math.max(max, m.id || 0), 0);
+    if (!last) return;
+    try { localStorage.setItem(seenKey(caseId), String(last)); } catch (e) { /* не страшно */ }
+}
+
+function renderTurn(caseData, messages) {
+    const box = document.getElementById("chatTurn");
+    if (!box) return;
+    const last = (messages || [])[messages.length - 1] || {};
+    const turn = turnOf(Object.assign({}, caseData, { last_role: last.role }));
+    if (!turn.text) { box.style.display = "none"; return; }
+    box.style.display = "flex";
+    box.className = "chat-turn" + (turn.mine ? " chat-turn-mine" : "") + (caseData.status === "Закрыто" ? " chat-turn-closed" : "");
+    box.innerHTML = `<span class="chat-turn-dot"></span><span>${escapeHtml(turn.text)}</span>`;
+}
+
+
+/* =========================================================
    СПИСОК ОБРАЩЕНИЙ
    ========================================================= */
 
@@ -395,21 +497,24 @@ async function loadConversations() {
             return;
         }
 
-        box.innerHTML = items.map(item => `
-            <button type="button" class="chat-item ${item.id === activeCaseId ? "chat-item-active" : ""}"
+        box.innerHTML = items.map(item => {
+            const turn = turnOf(item);
+            const unread = item.id !== activeCaseId && isUnread(item);
+            return `
+            <button type="button" class="chat-item ${item.id === activeCaseId ? "chat-item-active" : ""} ${unread ? "chat-item-unread" : ""}"
                     data-id="${item.id}">
                 <div class="chat-item-top">
-                    <span class="chat-item-name">${escapeHtml(machineName(item))}</span>
+                    <span class="chat-item-name">${unread ? '<span class="chat-unread-dot"></span>' : ""}${escapeHtml(machineName(item))}</span>
                     <span class="chat-item-time">${formatTime(item.last_at || item.created_at)}</span>
                 </div>
                 <div class="chat-item-last">${escapeHtml(item.last_message || item.worker_question || "")}</div>
-                <div class="chat-item-status" style="color:${STATUS_COLORS[item.status] || "#666"}">
-                    ${escapeHtml(item.status)}${item.brigade && seesAllShifts
+                <div class="chat-item-status ${turn.mine ? "chat-item-status-mine" : ""}">
+                    ${escapeHtml(turn.text)}${item.brigade && seesAllShifts
                         ? ` · смена ${escapeHtml(item.brigade)} (${escapeHtml(item.shift || "")})`
                         : ""}
                 </div>
-            </button>
-        `).join("");
+            </button>`;
+        }).join("");
 
         box.querySelectorAll(".chat-item").forEach(button => {
             button.addEventListener("click", () => openThread(Number(button.dataset.id)));
@@ -564,13 +669,15 @@ async function loadThread() {
             machineName(caseData) || "Обращение";
 
         document.getElementById("chatSubtitle").innerHTML =
-            `№${caseData.id} · <span style="color:${STATUS_COLORS[caseData.status] || "#888"}">` +
-            `${escapeHtml(caseData.status || "")}</span>`;
+            `№${caseData.id} · ${escapeHtml(caseData.status || "")}`;   // цвет — у плашки «чей ход»
 
         document.getElementById("chatComposer").style.display =
             data.can_write ? "flex" : "none";
 
         renderActions(data.actions || {}, caseData);
+
+        renderTurn(caseData, messages);
+        markSeen(caseData.id, messages);
 
         renderQuickReplies(messages, caseData, data.role);
 
@@ -852,7 +959,7 @@ function backToList() {
 
     hideQuickReplies();
 
-    ["chatStages", "chatChecked", "chatConfirm"].forEach(function (id) {
+    ["chatTurn", "chatStages", "chatChecked", "chatConfirm"].forEach(function (id) {
         const element = document.getElementById(id);
         if (element) element.style.display = "none";
     });

@@ -965,3 +965,40 @@ body[data-screen="list"] .chat-new-form { display: none; }
 :root[data-theme="dark"] .chat-quick-problem,
 :root[data-theme="dark"] .quick-call { background: #182030; border-color: #2c3850; color: #e2e8f0; }
 :root[data-theme="dark"] .chat-quick-problem-active { background: #3b5bfd; border-color: #3b5bfd; color: #fff; }
+
+/* =========================================================
+   ЧЕЙ ХОД И НЕПРОЧИТАННОЕ
+   Как в мессенджере: непрочитанное выделено, остальное спокойное.
+   Цвет — только «ваш ход».
+   ========================================================= */
+
+.chat-turn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+    background: #eef1f6;
+    border-bottom: 1px solid #dbe2ec;
+}
+.chat-turn-dot { width: 10px; height: 10px; border-radius: 50%; background: #5b6576; flex-shrink: 0; }
+.chat-turn-mine { background: #e8edff; color: #1e3fd8; border-bottom-color: #c7d2fe; }
+.chat-turn-mine .chat-turn-dot { background: #3b5bfd; }
+.chat-turn-closed { font-weight: 600; color: #475569; }
+
+.chat-item-status { color: #475569; font-weight: 600; }
+.chat-item-status-mine { color: #1e3fd8; }
+.chat-item-unread { border-color: #93a4f8; }
+.chat-item-unread .chat-item-name { font-weight: 800; }
+.chat-item-unread .chat-item-last { color: #0f172a; font-weight: 600; }
+.chat-unread-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #3b5bfd; margin-right: 7px; vertical-align: middle; }
+
+:root[data-theme="dark"] .chat-turn { background: #182030; color: #f1f5f9; border-bottom-color: #263045; }
+:root[data-theme="dark"] .chat-turn-dot { background: #8492a6; }
+:root[data-theme="dark"] .chat-turn-mine { background: #1c2a4d; color: #c7d2fe; }
+:root[data-theme="dark"] .chat-turn-mine .chat-turn-dot { background: #8ea2ff; }
+:root[data-theme="dark"] .chat-item-status { color: #a3b0c2; }
+:root[data-theme="dark"] .chat-item-status-mine { color: #a5b4fc; }
+:root[data-theme="dark"] .chat-item-unread .chat-item-last { color: #f1f5f9; }
