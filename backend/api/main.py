@@ -161,6 +161,12 @@ init_task_tables()
 from backend.services.plc_error_service import init_plc_error_table
 init_plc_error_table()
 
+# Запросы на удаление важных данных (решает владелец). Функцию
+# импортировали, но не вызывали — таблицы не было, и список запросов
+# у администратора падал с ошибкой 500.
+from backend.services.protection_service import init_protection_tables
+init_protection_tables()
+
 from backend.services.shift_report_service import init_shift_report_tables
 init_shift_report_tables()
 
