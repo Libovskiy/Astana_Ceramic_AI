@@ -16,7 +16,7 @@ import re
 from fastapi import APIRouter, Cookie, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
-from backend.config import DOCS_PATH, BASE_DIR, is_owner
+from backend.config import DOCS_PATH, STATIC_UPLOADS_DIR, is_owner
 from backend.services.auth_service import get_user_by_session, get_assigned_equipment_ids
 from backend.services.audit_service import log_action, log_change, log_change
 from backend.services.regulation_rbac import can, why_denied, permissions_for
@@ -774,7 +774,7 @@ def equipment_photo(equipment_id: int, request: PhotoRequest,
 
     binary = _decode(request.content, MAX_PHOTO_BYTES)
 
-    folder = BASE_DIR / "frontend" / "static" / "uploads" / "equipment"
+    folder = STATIC_UPLOADS_DIR / "equipment"
     folder.mkdir(parents=True, exist_ok=True)
 
     target = folder / f"equipment_{equipment_id}.{extension}"

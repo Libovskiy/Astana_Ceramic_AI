@@ -12,6 +12,8 @@
     Путь по коду ошибки PLC ИИ не требует;
   - фоновые потоки (запись датчиков, проверки для уведомлений) не
     стартуют, push никуда не уходит;
+  - файлы (вложения, фото обходов, документы, бэкапы, база знаний) —
+    во временной папке (ACAI_FILES_ROOT), живые файлы не трогаются;
   - сотрудники для проверок создаются в копии заново, у каждого свой
     пароль — от боевых учёток ничего не зависит.
 
@@ -54,11 +56,22 @@ def _copy_db(src: Path, dst: Path):
 _copy_db(ROOT / "factory.db", _TMP / "factory.db")
 _copy_db(ROOT / "monitoring.db", _TMP / "monitoring.db")
 
+# Свои папки для файлов: загрузки, удаления и бэкапы в проверках не
+# должны касаться живых вложений, фото обходов, документов и копий базы.
+# База знаний здесь пустая — сквозные сценарии идут по кодам ошибок PLC.
+_FILES = _TMP / "files"
+for sub in ("docs", "uploads/messenger", "data/checklist_photos", "backups",
+            "frontend/static/uploads", "knowledge_base"):
+    (_FILES / sub).mkdir(parents=True, exist_ok=True)
+os.environ["ACAI_FILES_ROOT"] = str(_FILES)
+
 os.environ["ACAI_DB"] = str(_TMP / "factory.db")
 os.environ["ACAI_MONITORING_DB"] = str(_TMP / "monitoring.db")
 os.environ["OPENAI_API_KEY"] = ""            # client = None
 os.environ["ACAI_LIVE_PROXY"] = "http://127.0.0.1:9"   # фоновые потоки не стартуют
 os.environ["ACAI_WEBHMI_COLLECTOR"] = "0"
+# владелец системы в песочнице — проверочная учётка, а не настоящий alibek
+os.environ["OWNERS"] = "t-owner"
 os.chdir(ROOT)   # шаблоны и статика ищутся относительно корня
 
 
@@ -103,8 +116,10 @@ class Sandbox:
         push_service.enabled = lambda: False   # уведомления не отправлять
 
         from backend.api.main import app
-        from backend.config import DB_NAME
+        from backend.config import DB_NAME, FILES_ROOT
         assert str(_TMP) in DB_NAME, "песочница должна работать на копии базы"
+        assert str(_TMP) in str(FILES_ROOT), "песочница должна писать файлы во временную папку"
+        self.files_root = FILES_ROOT
 
         self.app = app
         self.db_path = DB_NAME
@@ -128,11 +143,11 @@ class Sandbox:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def user(self, role, equipment=None, login=True, active=True, brigade=None):
+    def user(self, role, equipment=None, login=True, active=True, brigade=None, username=None):
         from backend.services.auth_service import create_user, assign_equipment, get_user_by_username
 
         self._n += 1
-        username = f"t-{role.replace('_', '-')}-{self._n}"
+        username = username or f"t-{role.replace('_', '-')}-{self._n}"
         password = "Test" + secrets.token_hex(6) + "9x"
         create_user(username, password, f"Проверка {role} {self._n}", role)
         row = get_user_by_username(username)

@@ -457,7 +457,8 @@ def _check_sensors():
 
 
 def _check_backup():
-    backups = sorted((Path(BASE_DIR) / "backups").glob("factory_*.db"), key=lambda f: f.stat().st_mtime)
+    from backend.config import BACKUPS_DIR
+    backups = sorted(Path(BACKUPS_DIR).glob("factory_*.db"), key=lambda f: f.stat().st_mtime)
     if not backups:
         return
     hours = (time.time() - backups[-1].stat().st_mtime) / 3600

@@ -12,14 +12,14 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from backend.config import BASE_DIR, DB_NAME, is_owner
+from backend.config import BACKUPS_DIR, DB_NAME, is_owner
 
 # DB_PATH из конфига указывает на monitoring.db (база модуля мониторинга)
 # и приходит строкой. Бэкапить надо factory.db — это DB_NAME, — и работать
 # с ней как с Path, иначе .exists() роняет создание копии.
 DB_PATH = Path(DB_NAME)
 
-BACKUP_DIR = BASE_DIR / "backups"
+BACKUP_DIR = BACKUPS_DIR
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_RETENTION = 14
 _lock = threading.Lock()

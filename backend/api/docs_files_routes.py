@@ -17,17 +17,16 @@
 """
 import mimetypes
 import unicodedata
-from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from backend.config import BASE_DIR
+from backend.config import DOCS_PATH
 from backend.services.auth_service import get_user_by_session
 
 router = APIRouter(tags=["docs-files"])
 
-DOCS_DIR = (BASE_DIR / "docs").resolve()
+DOCS_DIR = DOCS_PATH.resolve()
 
 
 def current_user(session_token: str | None = Cookie(default=None)):
@@ -57,7 +56,8 @@ def get_doc_file(file_path: str, user: dict = Depends(current_user)):
         except Exception:
             continue
         # ../ в пути не должен выводить за пределы docs
-        if not str(resolved).startswith(str(DOCS_DIR)):
+        # не startswith: «/проект/docs_old» тоже начинается с «/проект/docs»
+        if not resolved.is_relative_to(DOCS_DIR):
             raise HTTPException(status_code=403, detail="Недопустимый путь")
         if resolved.is_file():
             target = resolved

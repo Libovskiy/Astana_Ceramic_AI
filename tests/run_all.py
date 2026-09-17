@@ -20,10 +20,13 @@ ORDER = [
     "test_regulations_ui_contract.py",
     "test_e2e_breakdown.py",
     "test_access_denied.py",
+    "test_files.py",
+    "test_routes_unique.py",
 ]
 
 failed = []
-for name in ORDER + sorted(p.name for p in HERE.glob("test_*.py") if p.name not in ORDER):
+names = ORDER + sorted(p.name for p in HERE.glob("test_*.py") if p.name not in ORDER)
+for name in names:
     started = time.time()
     result = subprocess.run([sys.executable, str(HERE / name)], capture_output=True, text=True, cwd=HERE.parent)
     took = time.time() - started
@@ -35,5 +38,5 @@ for name in ORDER + sorted(p.name for p in HERE.glob("test_*.py") if p.name not 
         for line in lines[-8:]:
             print("       ", line[:200])
 
-print(f"\nИтого: {len(ORDER)} и более файлов, упало {len(failed)}")
+print(f"\nИтого файлов: {len(names)}, упало: {len(failed)}")
 sys.exit(1 if failed else 0)

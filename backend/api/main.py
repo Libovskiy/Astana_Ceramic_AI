@@ -36,6 +36,24 @@ from backend.api.common import templates
 
 app = FastAPI()
 
+
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    """
+    Ошибка формата запроса — без копии присланных данных в ответе.
+
+    Стандартный ответ FastAPI возвращает поле input: пароль из неудачного
+    входа уходил обратно открытым текстом, а на двоичном файле ответ
+    вообще падал с ошибкой 500 (нашли tests/test_files.py).
+    """
+    errors = [{k: v for k, v in error.items() if k not in ("input", "ctx")} for error in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
 @app.on_event("startup")
 def start_webhmi_collector():
     # Коллектор ходит на панель WebHMI и получает 403: пароль в коде

@@ -24,13 +24,7 @@ from backend.services.equipment_service import (
     update_equipment_details,
 )
 from backend.services.equipment_state_service import maintenance_completed
-from fastapi import (
-    BackgroundTasks,
-    Depends,
-    HTTPException,
-    UploadFile,
-)
-from pathlib import Path
+from fastapi import BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.api.common import (
@@ -237,69 +231,6 @@ def equipment_journal_route(
         "success": True,
         "journal": safe_events,
         "events": safe_events
-    }
-
-
-# =========================================
-# EQUIPMENT DOCUMENTS ("паспорт" — реальные PDF из docs/)
-# =========================================
-# Папка в docs/ должна называться ровно как станок в базе (см.
-# find_equipment_by_machine — та же логика точного совпадения
-# имени). Если папки нет или она пустая — просто пустой список,
-# не ошибка: далеко не для всех 50 станков документация уже
-# разложена.
-
-@router.get("/api/equipment/{equipment_id}/documents")
-def equipment_documents_route(
-    equipment_id: int,
-    user: dict = Depends(get_current_user)
-):
-
-    if user["role"] == "worker":
-
-        allowed_ids = set(get_assigned_equipment_ids(user["id"]))
-
-        if equipment_id not in allowed_ids:
-            return {
-                "success": False,
-                "message": "У вас нет доступа к этому оборудованию."
-            }
-
-    equipment = get_equipment(equipment_id)
-
-    if equipment is None:
-        return {
-            "success": False,
-            "message": "Оборудование не найдено."
-        }
-
-    # Та же замена "/" → "-", что и в /diagnose — иначе слеш в имени
-    # станка (например "FANUC M-410iB/700") интерпретируется как
-    # вложенная папка, а не часть названия.
-    safe_name = equipment["name"].replace("/", "-")
-
-    docs_folder = Path("/Users/champ_01/Documents/FactoryAssistant") / "docs" / safe_name
-
-    import sys
-    print(f"DEBUG docs_folder={docs_folder} exists={docs_folder.is_dir()}", file=sys.stderr)
-
-    documents = []
-
-    if docs_folder.is_dir():
-
-        for pdf_path in sorted(docs_folder.rglob("*.pdf")):
-
-            relative_path = pdf_path.relative_to(Path("/Users/champ_01/Documents/FactoryAssistant") / "docs")
-
-            documents.append({
-                "name": pdf_path.name,
-                "url": f"/docs-files/{relative_path.as_posix()}"
-            })
-
-    return {
-        "success": True,
-        "equipment_name": equipment["name"],
-        "documents": documents
     }
 
 
@@ -631,61 +562,32 @@ def set_equipment_status_route(
 
 
 # ── Загрузка документа для оборудования ──────────────────
-@router.post("/api/equipment/{equipment_id}/documents/upload")
-async def upload_equipment_doc(
-    background_tasks: BackgroundTasks,
-    equipment_id: int,
-    file: UploadFile,
-    user: dict = Depends(require_roles("admin", "director", "chief_engineer", "chief_mechanic", "chief_electrician"))
-):
-    import shutil
-    from pathlib import Path as _Path
-    equipment = get_equipment(equipment_id)
-    if not equipment:
-        raise HTTPException(status_code=404, detail="Оборудование не найдено")
-    safe_name = equipment["name"].replace("/", "-")
-    folder = _Path("docs") / safe_name
-    folder.mkdir(parents=True, exist_ok=True)
 
-    # имя от клиента — только имя, без путей, и с проверкой расширения
-    clean_name = safe_filename(file.filename)
-    dest = folder / clean_name
-
-    written = 0
-    with dest.open("wb") as f:
-        while True:
-            chunk = file.file.read(1024 * 1024)
-            if not chunk:
-                break
-            written += len(chunk)
-            if written > MAX_DOC_BYTES:
-                f.close()
-                dest.unlink(missing_ok=True)
-                raise HTTPException(status_code=413, detail="Файл больше 50 МБ")
-            f.write(chunk)
+def _register_document(equipment_id, safe_name, filename, user):
+    """Документ — в карточку станка (equipment_documents). Оба способа загрузки пишут одинаково."""
     try:
-        log_action(username=user["username"], role=user["role"],
-            action="document_uploaded",
-            target=f"equipment:{equipment_id}", details=str(file.filename))
-    except Exception:
-        pass
-    # В базу знаний — фоном. Без этого ИИ не увидит документ: файл
-    # окажется на диске, в карточке, но не в поиске.
-    from backend.services.quick_ingest import index_uploaded_pdf
-    background_tasks.add_task(index_uploaded_pdf, dest, safe_name)
-
-    return {"success": True, "name": clean_name, "url": f"/docs-files/{safe_name}/{clean_name}"}
+        import sqlite3 as _sq
+        from datetime import datetime as _dt
+        conn = _sq.connect(DB_NAME)
+        conn.execute(
+            "INSERT INTO equipment_documents (equipment_id, title, file_path, doc_type, added_by, added_at, is_active) VALUES (?,?,?,?,?,?,1)",
+            (equipment_id, filename, f"{safe_name}/{filename}", "manual", user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as error:
+        print(f"[equipment] документ не записан в карточку: {error}")
 
 
 @router.post("/api/equipment/{equipment_id}/documents/upload-b64")
 async def upload_doc_b64(equipment_id: int, request: dict, background_tasks: BackgroundTasks, user: dict = Depends(require_roles("admin","director","chief_engineer","chief_mechanic","chief_electrician"))):
     import base64 as _b64
-    from pathlib import Path as _Path
     equipment = get_equipment(equipment_id)
     if not equipment:
         return {"success": False, "message": "Оборудование не найдено"}
     safe_name = str(equipment["name"]).replace("/", "-")
-    folder = _Path("docs") / safe_name
+    from backend.config import DOCS_PATH
+    folder = DOCS_PATH / safe_name
     folder.mkdir(parents=True, exist_ok=True)
     filename = safe_filename(request.get("filename"))
     data = request.get("data", "")
@@ -696,20 +598,7 @@ async def upload_doc_b64(equipment_id: int, request: dict, background_tasks: Bac
         (folder / filename).write_bytes(file_bytes)
     except Exception as e:
         return {"success": False, "message": str(e)}
-    # записываем в БД
-    try:
-        import sqlite3 as _sq
-        from datetime import datetime as _dt
-        file_path = f"{safe_name}/{filename}"
-        conn2 = _sq.connect(DB_NAME)
-        conn2.execute(
-            "INSERT INTO equipment_documents (equipment_id, title, file_path, doc_type, added_by, added_at, is_active) VALUES (?,?,?,?,?,?,1)",
-            (equipment_id, filename, file_path, "manual", user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        conn2.commit()
-        conn2.close()
-    except Exception as e:
-        pass
+    _register_document(equipment_id, safe_name, filename, user)
     from backend.services.quick_ingest import index_uploaded_pdf
     background_tasks.add_task(index_uploaded_pdf, folder / filename, safe_name)
 

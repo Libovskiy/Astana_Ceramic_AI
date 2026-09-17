@@ -47,7 +47,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from backend.config import BASE_DIR, DB_NAME
+from backend.config import DB_NAME, MESSENGER_FILES_DIR
 
 KIND_DM = "dm"
 KIND_GROUP = "group"
@@ -60,7 +60,7 @@ MAX_TITLE_LENGTH = 80
 # работающего узла должно быть можно.
 MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
-ATTACHMENTS_DIR = BASE_DIR / "uploads" / "messenger"
+ATTACHMENTS_DIR = MESSENGER_FILES_DIR
 
 # Показываем прямо в переписке только то, что браузер умеет рисовать
 # сам и что безопасно открывать. Всё остальное отдаётся файлом на

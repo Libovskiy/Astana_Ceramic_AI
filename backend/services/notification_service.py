@@ -259,13 +259,13 @@ def _backup_notifications(user):
     from datetime import datetime
     from pathlib import Path
 
-    from backend.config import BASE_DIR, is_owner
+    from backend.config import BACKUPS_DIR, is_owner
 
     if user.get("role") != "admin" and not is_owner(user):
         return []
 
     backups = sorted(
-        (Path(BASE_DIR) / "backups").glob("factory_*.db"),
+        Path(BACKUPS_DIR).glob("factory_*.db"),
         key=lambda f: f.stat().st_mtime,
     )
 

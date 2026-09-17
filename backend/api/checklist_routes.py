@@ -17,12 +17,12 @@ from pathlib import Path
 from fastapi import APIRouter, Cookie, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from backend.config import DB_NAME, BASE_DIR
+from backend.config import DB_NAME, CHECKLIST_PHOTOS_DIR
 from backend.services.auth_service import get_user_by_session
 
 router = APIRouter(prefix="/api/checklist", tags=["checklist"])
 
-PHOTOS_DIR = BASE_DIR / "data" / "checklist_photos"
+PHOTOS_DIR = CHECKLIST_PHOTOS_DIR
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024   # 12 МБ — телефон после сжатия отдаёт ~200-600 КБ
 MAX_SIDE = 1600                        # длинная сторона после ресайза на сервере
@@ -190,7 +190,7 @@ def get_checklist_photo(photo_id: int, user: dict = Depends(current_user)):
 
     # rel_path писали мы сами, но проверяем, что путь не вылез из папки
     path = (PHOTOS_DIR / row["rel_path"]).resolve()
-    if not str(path).startswith(str(PHOTOS_DIR.resolve())) or not path.exists():
+    if not path.is_relative_to(PHOTOS_DIR.resolve()) or not path.exists():
         raise HTTPException(status_code=404, detail="Файл потерян")
 
     return FileResponse(

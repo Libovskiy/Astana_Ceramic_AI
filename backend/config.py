@@ -85,17 +85,28 @@ MAX_AI_STEPS = int(_os.getenv("MAX_AI_STEPS", "3"))
 # =========================================
 # ПУТИ К ДОКУМЕНТАЦИИ И ФАЙЛАМ ACAI
 # =========================================
-DOCS_PATH          = BASE_DIR / "docs"
+# FILES_ROOT — где лежат изменяемые файлы: документы, вложения, фото,
+# бэкапы, база знаний. По умолчанию — корень проекта, как всегда.
+# Сквозные проверки (tests/sandbox.py) подменяют его временной папкой
+# через ACAI_FILES_ROOT, чтобы загрузки и удаления не трогали живые файлы.
+FILES_ROOT = Path(_os.getenv("ACAI_FILES_ROOT") or BASE_DIR)
+
+DOCS_PATH          = FILES_ROOT / "docs"
+MESSENGER_FILES_DIR   = FILES_ROOT / "uploads" / "messenger"
+CHECKLIST_PHOTOS_DIR  = FILES_ROOT / "data" / "checklist_photos"
+BACKUPS_DIR           = FILES_ROOT / "backups"
+# картинки товаров и станков: отдаются через /static, поэтому внутри frontend/static
+STATIC_UPLOADS_DIR    = FILES_ROOT / "frontend" / "static" / "uploads"
 DOCS_MACHINES_PATH = DOCS_PATH / "Machines"
 SYMPTOMS_DIR       = BASE_DIR / "backend" / "core" / "symptoms"
-CHROMA_DB_PATH     = BASE_DIR / "knowledge_base" / "chroma_db"
+CHROMA_DB_PATH     = FILES_ROOT / "knowledge_base" / "chroma_db"
 # Модель поиска по документации и коллекция, в которой он ищет.
 # Прежняя all-MiniLM-L6-v2 обучена на английском, а документация русская:
 # она путала «залипание влажным сырьём» и «налипание массы на вал».
 # Меняются через .env, старую коллекцию это не трогает — откат возможен.
 EMBED_MODEL_NAME = _os.getenv("ACAI_EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 CHROMA_COLLECTION_NAME = _os.getenv("ACAI_COLLECTION", "factory_manuals_ml")
-KNOWLEDGE_BASE_PATH = BASE_DIR / "knowledge_base"
+KNOWLEDGE_BASE_PATH = FILES_ROOT / "knowledge_base"
 
 # =========================================
 # OPENAI

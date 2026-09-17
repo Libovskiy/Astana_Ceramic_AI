@@ -16,7 +16,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from backend.config import DB_NAME, BASE_DIR, is_owner, OWNERS
+from backend.config import DB_NAME, is_owner, OWNERS
 from backend.services.audit_service import log_action
 
 PROTECTED = {
@@ -187,7 +187,8 @@ def get_delete_request(request_id: int):
 
 def backup_database(reason="critical-delete"):
     """Делает физическую копию SQLite перед необратимой операцией."""
-    backup_dir = Path(BASE_DIR) / "backups"
+    from backend.config import BACKUPS_DIR
+    backup_dir = Path(BACKUPS_DIR)
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     path = backup_dir / f"acai_{reason}_{stamp}.db"

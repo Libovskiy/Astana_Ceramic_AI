@@ -15,13 +15,12 @@ API модуля «Регламенты».
 
 import base64
 import re
-from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from backend.config import BASE_DIR, DOCS_PATH
+from backend.config import DOCS_PATH, STATIC_UPLOADS_DIR
 
 from backend.services.auth_service import get_user_by_session
 from backend.services.audit_service import log_action
@@ -579,7 +578,7 @@ def complete(plan_id: int, request: CompleteRequest, user: dict = Depends(curren
 # загрузке файла. Ронять работающую систему ради формы загрузки
 # фотографии нельзя.
 
-UPLOAD_DIR = BASE_DIR / "frontend" / "static" / "uploads" / "products"
+UPLOAD_DIR = STATIC_UPLOADS_DIR / "products"
 
 ALLOWED_IMAGE = {"jpg", "jpeg", "png", "webp"}
 
@@ -593,10 +592,13 @@ class PhotoRequest(BaseModel):
 
 
 def _safe_name(name: str) -> str:
-    """Только буквы, цифры, дефис и точка — чтобы имя файла не увело
-    запись за пределы папки."""
+    """Только буквы (любого алфавита), цифры, дефис и точка — чтобы имя
+    файла не увело запись за пределы папки. Раньше разрешалась одна
+    латиница, и «паспорт.pdf» сохранялся как «_______.pdf»."""
 
-    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", name.strip())
+    cleaned = re.sub(r"[^\w.-]", "_", name.strip())
+    # ведущие точки: «..», «.htaccess»
+    cleaned = cleaned.lstrip(".")
 
     return cleaned[-80:] or "photo"
 
