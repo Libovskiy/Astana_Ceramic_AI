@@ -23,6 +23,20 @@
     root.style.colorScheme = theme;
   }
 
+  // Манифест и иконка — чтобы сайт можно было добавить «На экран Домой»
+  // (на iPhone без этого не бывает уведомлений). Здесь, а не в каждом
+  // шаблоне: theme.js и так подключён на всех страницах.
+  if (!document.querySelector('link[rel="manifest"]')) {
+    [['manifest', '/manifest.webmanifest'], ['apple-touch-icon', '/static/icon-192.png']].forEach(function (pair) {
+      var link = document.createElement('link');
+      link.rel = pair[0]; link.href = pair[1];
+      document.head.appendChild(link);
+    });
+    var meta = document.createElement('meta');
+    meta.name = 'apple-mobile-web-app-capable'; meta.content = 'yes';
+    document.head.appendChild(meta);
+  }
+
   var fallback = root.getAttribute('data-default-theme') || 'dark';
   var choice = saved();
   apply(choice === 'light' || choice === 'dark' ? choice : fallback);

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, Response, Cookie, UploadFile, BackgroundTasks
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -253,14 +253,13 @@ import os as _os_env
 from backend.services import usage_service
 usage_service.init_usage()
 
-from backend.services import telegram_service
-telegram_service.init_telegram()
+from backend.services import push_service
+push_service.init_push()
 
-# Бот слушает Telegram только в основном экземпляре (порт 8000):
-# HTTPS-экземпляр запущен с ACAI_LIVE_PROXY, и два слушателя забирали бы
-# одни и те же обновления друг у друга.
+# Проверки состояния (датчики, бэкап) — только в основном экземпляре
+# (порт 8000); HTTPS-экземпляр запущен с ACAI_LIVE_PROXY.
 if not _os_env.environ.get("ACAI_LIVE_PROXY"):
-    telegram_service.start()
+    push_service.start_checks()
 
 from backend.services.equipment_state_service import (
     init_state_events
@@ -2667,42 +2666,73 @@ def get_audit_log_route(
 # AUDIT LOG PAGE
 # =========================================
 
-# ─── Telegram ─────────────────────────────────────────────
+# ─── Уведомления на телефон (push) ────────────────────────
 
-@app.get("/api/telegram/status")
-def telegram_status(user: dict = Depends(get_current_user)):
-    return {"success": True, **telegram_service.status_for(user["id"])}
+class PushSubscribeRequest(BaseModel):
+    subscription: dict
 
 
-@app.post("/api/telegram/link")
-def telegram_link(user: dict = Depends(get_current_user)):
+class PushEndpointRequest(BaseModel):
+    endpoint: str | None = None
+
+
+@app.post("/api/push/status")
+def push_status(request: PushEndpointRequest, user: dict = Depends(get_current_user)):
+    return {"success": True, **push_service.status_for(user["id"], request.endpoint)}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(payload: PushSubscribeRequest, request: Request, user: dict = Depends(get_current_user)):
     try:
-        return {"success": True, **telegram_service.create_link(user["id"])}
+        push_service.subscribe(user["id"], payload.subscription, request.headers.get("user-agent", ""))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
-
-
-@app.post("/api/telegram/unlink")
-def telegram_unlink(user: dict = Depends(get_current_user)):
-    telegram_service.unlink(user["id"])
     return {"success": True}
 
 
-@app.get("/api/telegram/overview")
-def telegram_overview(user: dict = Depends(require_roles("director", "chief_engineer"))):
-    """Кто подключил уведомления — для «Использования»."""
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT u.full_name, u.username, u.role, t.linked_at
-        FROM telegram_links t JOIN users u ON u.id = t.user_id
-        ORDER BY t.linked_at DESC
-        """
-    ).fetchall()
-    conn.close()
-    return {"success": True, "configured": telegram_service.enabled(),
-            "bot": telegram_service.bot_username(), "linked": [dict(r) for r in rows]}
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(request: PushEndpointRequest, user: dict = Depends(get_current_user)):
+    push_service.unsubscribe(user["id"], request.endpoint)
+    return {"success": True}
+
+
+@app.post("/api/push/test")
+def push_test(user: dict = Depends(get_current_user)):
+    """Проверка: прислать уведомление себе на все свои устройства."""
+    push_service.send_to_users([user["id"]], "✅ Уведомления работают",
+                               "Так будут приходить срочные оповещения ACAI.", url="/", tag="test", urgent=True)
+    return {"success": True}
+
+
+@app.get("/api/push/overview")
+def push_overview(user: dict = Depends(require_roles("director", "chief_engineer"))):
+    """Кто включил уведомления — для «Использования»."""
+    return {"success": True, "configured": push_service.enabled(), "people": push_service.overview()}
+
+
+@app.get("/sw.js")
+def service_worker():
+    # Service worker должен лежать в корне сайта: из /static/ он
+    # управлял бы только адресами внутри /static/.
+    return FileResponse("frontend/static/sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest():
+    return FileResponse("frontend/static/manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/cert")
+def cert_page(request: Request):
+    return templates.TemplateResponse(request=request, name="cert.html")
+
+
+@app.get("/cert/acai-ca.crt")
+def cert_download():
+    # Только открытая часть корневого сертификата — ключ не отдаётся
+    return FileResponse("certs/ca.crt", media_type="application/x-x509-ca-cert",
+                        filename="ACAI-Astana-Ceramic.crt")
 
 
 @app.get("/usage")

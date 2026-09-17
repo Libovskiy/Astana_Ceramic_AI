@@ -876,13 +876,13 @@ def get_messages(conversation_id: int, me_id: int,
         conn.close()
 
 
-def _notify_telegram(conversation_id: int, sender_id: int, preview: str) -> None:
-    """Тем, кого нет на сайте, — в Telegram (если подключён)."""
+def _notify_push(conversation_id: int, sender_id: int, preview: str) -> None:
+    """Тем, кого нет на сайте, — уведомление на телефон."""
     try:
-        from backend.services import telegram_service
-        telegram_service.messenger_message(conversation_id, sender_id, preview)
+        from backend.services import push_service
+        push_service.messenger_message(conversation_id, sender_id, preview)
     except Exception as error:
-        print(f"[team_chat] Telegram: {error}")
+        print(f"[team_chat] push: {error}")
 
 
 def send_message(conversation_id: int, me_id: int, body: str) -> dict:
@@ -921,7 +921,7 @@ def send_message(conversation_id: int, me_id: int, body: str) -> dict:
 
         conn.commit()
 
-        _notify_telegram(conversation_id, me_id, body)
+        _notify_push(conversation_id, me_id, body)
 
         row = conn.execute(
             """
@@ -1195,7 +1195,7 @@ def save_attachment(conversation_id: int, me_id: int, temp_path: Path,
 
         message = _shape_messages(conn, [row], me_id)[0]
 
-        _notify_telegram(conversation_id, me_id, caption or {
+        _notify_push(conversation_id, me_id, caption or {
             KIND_IMAGE: "📷 Фото", KIND_VIDEO: "🎬 Видео", KIND_AUDIO: "🎤 Голосовое сообщение",
         }.get(kind, f"📎 {original_name}"))
 

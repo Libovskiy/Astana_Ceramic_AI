@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сертификат — ACAI</title>
+<script src="/static/theme.js?v=2"></script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<link rel="stylesheet" href="/static/acai.css?v=17">
+<!--
+  Страница открыта без входа: её открывают на новом телефоне ещё до
+  того, как телефон доверяет защищённому адресу.
+  Отдаётся только открытая часть корневого сертификата (certs/ca.crt).
+-->
+<style>
+body { padding: 16px; }
+.cert { max-width: 620px; margin: 0 auto; }
+.cert h1 { font-size: 22px; margin: 8px 0 6px; }
+.cert p { font-size: 14px; line-height: 1.55; color: var(--text); }
+.cert .dim { color: var(--text-dim); font-size: 13px; }
+.cert .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 14px 0; }
+.cert h2 { font-size: 16px; margin: 0 0 8px; }
+.cert ol { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; }
+.cert .big { display: block; text-align: center; padding: 14px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; text-decoration: none; margin: 12px 0; }
+.cert .link { display: block; text-align: center; padding: 12px; border-radius: 12px; background: var(--surface-2); color: var(--text); font-weight: 600; text-decoration: none; }
+.cert .tabs { display: flex; gap: 8px; margin-top: 6px; }
+.cert .tab { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.cert .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div class="cert">
+  <h1>🔒 Заводской сертификат</h1>
+  <p>Нужен один раз на каждом телефоне, чтобы работали <b>уведомления на телефон</b> и <b>диктофон</b>. После установки сайт открывается по защищённому адресу без предупреждений.</p>
+  <p class="dim">Это сертификат нашего сервера ACAI, он действует только для сайта завода.</p>
+
+  <a class="big" href="/cert/acai-ca.crt" download>⬇️ Скачать сертификат</a>
+
+  <div class="tabs">
+    <button class="tab active" data-os="android">Android</button>
+    <button class="tab" data-os="ios">iPhone</button>
+  </div>
+
+  <div class="box" id="os-android">
+    <h2>Android</h2>
+    <ol>
+      <li>Нажмите «Скачать сертификат» выше.</li>
+      <li>Откройте <b>Настройки → Безопасность</b> (или «Биометрия и безопасность») → <b>Другие настройки безопасности</b> → <b>Шифрование и учётные данные</b> → <b>Установить сертификат</b> → <b>Сертификат ЦС</b>.<br>
+        <span class="dim">Проще: в поиске настроек наберите «сертификат ЦС».</span></li>
+      <li>Нажмите «Всё равно установить», выберите скачанный файл <b>ACAI-Astana-Ceramic.crt</b>.</li>
+      <li>Откройте сайт по защищённому адресу (кнопка ниже).</li>
+    </ol>
+  </div>
+
+  <div class="box" id="os-ios" style="display:none">
+    <h2>iPhone</h2>
+    <ol>
+      <li>Откройте эту страницу в <b>Safari</b> и нажмите «Скачать сертификат» → «Разрешить».</li>
+      <li><b>Настройки → Основные → VPN и управление устройством</b> → профиль «ACAI Astana Ceramic» → <b>Установить</b>.</li>
+      <li><b>Настройки → Основные → Об этом устройстве → Доверие сертификатам</b> → включите «ACAI Astana Ceramic».</li>
+      <li>Откройте сайт по защищённому адресу, затем «Поделиться» ⬆️ → <b>«На экран Домой»</b>. Уведомления на iPhone работают только из значка на экране (iOS 16.4+).</li>
+    </ol>
+  </div>
+
+  <a class="link" id="secureLink" href="#">Открыть защищённый адрес →</a>
+  <p class="dim" style="margin-top:14px">После входа: колокольчик 🔔 (или кнопка «Включить уведомления» в «Обращениях») → «Включить» → «Разрешить».</p>
+</div>
+<script>
+document.getElementById('secureLink').href = 'https://' + location.hostname + ':8443/';
+document.querySelectorAll('.tab').forEach(function (t) {
+  t.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('active', x === t); });
+    document.getElementById('os-android').style.display = t.dataset.os === 'android' ? '' : 'none';
+    document.getElementById('os-ios').style.display = t.dataset.os === 'ios' ? '' : 'none';
+  });
+});
+if (/iPhone|iPad|iPod/.test(navigator.userAgent)) document.querySelector('[data-os="ios"]').click();
+</script>
+</body>
+</html>

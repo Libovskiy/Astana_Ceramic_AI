@@ -317,6 +317,21 @@ body {
     flex-shrink: 0;
 }
 
+/* Включить уведомления */
+.chat-push {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 11px 14px;
+    border: 1px dashed #93a4f8;
+    border-radius: 12px;
+    background: #f5f7ff;
+    color: #3b5bfd;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+:root[data-theme="dark"] .chat-push { background: #161d33; border-color: #3b4a8a; color: #a5b4fc; }
+
 /* Диктофон */
 .chat-mic {
     border: 1px solid #dbe2ec;

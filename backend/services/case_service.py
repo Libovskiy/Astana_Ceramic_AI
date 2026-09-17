@@ -266,10 +266,10 @@ def draft_close_case(case_id, drafted_by, draft_comment=None):
     conn.close()
 
     try:
-        from backend.services import telegram_service
-        telegram_service.case_ready_for_approval(case_id)
+        from backend.services import push_service
+        push_service.case_ready_for_approval(case_id)
     except Exception as error:
-        print(f"[case_service] Telegram: {error}")
+        print(f"[case_service] push: {error}")
 
 
 def approve_close_case(case_id, approved_by, final_comment=None):
@@ -468,12 +468,12 @@ def escalate_case(case_id):
     conn.commit()
     conn.close()
 
-    # Срочное: механик или электрик должен узнать, даже если сайт закрыт
+    # Срочное: механик или электрик должен узнать, даже если сайт закрыт — push на телефон
     try:
-        from backend.services import telegram_service
-        telegram_service.case_escalated(case_id)
+        from backend.services import push_service
+        push_service.case_escalated(case_id)
     except Exception as error:
-        print(f"[case_service] Telegram: {error}")
+        print(f"[case_service] push: {error}")
 
 
 def search_case_events(
@@ -758,6 +758,13 @@ def take_case(case_id, assigned_to):
     conn.commit()
     conn.close()
 
+    # Рабочему у станка важно знать, что к нему уже идут
+    try:
+        from backend.services import push_service
+        push_service.case_taken(case_id, assigned_to)
+    except Exception as error:
+        print(f"[case_service] push: {error}")
+
 
 def complete_repair(case_id, resolution_comment, completed_by):
     """
@@ -803,10 +810,10 @@ def complete_repair(case_id, resolution_comment, completed_by):
     conn.close()
 
     try:
-        from backend.services import telegram_service
-        telegram_service.case_ready_for_approval(case_id)
+        from backend.services import push_service
+        push_service.case_ready_for_approval(case_id)
     except Exception as error:
-        print(f"[case_service] Telegram: {error}")
+        print(f"[case_service] push: {error}")
 
 
 def get_work_queue(discipline=None):

@@ -478,6 +478,14 @@ def post_message(case_id, user, text):
         author_role=user["role"]
     )
 
+    if is_specialist:
+        # ответ специалиста — рабочему на телефон, он мог уйти от экрана
+        try:
+            from backend.services import push_service
+            push_service.case_specialist_reply(case_id, user.get("full_name") or user.get("username"), text)
+        except Exception as error:
+            print(f"[conversation_service] push: {error}")
+
     # -----------------------------------------
     # Рабочий сказал, что заработало?
     # -----------------------------------------

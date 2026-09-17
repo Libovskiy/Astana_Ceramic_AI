@@ -30,6 +30,9 @@ PHOTOS_DIR = BASE_DIR / "data" / "checklist_photos"
 # Восстановить их неоткуда — в git они не попадают (и не должны).
 CHAT_FILES_DIR = BASE_DIR / "uploads" / "messenger"
 DOCS_DIR = BASE_DIR / "docs"
+# Заводской сертификат и ключи уведомлений. Потеряв их, придётся заново
+# ставить сертификат на каждый телефон и заново включать уведомления.
+CERTS_DIR = BASE_DIR / "certs"
 BACKUP_DIR = BASE_DIR / "backups"
 DEFAULT_KEEP = 14
 
@@ -148,6 +151,7 @@ def main():
     backup_db(stamp)
     backup_dir(PHOTOS_DIR, stamp, "photos")
     backup_dir(CHAT_FILES_DIR, stamp, "chatfiles")
+    backup_dir(CERTS_DIR, stamp, "certs")
     if args.with_docs:
         backup_dir(DOCS_DIR, stamp, "docs")
 

@@ -8,8 +8,8 @@
     <!-- Обращения — отдельная страница со своими стилями, без общего
          acai.css. По умолчанию светлая (data-default-theme), тёмная —
          по кнопке, своя контрастная палитра в конце chat.css. -->
-    <script src="/static/theme.js?v=1"></script>
-    <link rel="stylesheet" href="/static/chat.css?v=44">
+    <script src="/static/theme.js?v=2"></script>
+    <link rel="stylesheet" href="/static/chat.css?v=45">
 </head>
 <body>
 
@@ -46,6 +46,11 @@
 
     <!-- ============ СПИСОК ОБРАЩЕНИЙ ============ -->
     <section class="chat-list" id="chatList">
+
+        <!-- Уведомления на телефон: специалист взял обращение, ответил -->
+        <button type="button" class="chat-push" id="chatPush" style="display:none;">
+            🔔 Включить уведомления на телефон
+        </button>
 
         <button type="button" class="chat-new" id="chatNew">
             <span class="chat-new-icon">+</span>
@@ -132,7 +137,8 @@
 
 <script src="/static/notify.js?v=31"></script>
 <script src="/static/voice.js?v=1"></script>
-<script src="/static/chat.js?v=35"></script>
+<script src="/static/push.js?v=1"></script>
+<script src="/static/chat.js?v=36"></script>
 
 </body>
 </html>

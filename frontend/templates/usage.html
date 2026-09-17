@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Использование — ACAI</title>
-<script src="/static/theme.js?v=1"></script>
+<script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
 <link rel="stylesheet" href="/static/acai.css?v=17">
 <style>
@@ -88,7 +88,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=20"></script>
+<script src="/static/acai_layout.js?v=21"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 const ROLE_NAMES = {
@@ -140,7 +140,7 @@ async function load() {
   try {
     data = await ACAI.get(`/api/usage/summary?days=${days}`);
     render();
-    loadTelegram();
+    loadPush();
   } catch (e) {
     document.getElementById('usPage').innerHTML = `<div class="empty">Не удалось загрузить: ${esc(e.message)}</div>`;
   }
@@ -253,8 +253,8 @@ function render() {
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <div class="card-head"><h2>📲 Уведомления в Telegram</h2></div>
-      <div class="card-body" id="usTelegram"><div class="empty">Загрузка...</div></div>
+      <div class="card-head"><h2>📲 Уведомления на телефон</h2></div>
+      <div class="card-body" id="usPush"><div class="empty">Загрузка...</div></div>
     </div>
 
     <div class="card">
@@ -296,26 +296,23 @@ function render() {
   `;
 }
 
-async function loadTelegram() {
-  const box = document.getElementById('usTelegram');
+async function loadPush() {
+  const box = document.getElementById('usPush');
   if (!box) return;
   try {
-    const r = await ACAI.get('/api/telegram/overview');
-    if (!r.configured) {
-      box.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">Бот не настроен: нужен TELEGRAM_BOT_TOKEN в .env на сервере.</div>';
-      return;
-    }
+    const r = await ACAI.get('/api/push/overview');
+    if (!r.configured) { box.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">Уведомления на сервере не настроены (нет ключей в certs/).</div>'; return; }
     box.innerHTML = `
-      <div style="font-size:13px;margin-bottom:8px">Бот <b>@${esc(r.bot || '—')}</b> · подключили <b>${r.linked.length}</b> из ${data.totals.accounts}</div>
-      ${r.linked.map(p => `<div class="us-row"><span class="us-name">${esc(p.full_name || p.username)}</span>
-        <span class="us-delta">${esc(ROLE_NAMES[p.role] || p.role)}</span></div>`).join('')
-        || '<div style="font-size:12px;color:var(--text-dim)">Пока никто. Подключается через колокольчик 🔔 → «Уведомления в Telegram».</div>'}`;
+      <div style="font-size:13px;margin-bottom:8px">Включили <b>${r.people.length}</b> из ${data.totals.accounts}</div>
+      ${r.people.map(p => `<div class="us-row"><span class="us-name">${esc(p.full_name || p.username)}</span>
+        <span class="us-delta">${esc(ROLE_NAMES[p.role] || p.role)}${p.devices > 1 ? ` · ${p.devices} устр.` : ''}</span></div>`).join('')
+        || '<div style="font-size:12px;color:var(--text-dim)">Пока никто. Включается через колокольчик 🔔 → «Уведомления на телефон».</div>'}`;
   } catch {
     box.innerHTML = '<div class="empty">Не удалось загрузить</div>';
   }
 }
 
-function setFilter(f) { peopleFilter = f; render(); loadTelegram(); }
+function setFilter(f) { peopleFilter = f; render(); loadPush(); }
 
 document.getElementById('periodChips').addEventListener('click', (e) => {
   const b = e.target.closest('[data-days]');

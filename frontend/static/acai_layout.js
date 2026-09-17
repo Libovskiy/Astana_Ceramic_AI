@@ -318,7 +318,28 @@ function toggleTheme(button) {
   document.querySelectorAll('.theme-btn').forEach(b => { b.textContent = themeIcon(); });
 }
 
+// ── УВЕДОМЛЕНИЯ НА ТЕЛЕФОН ───────────────────────────────
+// Сама логика — в push.js, он подгружается по первому нажатию.
+function loadPushScript() {
+  if (window.ACAIPush) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/static/push.js?v=1';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function openPushSettings() {
+  const panel = document.getElementById('bellPanel');
+  if (panel) panel.style.display = 'none';
+  try { await loadPushScript(); ACAIPush.openDialog(); }
+  catch { ACAI.toast('Не удалось открыть настройки уведомлений', 'danger'); }
+}
+
 async function logout() {
+  // уведомления этого телефона — не следующему, кто войдёт
+  try { await loadPushScript(); await ACAIPush.forgetThisDevice(); } catch {}
   try { await fetch('/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
   window.location.href = '/login';
 }
@@ -428,6 +449,12 @@ const BELL_LINKS = {
 
 function bellLink(item) {
   return item.link || BELL_LINKS[item.type] || '/cases';
+}
+
+// Разрешение на уведомления уже дано — подгружаем push.js, он сам
+// обновит привязку телефона к тому, кто сейчас вошёл.
+if ('Notification' in window && Notification.permission === 'granted' && location.protocol === 'https:') {
+  loadPushScript().catch(() => {});
 }
 
 async function initBell() {
@@ -548,96 +575,12 @@ async function loadBell() {
     </div>`;
 
   panel.insertAdjacentHTML('beforeend', `
-    <button type="button" onclick="event.stopPropagation();openTelegramSettings()"
+    <button type="button" onclick="event.stopPropagation();openPushSettings()"
       style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:none;
              border-top:1px solid var(--border);background:var(--surface-2);color:var(--text);
              cursor:pointer;font-size:12.5px;font-weight:600;text-align:left">
-      📲 Уведомления в Telegram
-      <span style="margin-left:auto;font-weight:400;color:var(--text-dim);white-space:nowrap">на телефон</span>
+      📲 Уведомления на телефон
+      <span style="margin-left:auto;font-weight:400;color:var(--text-dim);white-space:nowrap">со звуком</span>
     </button>`);
 }
 
-// ── TELEGRAM ─────────────────────────────────────────────
-// Срочное (эскалация, задача на вас, сообщение, пока вас нет на сайте)
-// приходит в Telegram. Привязка — одноразовой ссылкой на бота.
-async function openTelegramSettings() {
-  const panel = document.getElementById('bellPanel');
-  if (panel) panel.style.display = 'none';
-
-  let st;
-  try { st = await ACAI.get('/api/telegram/status'); }
-  catch { ACAI.toast('Не удалось проверить Telegram', 'danger'); return; }
-
-  const what = `
-    <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:10px 0 4px">
-      Что приходит:<br>
-      🔴 обращение передано специалисту (механикам или электрикам)<br>
-      🟡 ремонт завершён — ждёт подтверждения<br>
-      📌 на вас назначили задачу<br>
-      💭 вам написали, пока вас нет на сайте
-    </div>`;
-
-  let body;
-  if (!st.configured) {
-    body = `<div class="empty" style="padding:14px 0">Бот ещё не настроен. Попросите администратора добавить TELEGRAM_BOT_TOKEN.</div>
-      <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`;
-  } else if (st.linked) {
-    body = `
-      <div style="padding:12px;border-radius:10px;background:var(--surface-2);font-size:13px">
-        ✅ Подключено${st.tg_name ? ` — ${st.tg_name}` : ''}<br>
-        <span style="font-size:11px;color:var(--text-dim)">бот @${st.bot || '—'}</span>
-      </div>
-      ${what}
-      <div class="modal-foot">
-        <button class="btn danger" onclick="telegramUnlink()">Отключить</button>
-        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
-      </div>`;
-  } else {
-    body = `
-      <div style="font-size:13px;line-height:1.5">
-        Нажмите кнопку — откроется Telegram. Там нажмите <b>«Старт»</b>, и уведомления будут приходить на этот телефон.
-      </div>
-      ${what}
-      <div class="modal-foot">
-        <button class="btn primary" id="tgLinkBtn" onclick="telegramLink()">Открыть бота</button>
-        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
-      </div>
-      <div id="tgLinkHint" style="font-size:11px;color:var(--text-dim);margin-top:8px"></div>`;
-  }
-
-  ACAI.showModal(`<h3>📲 Уведомления в Telegram</h3>${body}`);
-}
-
-async function telegramLink() {
-  // Окно открываем сразу по нажатию: после ожидания ответа сервера
-  // телефон счёл бы его всплывающим и заблокировал.
-  const win = window.open('', '_blank');
-  try {
-    const r = await ACAI.post('/api/telegram/link', {});
-    if (win) win.location.href = r.url; else window.location.href = r.url;
-    const hint = document.getElementById('tgLinkHint');
-    if (hint) hint.innerHTML = `Не открылось? Откройте ссылку на телефоне: <a href="${r.url}" target="_blank">${r.url}</a> (действует 15 минут). После «Старт» закройте это окно.`;
-    // ждём, пока человек нажмёт «Старт» в боте
-    let tries = 0;
-    const timer = setInterval(async () => {
-      tries++;
-      try {
-        const st = await ACAI.get('/api/telegram/status');
-        if (st.linked) { clearInterval(timer); ACAI.toast('Telegram подключён'); openTelegramSettings(); }
-      } catch {}
-      if (tries > 90 || !document.getElementById('tgLinkHint')) clearInterval(timer);
-    }, 3000);
-  } catch (e) {
-    if (win) win.close();
-    ACAI.toast(e.message || 'Не получилось', 'danger');
-  }
-}
-
-async function telegramUnlink() {
-  if (!confirm('Отключить уведомления в Telegram?')) return;
-  try {
-    await ACAI.post('/api/telegram/unlink', {});
-    ACAI.toast('Уведомления отключены');
-    ACAI.closeModal();
-  } catch (e) { ACAI.toast(e.message || 'Не получилось', 'danger'); }
-}

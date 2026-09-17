@@ -213,7 +213,19 @@ function bindEvents() {
 
     }
 
+    // Кнопка уведомлений видна, пока они не включены на этом телефоне
+    const pushButton = document.getElementById("chatPush");
+    if (pushButton && window.ACAIPush) {
+        pushButton.addEventListener("click", async function () {
+            await ACAIPush.openDialog();
+        });
+        ACAIPush.state().then(function (st) {
+            pushButton.style.display = (st.thisDevice && st.permission === "granted") ? "none" : "block";
+        }).catch(function () {});
+    }
+
     document.getElementById("chatLogout").addEventListener("click", async function () {
+        if (window.ACAIPush) { try { await ACAIPush.forgetThisDevice(); } catch (e) {} }
         try { await fetch("/auth/logout", { method: "POST" }); }
         finally { window.location.href = "/login"; }
     });
