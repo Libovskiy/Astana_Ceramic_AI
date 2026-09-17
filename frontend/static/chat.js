@@ -630,7 +630,10 @@ async function loadThread() {
 
     try {
 
-        const response = await fetch(`/api/conversation/${activeCaseId}`);
+        // пришёл из уведомления — сказать серверу один раз (для «Наблюдения»)
+        const params = new URLSearchParams(window.location.search);
+        const viaPush = params.get("from") === "push" && Number(params.get("case")) === activeCaseId;
+        const response = await fetch(`/api/conversation/${activeCaseId}${viaPush ? "?from=push" : ""}`);
 
         if (response.status === 401) {
             window.location.href = "/login";

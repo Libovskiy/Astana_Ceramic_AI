@@ -51,6 +51,17 @@ def push_unsubscribe(request: PushEndpointRequest, user: dict = Depends(get_curr
     return {"success": True}
 
 
+class PushClickRequest(BaseModel):
+    tag: str
+
+
+@router.post("/api/push/clicked")
+def push_clicked(payload: PushClickRequest, user: dict = Depends(get_current_user)):
+    from backend.services.observation_service import record_click
+    record_click(user["id"], payload.tag[:100])
+    return {"success": True}
+
+
 @router.post("/api/push/test")
 def push_test(user: dict = Depends(get_current_user)):
     """Проверка: прислать уведомление себе на все свои устройства."""

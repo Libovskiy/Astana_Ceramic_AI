@@ -32,7 +32,18 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin);
+  // откуда пришёл человек — чтобы отличать «открыл из уведомления» от «зашёл сам»
+  target.searchParams.set('from', 'push');
+  const url = target.href;
+  const tag = event.notification.tag;
+  if (tag) {
+    fetch('/api/push/clicked', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag })
+    }).catch(() => {});
+  }
 
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

@@ -198,6 +198,9 @@ usage_service.init_usage()
 from backend.services import push_service
 push_service.init_push()
 
+from backend.services.observation_service import init_observation
+init_observation()
+
 # Проверки состояния (датчики, бэкап) — только в основном экземпляре
 # (порт 8000); HTTPS-экземпляр запущен с ACAI_LIVE_PROXY.
 if not _os_env.environ.get("ACAI_LIVE_PROXY"):
@@ -278,6 +281,8 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     "/audit": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
     # Пользуются ли системой: кто заходит, какие разделы, сколько работы
     "/usage": ("director", "chief_engineer"),
+    # полчаса в цеху: подготовка телефона механика, времена, заметки
+    "/observe": ("director", "chief_engineer"),
     "/settings": (),  # только admin
 }
 
@@ -393,3 +398,6 @@ app.include_router(technolog_router)
 
 from backend.api.parts_routes import router as parts_router
 app.include_router(parts_router)
+
+from backend.api.observe_routes import router as observe_router
+app.include_router(observe_router)

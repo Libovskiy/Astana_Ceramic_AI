@@ -204,11 +204,17 @@ def send_to_roles(roles, title, body, url="/", tag=None, urgent=False, exclude_u
 
 def _deliver(user_ids, payload) -> None:
     from pywebpush import webpush, WebPushException
+    from backend.services.observation_service import record_delivery
+
+    try:
+        meta = json.loads(payload)
+    except ValueError:
+        meta = {}
 
     marks = ",".join("?" for _ in user_ids)
     conn = get_connection()
     subs = conn.execute(
-        f"SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id IN ({marks})", user_ids
+        f"SELECT id, user_id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id IN ({marks})", user_ids
     ).fetchall()
     conn.close()
 
@@ -228,8 +234,10 @@ def _deliver(user_ids, payload) -> None:
                          (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), sub["id"]))
             conn.commit()
             conn.close()
+            record_delivery(sub["user_id"], meta.get("tag"), meta.get("title"), True)
         except WebPushException as error:
             status = getattr(getattr(error, "response", None), "status_code", None)
+            record_delivery(sub["user_id"], meta.get("tag"), meta.get("title"), False, str(status))
             # 404/410 — подписки больше нет (удалили сайт, сбросили браузер)
             if status in (404, 410):
                 conn = get_connection()

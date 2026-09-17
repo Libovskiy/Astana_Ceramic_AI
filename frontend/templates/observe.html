@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Наблюдение — ACAI</title>
+<script src="/static/theme.js?v=2"></script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<link rel="stylesheet" href="/static/acai.css?v=18">
+<style>
+.ob { max-width: 640px; margin: 0 auto; }
+.ob-step { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+.ob-step h2 { font-size: 19px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+.ob-num { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.ob-step.done .ob-num { background: var(--text); color: var(--bg); }
+.ob-hint { font-size: 15px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 12px; }
+.ob-big { display: block; width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 17px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+.ob-primary { background: var(--accent); color: #fff; }
+.ob-plain { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.ob-danger { background: var(--danger); color: #fff; }
+.ob-row { display: flex; gap: 10px; }
+.ob-row .ob-big { flex: 1; }
+.ob-pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 16px; margin-top: 8px; cursor: pointer; }
+.ob-pick.active { border: 2px solid var(--accent); }
+.ob-pick small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+.ob-status { padding: 12px 14px; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 10px; background: var(--surface-2); }
+.ob-status.warn { background: rgba(245,158,11,.14); color: var(--warn); }
+.ob-status.bad { background: rgba(239,68,68,.12); color: var(--danger); }
+.ob-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); font-size: 15px; line-height: 1.45; }
+.ob-check input { width: 22px; height: 22px; margin-top: 1px; flex-shrink: 0; }
+.ob-check code { font-size: 14px; word-break: break-all; }
+.ob-key { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 12px; }
+.ob-key div { background: var(--surface-2); border-radius: 12px; padding: 12px 8px; text-align: center; }
+.ob-key b { display: block; font-family: var(--mono); font-size: 24px; }
+.ob-key span { font-size: 12px; color: var(--text-dim); }
+.ob-tl { list-style: none; padding: 0; margin: 0; }
+.ob-tl li { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 15px; }
+.ob-tl time { font-family: var(--mono); font-weight: 700; min-width: 52px; }
+.ob-tl .plus { margin-left: auto; font-family: var(--mono); color: var(--text-dim); white-space: nowrap; }
+.ob-tl .bad { color: var(--danger); font-weight: 700; }
+.ob-notes { width: 100%; min-height: 140px; font-size: 16px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; resize: vertical; }
+.ob-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.ob-chip { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 15px; cursor: pointer; }
+.ob-saved { font-size: 13px; color: var(--text-dim); margin-top: 6px; min-height: 18px; }
+details.ob-step summary { font-size: 17px; font-weight: 700; cursor: pointer; }
+details.ob-step ul { margin: 10px 0 0; padding-left: 20px; font-size: 15px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Наблюдение</div>
+        <div class="topbar-sub">Полчаса в цеху: механик → оператор → закрытие</div>
+      </div>
+      <div class="topbar-right"><span class="topbar-clock" id="topbarClock"></span></div>
+    </header>
+    <div class="page"><div class="ob" id="ob"><div class="empty">Загрузка…</div></div></div>
+  </div>
+</div>
+
+<script src="/static/acai_layout.js?v=22"></script>
+<script src="/static/mobile_nav_v2.js?v=3"></script>
+<script src="/static/voice.js?v=1"></script>
+<script>
+const SITE_HTTP = `http://${location.hostname}:8000`;
+const SITE_HTTPS = `https://${location.hostname}:8443`;
+let obsId = null, candidates = [], state = null, pollTimer = null, notesTimer = null, notesDirty = false;
+// страница перерисовывается каждые 3 с — галочки, раскрытые блоки и выбор «сменить» держим здесь
+let checks = {}, lookOpen = false, pickerOpen = false;
+
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hhmm = s => s ? s.slice(11, 16) : '—';
+const mins = m => m == null ? '—' : (m < 1 ? '<1' : (m >= 60 ? `${Math.floor(m/60)}ч ${Math.round(m%60)}м` : Math.round(m)));
+
+async function boot() {
+  const r = await ACAI.get('/api/observe/current');
+  candidates = r.candidates || [];
+  obsId = r.id;
+  if (!obsId) return renderStart(r.push_configured);
+  await refresh();
+  pollTimer = setInterval(refresh, 3000);
+}
+
+function renderStart(pushOk) {
+  document.getElementById('ob').innerHTML = `
+    <div class="ob-step">
+      <h2>Перед началом</h2>
+      <div class="ob-hint">Порядок: <b>сначала механик</b> — поставить сертификат и включить уведомления, проверить,
+        что проверочное приходит. Только потом оператор. Иначе оператор создаст обращение, а механик о нём не узнает.</div>
+      <div class="ob-hint">Если оператор застрянет на первом шаге — это не провал, а результат. Запишите, где именно.</div>
+      ${pushOk ? '' : '<div class="ob-status bad">Уведомления на сервере не настроены — сообщите администратору.</div>'}
+      <button class="ob-big ob-primary" onclick="startObservation()">Начать наблюдение</button>
+    </div>`;
+}
+
+async function startObservation() {
+  const r = await ACAI.post('/api/observe/start', {});
+  obsId = r.id;
+  await refresh();
+  pollTimer = setInterval(refresh, 3000);
+}
+
+async function save(fields) {
+  const r = await ACAI.post(`/api/observe/${obsId}`, fields);
+  state = r; render();
+}
+
+async function refresh() {
+  if (!obsId) return;
+  try { state = await ACAI.get(`/api/observe/${obsId}`); } catch { return; }
+  // заметки перерисовываем, только если человек их сейчас не правит
+  render();
+}
+
+function render() {
+  const o = state.observation, m = state.mechanic, c = state.case, key = state.key || {};
+  const box = document.getElementById('ob');
+  const notesEl = document.getElementById('obNotes');
+  const keepNotes = notesEl && (document.activeElement === notesEl || notesDirty) ? notesEl.value : null;
+
+  const mechReady = m && m.devices > 0;
+  const testOk = o.test_received === 'да';
+  const step1Done = mechReady && testOk;
+
+  let html = '';
+
+  // ── 1. Механик
+  html += `<div class="ob-step ${step1Done ? 'done' : ''}">
+    <h2><span class="ob-num">1</span> Телефон механика</h2>
+    <div class="ob-hint">Кого наблюдаем? Выберите и подготовьте его телефон — до прихода оператора.</div>
+    ${(m && !pickerOpen)
+      ? `<button class="ob-pick active" onclick="pickerOpen=true;render()">
+           <span style="flex:1">${esc(m.full_name || m.username)}<small>${esc(m.username)} · нажмите, чтобы выбрать другого</small></span>
+         </button>`
+      : candidates.map(p => `
+      <button class="ob-pick ${m && m.id === p.id ? 'active' : ''}" onclick="pickerOpen=false;save({mechanic_id:${p.id}})">
+        <span style="flex:1">${esc(p.full_name || p.username)}<small>${esc(p.username)} · ${p.devices ? '🔔 уведомления включены' : 'уведомления не включены'}</small></span>
+      </button>`).join('')}`;
+
+  if (m) {
+    html += `
+      <label class="ob-check"><input type="checkbox" data-check="c1" ${checks.c1?'checked':''}> <span>На его телефоне открыть <code>${SITE_HTTP}/cert</code>, скачать и установить сертификат (там инструкция для Android и iPhone).</span></label>
+      <label class="ob-check"><input type="checkbox" data-check="c2" ${checks.c2?'checked':''}> <span>Войти по защищённому адресу <code>${SITE_HTTPS}</code> под учёткой <b>${esc(m.username)}</b>. На iPhone — добавить «На экран Домой» и открыть со значка.</span></label>
+      <label class="ob-check"><input type="checkbox" data-check="c3" ${checks.c3?'checked':''}> <span>Колокольчик 🔔 → «Уведомления на телефон» → «Включить» → «Разрешить».</span></label>
+      <div class="ob-status ${mechReady ? '' : 'warn'}">${mechReady
+        ? `✓ Уведомления включены на ${m.devices} тел.`
+        : 'Ждём, пока механик включит уведомления… (обновляется само)'}</div>`;
+    if (mechReady) {
+      const d = m.test_delivery;
+      html += `<button class="ob-big ob-plain" onclick="sendTest()">Отправить механику проверочное</button>`;
+      if (o.test_sent_at) {
+        html += `<div class="ob-status ${d && !d.ok ? 'bad' : ''}">
+          ${d ? (d.ok ? `Ушло в службу доставки в ${hhmm(d.sent_at)}${d.clicked_at ? ` · нажал в ${hhmm(d.clicked_at)}` : ''}` : `Не доставлено (ошибка ${esc(d.status)})`) : 'Отправляется…'}</div>
+          <div class="ob-hint" style="margin-bottom:0">«Ушло» ещё не значит «пришло». Посмотрите на экран <b>его телефона</b>: появилось?
+            Не пришло за минуту — отправьте ещё раз: первое уведомление на только что включённый телефон иногда теряется.</div>
+          <div class="ob-row">
+            <button class="ob-big ${o.test_received === 'да' ? 'ob-primary' : 'ob-plain'}" onclick="save({test_received:'да'})">Да, пришло</button>
+            <button class="ob-big ${o.test_received === 'нет' ? 'ob-danger' : 'ob-plain'}" onclick="save({test_received:'нет'})">Нет</button>
+          </div>
+          ${o.test_received === 'нет' ? `<div class="ob-hint">Проверьте по порядку: сайт открыт по <b>https</b> и без предупреждения о сертификате;
+            в браузере разрешены уведомления для сайта; у телефона есть интернет; на iPhone сайт открыт со значка на экране «Домой»;
+            не включён режим «Не беспокоить». Запишите в заметки, что оказалось.</div>` : ''}`;
+      }
+    }
+  }
+  html += `</div>`;
+
+  // ── 2. Оператор
+  html += `<div class="ob-step ${c ? 'done' : ''}">
+    <h2><span class="ob-num">2</span> Оператор</h2>
+    ${step1Done ? '' : '<div class="ob-status warn">Сначала закончите шаг 1 — иначе потеряете момент, когда механик узнаёт.</div>'}
+    <div class="ob-hint">Скажите: «Представьте, что встал привод. Сообщите через телефон». <b>Не подсказывайте</b>, куда нажимать.</div>
+    <div class="ob-status">${c
+      ? `✓ Обращение №${c.id}: ${esc(c.equipment_name)} — «${esc((c.worker_question || '').replace((c.equipment_name || '') + '. ', '').slice(0, 60))}»`
+      : 'Ждём обращение… появится само'}</div>
+  </div>`;
+
+  // ── 3. Механик узнал
+  if (c) {
+    html += `<div class="ob-step ${o.seen_at ? 'done' : ''}">
+      <h2><span class="ob-num">3</span> Механик узнал</h2>
+      <div class="ob-hint">Нажмите в тот момент, когда механик <b>увидел</b> обращение. Когда он его <b>откроет</b>, система запишет сама.</div>
+      ${o.seen_at
+        ? `<div class="ob-status">✓ Увидел в ${hhmm(o.seen_at)} (${esc(o.seen_how)})</div>`
+        : `<div class="ob-row">
+             <button class="ob-big ob-primary" onclick="save({seen:'уведомление'})">Увидел по уведомлению</button>
+           </div>
+           <div class="ob-row">
+             <button class="ob-big ob-plain" onclick="save({seen:'сам зашёл'})">Сам зашёл</button>
+             <button class="ob-big ob-plain" onclick="save({seen:'ему сказали'})">Ему сказали</button>
+           </div>`}
+    </div>`;
+
+    html += `<div class="ob-step">
+      <h2>Время</h2>
+      <div class="ob-key">
+        <div><b>${mins(key.seen_min)}</b><span>мин до «увидел»</span></div>
+        <div><b>${mins(key.opened_min)}</b><span>мин до «открыл»${key.opened_via ? `<br>${esc(key.opened_via)}` : ''}</span></div>
+        <div><b>${mins(key.closed_min)}</b><span>мин до закрытия</span></div>
+      </div>
+      <ul class="ob-tl">
+        ${(state.timeline || []).map(t => `<li>
+          <time>${hhmm(t.at)}</time>
+          <span class="${/НЕ/.test(t.label) ? 'bad' : ''}">${esc(t.label)}${t.who ? ` — ${esc(t.who)}` : ''}${t.extra ? ` <span style="color:var(--text-dim)">(${esc(t.extra)})</span>` : ''}${t.manual ? ' ✋' : ''}</span>
+          <span class="plus">${t.after_created_min ? '+' + mins(t.after_created_min) + ' мин' : ''}</span>
+        </li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // ── Заметки
+  html += `<div class="ob-step">
+    <h2>Заметки</h2>
+    <div class="ob-hint">Главное — где остановился или переспросил, дословно. Кнопки ниже ставят время.</div>
+    <div class="ob-chips">
+      ${['застрял', 'переспросил', 'не нашёл кнопку', 'не понял текст', 'не читается на солнце', 'надиктовал голосом', 'всё понял сам']
+        .map(t => `<button class="ob-chip" onclick="addNote('${t}')">${t}</button>`).join('')}
+      <button class="ob-chip" id="obMic">🎤 надиктовать</button>
+    </div>
+    <textarea class="ob-notes" id="obNotes" placeholder="Например: 16:05 не нашёл, где выбрать станок — листал вниз">${esc(keepNotes ?? o.notes ?? '')}</textarea>
+    <div class="ob-saved" id="obSaved"></div>
+  </div>`;
+
+  html += `<details class="ob-step" ${lookOpen ? 'open' : ''} ontoggle="lookOpen=this.open">
+    <summary>На что смотреть</summary>
+    <ul>
+      <li>Нашёл ли оператор «Сообщить о проблеме» сразу и выбрал ли станок без подсказки</li>
+      <li>Попробовал ли надиктовать голосом вместо набора</li>
+      <li>Понял ли плашку «Ждём механика» и заметил ли, что механик ответил</li>
+      <li>Как механик узнал: уведомление, звук или случайно</li>
+      <li>Читается ли серый текст на солнце, мелкие подписи тоже</li>
+    </ul>
+  </details>`;
+
+  html += `<div class="ob-step">
+    ${o.finished_at
+      ? `<div class="ob-status">Наблюдение завершено в ${hhmm(o.finished_at)}. Результат сохранён.</div>
+         <button class="ob-big ob-plain" onclick="newObservation()">Начать новое наблюдение</button>`
+      : `<button class="ob-big ob-plain" onclick="finish()">Завершить наблюдение</button>`}
+  </div>`;
+
+  box.innerHTML = html;
+  box.querySelectorAll('[data-check]').forEach(el => el.addEventListener('change', () => { checks[el.dataset.check] = el.checked; }));
+  const notes = document.getElementById('obNotes');
+  if (keepNotes != null && document.activeElement !== notes) notes.focus();
+  notes.addEventListener('input', () => { notesDirty = true; scheduleNotes(); });
+  if (window.ACAIVoice) ACAIVoice.dictateButton(document.getElementById('obMic'), notes);
+}
+
+function scheduleNotes() {
+  clearTimeout(notesTimer);
+  document.getElementById('obSaved').textContent = 'сохраняю…';
+  notesTimer = setTimeout(async () => {
+    const value = document.getElementById('obNotes').value;
+    await ACAI.post(`/api/observe/${obsId}`, { notes: value });
+    notesDirty = false;
+    const s = document.getElementById('obSaved');
+    if (s) s.textContent = 'сохранено ' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }, 800);
+}
+
+function addNote(tag) {
+  const area = document.getElementById('obNotes');
+  const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  area.value = (area.value ? area.value.replace(/\s*$/, '') + '\n' : '') + `${time} ${tag}: `;
+  area.focus();
+  area.setSelectionRange(area.value.length, area.value.length);
+  notesDirty = true;
+  scheduleNotes();
+}
+
+async function sendTest() {
+  try { await ACAI.post(`/api/observe/${obsId}/test-push`, {}); ACAI.toast('Отправлено — смотрите на его телефон'); }
+  catch (e) { ACAI.toast(e.message, 'danger'); }
+  refresh();
+}
+
+async function finish() {
+  if (!confirm('Завершить наблюдение? Время и заметки сохранятся.')) return;
+  await save({ finish: true, notes: document.getElementById('obNotes').value });
+  clearInterval(pollTimer);
+}
+
+function newObservation() { obsId = null; state = null; checks = {}; pickerOpen = false; renderStart(true); }
+
+boot();
+</script>
+</body>
+</html>

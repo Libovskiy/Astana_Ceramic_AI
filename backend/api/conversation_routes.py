@@ -113,9 +113,13 @@ def _check_access(case_id: int, user: dict):
 
 
 @router.get("/api/conversation/{case_id}")
-def read_conversation(case_id: int, user: dict = Depends(current_user)):
+def read_conversation(case_id: int, request: Request, user: dict = Depends(current_user)):
 
     case = _check_access(case_id, user)
+
+    # первое открытие обращения этим человеком — и откуда
+    from backend.services.observation_service import record_case_view
+    record_case_view(case_id, user["id"], "push" if request.query_params.get("from") == "push" else None)
 
     status = case["status"]
 
