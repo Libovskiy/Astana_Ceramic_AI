@@ -26,7 +26,11 @@
 
     <div class="page">
 
-      <div id="workQueueSummary" style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;"></div>
+      <!-- Механик и электрик открывают вкладку с одним вопросом: за что
+           браться сейчас. Ответ словами, с ходом прямо в обращение. -->
+      <div class="verdict calm" id="workQueueSummary">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю очередь…</div>
+      </div>
 
       <section class="dashboard-card">
         <div class="card-header">
@@ -92,7 +96,7 @@
 <script src="/static/acai_layout.js?v=23"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>window.DISCIPLINE_LOCK = "mechanical";</script>
-<script src="/static/equipment.js?v=33"></script>
+<script src="/static/equipment.js?v=34"></script>
 <script>initLayout().then(ctx => { window.currentUser = ctx?.user; });</script>
 
 </body>

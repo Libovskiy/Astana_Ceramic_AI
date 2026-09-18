@@ -126,20 +126,40 @@ async function renderWorkQueueSummary(queue) {
 
     }
 
-    container.innerHTML = `
-        <div style="background: #fef2f2; padding: 10px 16px; border-radius: 10px;">
-            <div style="font-size: 20px; font-weight: 700; color: #dc2626;">${criticalCount}</div>
-            <div style="font-size: 12px; color: #888;">критичных</div>
-        </div>
-        <div style="background: #eff6ff; padding: 10px 16px; border-radius: 10px;">
-            <div style="font-size: 20px; font-weight: 700; color: var(--accent);">${inProgressCount}</div>
-            <div style="font-size: 12px; color: #888;">в работе</div>
-        </div>
-        <div style="background: #fffbeb; padding: 10px 16px; border-radius: 10px;">
-            <div style="font-size: 20px; font-weight: 700; color: #d97706;">${downtimeMinutes} мин</div>
-            <div style="font-size: 12px; color: #888;">простой сейчас</div>
-        </div>
-    `;
+    // Было три плитки с зашитыми светлыми цветами (#fef2f2 и прочие) —
+    // в тёмной теме они светились, а сами цифры не говорили, за что
+    // браться. Теперь это плашка-вывод: сначала то, что стоит.
+    const rows = [];
+
+    if (criticalCount > 0) {
+        rows.push({
+            level: "critical",
+            what: `Ждут вас: ${criticalCount}`,
+            where: downtimeMinutes > 0
+                ? `оборудование стоит уже ${downtimeMinutes} мин — минуты идут`
+                : "обращение передано специалисту, но никто не взял в работу",
+        });
+    }
+
+    if (inProgressCount > 0) {
+        rows.push({
+            level: "warning",
+            what: `У вас в работе: ${inProgressCount}`,
+            where: "не забудьте отметить ремонт — без отметки обращение не закроется",
+        });
+    }
+
+    if (rows.length) {
+        ACAI.verdict(container, { title: "За что браться", rows });
+        return;
+    }
+
+    ACAI.verdict(container, {
+        title: "Открытых обращений по вашей части нет",
+        sub: downtimeMinutes > 0
+            ? `Но оборудование стоит ${downtimeMinutes} мин — проверьте, не забыли ли закрыть обращение.`
+            : "Ничего не стоит и никто не ждёт. Ниже — список оборудования и история.",
+    });
 
 }
 

@@ -170,7 +170,16 @@ function renderMetrics(){
     <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div></div>
     <div class="metric ${overdue>0?'danger':'ok'}"><div class="metric-label">Просрочено</div><div class="metric-value ${overdue>0?'danger':'ok'}">${overdue}</div></div>`;
 
-  renderToVerdict({total, planned, done, overdue, year});
+  // Тот же счёт, что в «Аналитике» и «Отчётах»: работы, которые должны
+  // быть сделаны в этом месяце, и отметки за этот месяц. Иначе страницы
+  // спорят друг с другом: тут «идём по графику», там «отстаём».
+  const thisYear = year === now.getFullYear();
+  const dueMonth = thisYear
+    ? schedule.filter(r=>r.months.split(',').map(Number).includes(curMonth)).length : 0;
+  const doneMonth = thisYear
+    ? logs.filter(l=>l.month===curMonth && l.year===year).length : 0;
+
+  renderToVerdict({total, planned, done, overdue, year, dueMonth, doneMonth});
 }
 
 // «0 выполнено» из графика на 52 работы означает не провал механиков, а
@@ -193,9 +202,15 @@ function renderToVerdict(m){
     what:`Просрочено работ: ${m.overdue}`,
     where:`выполнено ${m.done} из ${m.planned} за ${m.year} год`});
 
+  // Работы этого месяца — то, что решается сейчас; годовой счёт справкой.
+  const left = m.dueMonth - m.doneMonth;
+  if(m.dueMonth && left > 0) rows.push({level: m.doneMonth ? 'warning' : 'critical',
+    what:`В этом месяце осталось ${left} из ${m.dueMonth}`,
+    where:`отмечено ${m.doneMonth} — остальные работы месяца ещё не закрыты`});
+
   if(rows.length){ ACAI.verdict('toVerdict', {title: m.done ? 'ТО отстаёт' : 'ТО не отмечается', rows}); return; }
   ACAI.verdict('toVerdict', {title:'ТО идёт по графику',
-    sub:`Просроченных работ нет · выполнено ${m.done} из ${m.planned} запланированных на ${m.year} год`});
+    sub:`Работы этого месяца закрыты (${m.doneMonth} из ${m.dueMonth}) · за ${m.year} год отмечено ${m.done} из ${m.planned}`});
 }
 
 // состояние свёрнутых групп

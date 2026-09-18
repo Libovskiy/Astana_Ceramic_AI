@@ -518,12 +518,18 @@ def search_case_events(
 
     params = []
 
+    # Сравниваем по дате, а не по строке целиком. created_at — это
+    # «2026-09-18 09:12:04», а фильтр приходит как «2026-09-18»: при
+    # сравнении строк такое обращение оказывалось БОЛЬШЕ верхней
+    # границы и выпадало из выборки. Из-за этого отчёт «Обращения за
+    # период» и «Журнал событий» не показывали всё, что случилось
+    # сегодня — то есть самое нужное.
     if date_from:
-        query += " AND cases.created_at >= ?"
+        query += " AND date(cases.created_at) >= date(?)"
         params.append(date_from)
 
     if date_to:
-        query += " AND cases.created_at <= ?"
+        query += " AND date(cases.created_at) <= date(?)"
         params.append(date_to)
 
     if equipment_id:
