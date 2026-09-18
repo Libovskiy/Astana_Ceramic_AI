@@ -45,6 +45,12 @@
     </header>
     <div class="page">
 
+      <!-- Вопрос вкладки: что просрочено и что ждёт подтверждения.
+           Ответ словами, цифры ниже. -->
+      <div class="verdict calm" id="tasksVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю задачи…</div>
+      </div>
+
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="taskMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -101,8 +107,29 @@ async function load(){
     <div class="metric ${inprog>0?'warn':'ok'}"><div class="metric-label">В работе</div><div class="metric-value ${inprog>0?'warn':'ok'}">${inprog}</div><div class="metric-sub">выполняются</div></div>
     <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div><div class="metric-sub">задач</div></div>
     <div class="metric ${overdue>0?'danger':'ok'}"><div class="metric-label">Просрочено</div><div class="metric-value ${overdue>0?'danger':'ok'}">${overdue}</div><div class="metric-sub">требует внимания</div></div>`;
+  renderTasksVerdict({open, review, inprog, done, overdue, total: allTasks.length});
   renderTasks();
   loadAssignees();   // подтягиваем исполнителей и перерисовываем
+}
+
+// Сначала просроченное, потом то, что ждёт подтверждения (чужой ход
+// виден сразу), потом спокойная строка.
+function renderTasksVerdict(m){
+  if(!m.total){
+    ACAI.verdict('tasksVerdict', {title:'Задач нет',
+      sub:'Ни одной задачи не поставлено — это не «всё сделано», а пустой список. Нажмите «+ Задача», чтобы поручить работу с датой.'});
+    return;
+  }
+  const rows=[];
+  if(m.overdue>0) rows.push({level:'critical', what:`Просрочено: ${m.overdue}`,
+    where:'срок прошёл, задача не закрыта'});
+  if(m.review>0) rows.push({level:'warning', what:`Ждут подтверждения: ${m.review}`,
+    where:'исполнитель отметил «сделано» — нужен ваш ход'});
+  if(m.inprog>0) rows.push({level:'warning', what:`В работе: ${m.inprog}`, where:'сроки пока не вышли'});
+
+  if(rows.length){ ACAI.verdict('tasksVerdict', {title:'Требуют хода', rows}); return; }
+  ACAI.verdict('tasksVerdict', {title:'Просроченных задач нет',
+    sub:`Всего задач ${m.total}, выполнено ${m.done}`});
 }
 
 function renderTasks(){

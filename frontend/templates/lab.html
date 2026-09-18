@@ -40,6 +40,12 @@
     </header>
     <div class="page">
 
+      <!-- Вопрос вкладки: есть ли свежие пробы и всё ли доведено до
+           результата. Ответ словами, цифры ниже. -->
+      <div class="verdict calm" id="labVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю журнал проб…</div>
+      </div>
+
       <div class="metrics" id="labMetrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -98,6 +104,30 @@ function renderMetrics(){
     <div class="metric accent"><div class="metric-label">Последняя</div><div class="metric-value accent" style="font-size:16px">${lastDate}</div></div>
     <div class="metric ${lastStrength!=='—'?'ok':''}"><div class="metric-label">Прочность (посл.)</div><div class="metric-value">${lastStrength!=='—'?lastStrength+' кг/см²':'—'}</div></div>
     <div class="metric ${pending>0?'warn':'ok'}"><div class="metric-label">Ожидают данных</div><div class="metric-value ${pending>0?'warn':'ok'}">${pending}</div><div class="metric-sub">без результата</div></div>`;
+
+  renderLabVerdict({total, pending, last});
+}
+
+// Проба без результата — незакрытое дело, а не ноль. Давность последней
+// записи важнее, чем их общее число: по старым пробам решений не примешь.
+function renderLabVerdict(m){
+  if(!m.total){
+    ACAI.verdict('labVerdict', {title:'Проб в журнале нет',
+      sub:'Ни одной записи не внесено — сравнивать партии и видеть прочность пока не по чему. Нажмите «+ Запись».'});
+    return;
+  }
+  const rows=[];
+  const days = m.last?.log_date
+    ? Math.floor((Date.now() - new Date(String(m.last.log_date).replace(' ','T')).getTime()) / 86400000)
+    : null;
+  if(m.pending>0) rows.push({level:'warning', what:`Без результата: ${m.pending}`,
+    where:'пробы внесены, но прочность или вес после обжига не записаны'});
+  if(days != null && days > 7) rows.push({level:'warning',
+    what:`Последняя проба ${days} дн. назад`, where:'свежих данных по массе нет'});
+
+  if(rows.length){ ACAI.verdict('labVerdict', {title:'Требует внимания', rows}); return; }
+  ACAI.verdict('labVerdict', {title:'Журнал проб в порядке',
+    sub:`Записей ${m.total}, все с результатом${days != null ? ` · последняя ${days === 0 ? 'сегодня' : days + ' дн. назад'}` : ''}`});
 }
 
 function val(v,unit=''){return v!=null&&v!==''?`${v}${unit}`:'—';}

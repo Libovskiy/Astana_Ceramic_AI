@@ -39,6 +39,12 @@
     </header>
     <div class="page">
 
+      <!-- Вопрос вкладки: чего не хватит, когда станок встанет.
+           Ответ словами, дальше — цифры и карточки. -->
+      <div class="verdict calm" id="partsVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю склад…</div>
+      </div>
+
       <div class="metrics" id="partsMetrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -81,6 +87,29 @@ function renderMetrics(){
     <div class="metric ${low>0?'danger':'ok'}"><div class="metric-label">Заканчиваются</div><div class="metric-value ${low>0?'danger':'ok'}">${low}</div><div class="metric-sub">≤ минимума</div></div>
     <div class="metric ${zero>0?'danger':'ok'}"><div class="metric-label">Отсутствуют</div><div class="metric-value ${zero>0?'danger':'ok'}">${zero}</div></div>
     <div class="metric ok"><div class="metric-label">В наличии</div><div class="metric-value ok">${total-zero}</div></div>`;
+
+  renderPartsVerdict({total, low, zero});
+}
+
+// Сначала то, чего нет совсем, потом то, что на минимуме. Пустой склад —
+// это «не заполняли», а не «всё есть».
+function renderPartsVerdict(m){
+  if(!m.total){
+    ACAI.verdict('partsVerdict', {title:'Склад не заполнен',
+      sub:'Ни одной позиции не внесено — когда станок встанет, искать запчасть будет негде. Добавьте хотя бы то, что меняют чаще всего.'});
+    return;
+  }
+  const rows=[];
+  const out=allParts.filter(p=>p.quantity===0);
+  const low=allParts.filter(p=>p.quantity>0&&p.quantity<=p.min_quantity);
+  if(out.length) rows.push({level:'critical', what:`Нет совсем: ${out.length}`,
+    where:out.slice(0,3).map(p=>p.name).join(', ')+(out.length>3?` и ещё ${out.length-3}`:'')});
+  if(low.length) rows.push({level:'warning', what:`На минимуме: ${low.length}`,
+    where:low.slice(0,3).map(p=>`${p.name} — ${p.quantity} ${p.unit||'шт'}`).join(', ')});
+
+  if(rows.length){ ACAI.verdict('partsVerdict', {title:'Нужно заказать', rows}); return; }
+  ACAI.verdict('partsVerdict', {title:'Запас в норме',
+    sub:`${m.total} позиций, все выше минимума`});
 }
 
 function renderParts(){
@@ -186,7 +215,8 @@ document.querySelectorAll('.filter-chip').forEach(btn=>{
   });
 });
 
-initLayout();load();
+// меню раньше вывода: ссылки ставятся только на открытые роли страницы
+initLayout().then(load, load);
 
 setInterval(() => {
   const overlay = document.getElementById('_overlay');

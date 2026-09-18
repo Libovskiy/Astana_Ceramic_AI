@@ -59,6 +59,13 @@
     </header>
     <div class="page">
 
+      <!-- Одна плашка на весь обход: что осталось сделать, чтобы кнопка
+           «Завершить» разблокировалась. Раньше причину блокировки можно
+           было узнать только наведя мышь на кнопку — на телефоне никак. -->
+      <div class="verdict calm" id="clVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Готовлю обход…</div>
+      </div>
+
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <span style="font-size:13px;font-weight:600">Прогресс обхода</span>
         <span id="progressLabel" style="font-size:13px;color:var(--text-dim)">0 / 0</span>
@@ -266,6 +273,24 @@ function updateProgress(){
   btn.disabled=!(done>=total&&problemsWithoutPhoto.length===0&&!uploading);
   btn.title=uploading?'Дождитесь загрузки фото'
     :problemsWithoutPhoto.length?`Нужны фото для: ${problemsWithoutPhoto.map(e=>e.name).join(', ')}`:'';
+
+  // То же самое словами и крупно — в цеху телефон в одной руке.
+  const rows=[];
+  if(uploading) rows.push({level:'warning', what:'Фото ещё загружаются', where:'дождитесь — иначе обход уйдёт без них'});
+  if(problemsWithoutPhoto.length) rows.push({level:'warning',
+    what:`Нужно фото: ${problemsWithoutPhoto.length}`,
+    where:problemsWithoutPhoto.slice(0,3).map(e=>e.name).join(', ')+(problemsWithoutPhoto.length>3?' и ещё':'')});
+  const left=total-done;
+  if(left>0) rows.push({level:'warning', what:`Осталось отметить: ${left} из ${total}`,
+    where:'по каждому станку — работает, внимание или стоит'});
+
+  if(rows.length){ ACAI.verdict('clVerdict', {title: done?'Обход не закончен':'Обход не начат', rows}); return; }
+  const bad=allEquipment.filter(e=>checks[e.id]==='bad').length;
+  const warn=allEquipment.filter(e=>checks[e.id]==='warn').length;
+  ACAI.verdict('clVerdict', {title:'Обход готов — нажмите «Завершить обход»',
+    sub: bad||warn
+      ? `Отмечено проблем: ${bad} стоят, ${warn} требуют внимания — по ним создадутся обращения`
+      : `Все ${total} станков в порядке, проблем не отмечено`});
 }
 
 async function submitChecklist(){
@@ -367,7 +392,8 @@ window.addEventListener('beforeunload',ev=>{
   if(!savedOk&&Object.keys(checks).length){ev.preventDefault();ev.returnValue='';}
 });
 
-initLayout();loadEquipment();
+// меню раньше содержимого: ссылки в выводе зависят от него
+initLayout().then(loadEquipment, loadEquipment);
 </script>
 </body>
 </html>
