@@ -7,7 +7,7 @@
 <title>ACAI — Производство</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=18">
+<link rel="stylesheet" href="/static/acai.css?v=19">
 <link rel="stylesheet" href="/static/equipment-page.css?v=2">
 <link rel="stylesheet" href="/static/production-page.css?v=2">
 </head>
@@ -26,6 +26,12 @@
     </header>
 
     <div class="page">
+
+      <!-- Вкладку открывают с вопросом «идём ли по плану». Раньше ответ
+           надо было собирать из трёх таблиц ниже. -->
+      <div class="verdict calm" id="prodVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Считаю выпуск…</div>
+      </div>
 
       <!-- СМЕННЫЙ ОТЧЁТ УПАКОВКИ: вагонетки → слои → брак → согласование -->
       <section class="dashboard-card" id="shiftReportCard">
@@ -122,11 +128,70 @@
      вместе с секцией «Производственный процесс»: открывавший их код
      удалён из production.js, разметка оставалась пустым грузом. -->
 
-<script src="/static/acai_layout.js?v=22"></script>
+<script src="/static/acai_layout.js?v=23"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script src="/static/production.js?v=38"></script>
 <script src="/static/shift-report.js?v=4"></script>
-<script>initLayout().then(() => initShiftReport());</script>
+<script>
+// Сначала меню (от него зависят ссылки в выводе), потом сам вывод.
+initLayout().then(ctx => { initShiftReport(); renderProdVerdict(ctx?.user?.role); });
+
+// Выпуск за сутки против плана. Если за сегодня не вносили ни строчки —
+// пишем это прямо, а не «0% выполнения плана».
+// Роли, которым открыта сводка по заводу (DASHBOARD_ALLOWED_ROLES на
+// сервере). Остальным эти два запроса вернули бы 403 — не спрашиваем.
+const PROD_SUMMARY_ROLES = ['admin','director','chief_engineer','engineer',
+                            'shift_supervisor','analyst','chief_mechanic','chief_electrician'];
+
+async function renderProdVerdict(role){
+  // Рабочему и мастеру сводка по заводу закрыта (те же роли, что у
+  // /dashboard). Для них вывод — про их собственную работу, а не «план
+  // не задан»: иначе страница врала бы им на пустом месте.
+  let today = null, plan = null, closed = !PROD_SUMMARY_ROLES.includes(role);
+  if (!closed) {
+    try {
+      const r = await fetch('/api/production/today', {credentials:'include'});
+      if (r.status === 403) closed = true; else today = await r.json();
+    } catch {}
+    try {
+      const r = await fetch('/api/production/plan', {credentials:'include'});
+      if (r.status === 403) closed = true; else plan = await r.json();
+    } catch {}
+  }
+
+  if (closed) {
+    ACAI.verdict('prodVerdict', {title:'Смена: внесите выпуск и сдайте отчёт',
+      sub:'Сводка по заводу открыта руководству. Ваш ход — сменный отчёт упаковки ниже: вагонетки, слои, брак.'});
+    return;
+  }
+
+  const types = today && today.success ? Object.values(today.by_type || {}) : [];
+  const produced = types.reduce((a, t) => a + (t.produced || 0), 0);
+  const target   = types.reduce((a, t) => a + (t.target   || 0), 0);
+  const planSet  = plan && plan.success && Object.values(plan.plan || plan.plans || {}).some(v => +v > 0);
+
+  if (!planSet) {
+    ACAI.verdict('prodVerdict', {title:'План месяца не задан',
+      sub:'Без плана процент выполнения считать не по чему — внесите план в карточке «Месячный план» ниже.'});
+    return;
+  }
+  if (!produced) {
+    ACAI.verdict('prodVerdict', {title:'Выпуск за сегодня не вносили', rows:[{level:'warning',
+      what:'Данных за сутки нет',
+      where:'это не ноль кирпича, а незаполненный учёт — вносит мастер смены в «Учёте выпуска»'}]});
+    return;
+  }
+  const pct = target ? Math.round(produced / target * 100) : null;
+  const n = v => v.toLocaleString('ru-RU');
+  if (pct != null && pct < 90) {
+    ACAI.verdict('prodVerdict', {title:'Отстаём от суточного плана', rows:[{level:'warning',
+      what:`${pct}% суточного плана`, where:`сделано ${n(produced)} из ${n(target)} шт`}]});
+    return;
+  }
+  ACAI.verdict('prodVerdict', {title: pct != null ? `Суточный план — ${pct}%` : 'Выпуск идёт',
+    sub:`Сегодня ${n(produced)} шт${target ? ` из ${n(target)} по плану` : ''}`});
+}
+</script>
 
 </body>
 </html>

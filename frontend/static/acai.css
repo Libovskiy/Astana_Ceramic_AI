@@ -495,3 +495,32 @@ html, body {
      неё нельзя долистать. */
   .page { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ======================================================
+   ПЛАШКА-ВЫВОД (что тут происходит и чей ход)
+   Была только на главной — теперь общая: страница отвечает
+   словами на свой вопрос, а цифры и таблицы идут ниже.
+   Рисует ACAI.verdict() в acai_layout.js.
+   ====================================================== */
+.verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
+.verdict.calm{padding:22px 24px;}
+.verdict.calm .v-title{font-size:26px;font-weight:700;letter-spacing:-.01em;}
+.verdict .v-sub{font-size:14px;color:var(--text-dim);margin-top:6px;line-height:1.45;}
+.verdict.alert{border:2px solid var(--danger);overflow:hidden;}
+.verdict.alert.only-warn{border-color:var(--warn);}
+.v-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 10px;}
+.v-head .v-title{font-size:22px;font-weight:700;}
+.v-all{border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.v-row{display:flex;align-items:center;gap:12px;padding:14px 20px;border-top:1px solid var(--border);color:var(--text);text-decoration:none;}
+.v-row:hover{background:var(--surface-2);}
+.v-mark{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.v-row .v-what{font-size:16px;font-weight:600;}
+.v-row .v-where{font-size:14px;color:var(--text-dim);margin-top:2px;}
+.v-row .v-go{margin-left:auto;font-size:22px;color:var(--text-dim);}
+@media (max-width:600px){
+  .verdict.calm{padding:18px;}
+  .verdict.calm .v-title{font-size:22px;}
+  .v-head{padding:14px 16px 8px;}
+  .v-head .v-title{font-size:19px;}
+  .v-row{padding:14px 16px;}
+}

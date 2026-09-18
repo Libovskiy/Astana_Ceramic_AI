@@ -7,7 +7,7 @@
 <title>График ТО — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=18">
+<link rel="stylesheet" href="/static/acai.css?v=19">
 <style>
 .to-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
 .to-table{width:100%;border-collapse:collapse;min-width:900px;}
@@ -75,6 +75,12 @@
         <div class="leg-item"><span style="width:20px;height:16px;background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:3px;display:inline-block"></span> Просрочено</div>
       </div>
 
+      <!-- Главный вопрос вкладки: отстаём мы по ТО или нет. Ответ
+           словами, с ходом к просроченным работам. -->
+      <div class="verdict calm" id="toVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Считаю график…</div>
+      </div>
+
       <!-- МЕТРИКИ -->
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="toMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
@@ -103,7 +109,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:560px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=22"></script>
+<script src="/static/acai_layout.js?v=23"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
@@ -163,6 +169,33 @@ function renderMetrics(){
     <div class="metric accent"><div class="metric-label">Запланировано</div><div class="metric-value accent">${planned}</div><div class="metric-sub">выполнений за год</div></div>
     <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div></div>
     <div class="metric ${overdue>0?'danger':'ok'}"><div class="metric-label">Просрочено</div><div class="metric-value ${overdue>0?'danger':'ok'}">${overdue}</div></div>`;
+
+  renderToVerdict({total, planned, done, overdue, year});
+}
+
+// «0 выполнено» из графика на 52 работы означает не провал механиков, а
+// что отметок в системе нет ни одной. Так и пишем — иначе отчёт врёт.
+function renderToVerdict(m){
+  const rows=[];
+  if(!m.total){
+    ACAI.verdict('toVerdict', {title:'График ТО не заведён',
+      sub:'Нажмите «+ Работа» и внесите первые работы — без графика просрочку считать не по чему.'});
+    return;
+  }
+  // Ноль отметок — всегда отклонение, даже если просрочки по отсечке
+  // ещё нет: «выполнено 0 из 564» нельзя называть «идём по графику».
+  if(!m.done) rows.push({level: m.overdue>0 ? 'critical' : 'warning',
+    what:'Отметок о выполнении нет ни одной',
+    where: m.overdue>0
+      ? `по графику ${m.overdue} работ уже должны быть сделаны — либо их не делают, либо не отмечают`
+      : `в графике ${m.planned} работ на ${m.year} год, но в системе не отмечена ни одна`});
+  else if(m.overdue>0) rows.push({level:'warning',
+    what:`Просрочено работ: ${m.overdue}`,
+    where:`выполнено ${m.done} из ${m.planned} за ${m.year} год`});
+
+  if(rows.length){ ACAI.verdict('toVerdict', {title: m.done ? 'ТО отстаёт' : 'ТО не отмечается', rows}); return; }
+  ACAI.verdict('toVerdict', {title:'ТО идёт по графику',
+    sub:`Просроченных работ нет · выполнено ${m.done} из ${m.planned} запланированных на ${m.year} год`});
 }
 
 // состояние свёрнутых групп

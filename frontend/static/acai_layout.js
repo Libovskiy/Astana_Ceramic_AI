@@ -145,6 +145,54 @@ const ACAI = {
     return `${ACAI.localDate(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   },
 
+  // ── ПЛАШКА-ВЫВОД ──────────────────────────────────────
+  // Каждая страница отвечает словами на свой вопрос: «всё ли в
+  // порядке здесь» и «чей ход». Раньше так умела только главная, а
+  // остальные вкладки начинались с цифр — по ним нельзя понять,
+  // 0 — это «хорошо» или «никто не вносил».
+  //
+  //   ACAI.verdict('boxId', {title, sub})                 — спокойно
+  //   ACAI.verdict('boxId', {title, rows:[{what, where, href, level}]})
+  //
+  // level: 'critical' — красная рамка, 'warning' — жёлтая.
+  // Ссылку ставим только туда, куда этой роли открыт вход: иначе
+  // вывод ведёт человека на 403 (так и было в аналитике).
+  canOpen(href) {
+    if (!href) return false;
+    const path = String(href).split('?')[0];
+    return !!document.querySelector(`.nav-item[href="${path}"]`);
+  },
+
+  verdict(box, data) {
+    const el = typeof box === 'string' ? document.getElementById(box) : box;
+    if (!el) return;
+    const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const rows = (data.rows || []).filter(Boolean);
+
+    if (!rows.length) {
+      el.className = 'verdict calm';
+      el.innerHTML = `<div class="v-title">${esc(data.title)}</div>` +
+        (data.sub ? `<div class="v-sub">${esc(data.sub)}</div>` : '');
+      return;
+    }
+
+    const critical = rows.some(r => r.level === 'critical');
+    el.className = 'verdict alert' + (critical ? '' : ' only-warn');
+    el.innerHTML = `
+      <div class="v-head"><span class="v-title">${esc(data.title)}</span></div>
+      ${rows.map(r => {
+        const inner = `
+          <span class="v-mark" style="background:${r.level === 'critical' ? 'var(--danger)' : r.level === 'warning' ? 'var(--warn)' : 'var(--border)'}"></span>
+          <span style="min-width:0">
+            <div class="v-what">${esc(r.what)}</div>
+            ${r.where ? `<div class="v-where">${esc(r.where)}</div>` : ''}
+          </span>`;
+        return ACAI.canOpen(r.href)
+          ? `<a class="v-row" href="${esc(r.href)}">${inner}<span class="v-go">›</span></a>`
+          : `<div class="v-row">${inner}</div>`;
+      }).join('')}`;
+  },
+
   shortDate(str) {
     const d = ACAI.parseTime(str);
     return d ? d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '—';

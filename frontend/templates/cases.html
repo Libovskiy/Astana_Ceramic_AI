@@ -7,7 +7,7 @@
 <title>Обращения — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=18">
+<link rel="stylesheet" href="/static/acai.css?v=19">
 <style>
 .case-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;border-left:4px solid var(--border);transition:border-color .15s;}
 .case-card:hover{border-color:var(--accent);}
@@ -46,6 +46,12 @@
     </header>
     <div class="page">
 
+      <!-- Журнал открывают с вопросом «чей сейчас ход». Ответ — словами
+           первым, цифры ниже. -->
+      <div class="verdict calm" id="casesVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю журнал…</div>
+      </div>
+
       <div class="metrics" id="caseMetrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -74,7 +80,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:520px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=22"></script>
+<script src="/static/acai_layout.js?v=23"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 let allCases=[];let currentFilter='';let currentUser=null;
@@ -108,15 +114,42 @@ async function load(){
   const avgMin=d.average_resolution_minutes;
   const avgTxt=avgMin!=null?(avgMin<60?`${avgMin}м`:`${Math.floor(avgMin/60)}ч`):'—';
 
+  // Пустой журнал — это не «ноль поломок», а «ничего не вносили».
+  // Ставим «—», чтобы цифра не врала.
+  const num = v => allCases.length ? v : '—';
+
   document.getElementById('caseMetrics').innerHTML=`
-    <div class="metric ${esc>0?'danger':'ok'}"><div class="metric-label">Эскалация</div><div class="metric-value ${esc>0?'danger':'ok'}">${esc}</div><div class="metric-sub">требует специалиста</div></div>
-    <div class="metric ${open>0?'accent':'ok'}"><div class="metric-label">Открытых</div><div class="metric-value accent">${open}</div><div class="metric-sub">в работе</div></div>
-    <div class="metric ${draft>0?'warn':'ok'}"><div class="metric-label">На проверке</div><div class="metric-value ${draft>0?'warn':'ok'}">${draft}</div><div class="metric-sub">черновик закрытия</div></div>
-    <div class="metric ok"><div class="metric-label">Закрыто</div><div class="metric-value ok">${closed}</div><div class="metric-sub">из ${allCases.length} всего</div></div>
+    <div class="metric ${esc>0?'danger':'ok'}"><div class="metric-label">Эскалация</div><div class="metric-value ${esc>0?'danger':'ok'}">${num(esc)}</div><div class="metric-sub">требует специалиста</div></div>
+    <div class="metric ${open>0?'accent':'ok'}"><div class="metric-label">Открытых</div><div class="metric-value accent">${num(open)}</div><div class="metric-sub">в работе</div></div>
+    <div class="metric ${draft>0?'warn':'ok'}"><div class="metric-label">На проверке</div><div class="metric-value ${draft>0?'warn':'ok'}">${num(draft)}</div><div class="metric-sub">черновик закрытия</div></div>
+    <div class="metric ok"><div class="metric-label">Закрыто</div><div class="metric-value ok">${num(closed)}</div><div class="metric-sub">из ${allCases.length} всего</div></div>
     <div class="metric accent"><div class="metric-label">Среднее решение</div><div class="metric-value accent">${avgTxt}</div><div class="metric-sub">время на закрытие</div></div>`;
 
+  renderVerdict({esc, open, draft, closed, avgTxt, avgMin, total: allCases.length});
   renderCases();
   loadCasePhotos();   // фото с обхода — одним запросом, потом перерисовка
+}
+
+// Что делать прямо сейчас: сначала то, что стоит без хозяина, потом
+// то, что ждёт проверки, и только потом спокойные строки.
+function renderVerdict(m){
+  const rows=[];
+  if(m.esc>0) rows.push({level:'critical', what:`Ждут специалиста: ${m.esc}`,
+    where:'никто не взял в работу — механик или электрик ещё не открыл', href:'/chat'});
+  if(m.draft>0) rows.push({level:'warning', what:`Ждут вашей проверки: ${m.draft}`,
+    where:'ремонт отмечен, обращение закроется после подтверждения'});
+  if(m.open>0) rows.push({level:'warning', what:`В работе: ${m.open}`,
+    where:'взяты специалистом, ремонт идёт', href:'/chat'});
+
+  if(rows.length){
+    ACAI.verdict('casesVerdict', {title:'Требуют хода', rows});
+    return;
+  }
+  ACAI.verdict('casesVerdict', m.total
+    ? {title:'Открытых обращений нет',
+       sub:`Все ${m.total} обращения журнала закрыты${m.avgMin!=null?` · среднее время решения ${m.avgTxt}`:''}`}
+    : {title:'Обращений пока не было',
+       sub:'Это не значит, что не было поломок: значит, о них не сообщали через систему. Цех создаёт обращение во вкладке «Обращения».'});
 }
 
 function renderCases(){

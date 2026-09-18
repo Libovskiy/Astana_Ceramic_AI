@@ -6,7 +6,7 @@
 <title>Оборудование — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=18">
+<link rel="stylesheet" href="/static/acai.css?v=19">
 <style>
 .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
 .eq-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,transform .1s;position:relative;overflow:hidden;}
@@ -45,6 +45,12 @@
       </div>
     </header>
     <div class="page">
+      <!-- Вкладку открывают с вопросом «что из этого сейчас не в
+           порядке». Ответ словами, с ходом в конкретную запись. -->
+      <div class="verdict calm" id="eqVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю оборудование…</div>
+      </div>
+
       <div class="metrics" id="metrics" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -55,7 +61,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:580px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
 
-<script src="/static/acai_layout.js?v=22"></script>
+<script src="/static/acai_layout.js?v=23"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 let allEquipment=[];let activeFilter='all';let currentUser=null;
@@ -126,7 +132,7 @@ async function loadEquipment(){
   const r=await ACAI.get('/api/equipment');
   allEquipment=r.equipment||r||[];
   await Promise.all([loadMaintenanceSummary(), loadHealth()]);   // до отрисовки: от них зависят счётчики
-  renderFilters();renderEquipment();renderMetrics();
+  renderFilters();renderEquipment();renderMetrics();renderEqVerdict();
 }
 
 function renderMetrics(){
@@ -140,12 +146,45 @@ function renderMetrics(){
     <div class="metric ${wn>0?'warn':'ok'}"><div class="metric-label">Внимание</div><div class="metric-value ${wn>0?'warn':'ok'}">${wn}</div></div>
     <div class="metric ${er>0?'danger':'ok'}"><div class="metric-label">Ошибка</div><div class="metric-value ${er>0?'danger':'ok'}">${er}</div></div>
     <div class="metric ${to>0?'warn':'ok'}"><div class="metric-label">ТО скоро</div><div class="metric-value ${to>0?'warn':'ok'}">${to}</div><div class="metric-sub">по графику</div></div>
-    <div class="metric accent"><div class="metric-label">Исправность</div><div class="metric-value accent">${avgHealth()}%</div><div class="metric-sub">средняя за 90 дней</div></div>`;
+    <div class="metric accent"><div class="metric-label">Исправность</div><div class="metric-value accent">${avgHealth()==null?'—':avgHealth()+'%'}</div><div class="metric-sub">${avgHealth()==null?'история пустая':'средняя за 90 дней'}</div></div>`;
+}
+
+// Сначала то, что стоит и что просрочено, потом спокойная строка.
+// Исправность считаем только по тем станкам, где есть история: «100%»
+// на пустой базе — это не «всё здорово», а «нечего показать».
+function renderEqVerdict(){
+  const rows=[];
+  const broken=allEquipment.filter(e=>e.status==='Ошибка');
+  const attention=allEquipment.filter(e=>e.status==='Внимание');
+  const overdue=allEquipment.filter(e=>{const t=toState(e.id);return t&&t.cls==='overdue';});
+
+  if(broken.length) rows.push({level:'critical',
+    what:`Стоит: ${broken.slice(0,3).map(e=>e.name).join(', ')}${broken.length>3?` и ещё ${broken.length-3}`:''}`,
+    where:'ремонт по обращению — журнал обращений', href:'/cases'});
+  if(attention.length) rows.push({level:'warning',
+    what:`Требует внимания: ${attention.length}`,
+    where:attention.slice(0,3).map(e=>e.name).join(', ')});
+  if(overdue.length) rows.push({level:'warning',
+    what:`ТО просрочено: ${overdue.length}`,
+    where:'работы по графику не отмечены', href:'/maintenance'});
+
+  if(rows.length){ ACAI.verdict('eqVerdict', {title:'Не в порядке', rows}); return; }
+
+  const h=avgHealth();
+  ACAI.verdict('eqVerdict', {
+    title:`Всё оборудование в работе — ${allEquipment.length} ед.`,
+    sub: h==null
+      ? 'Поломок не отмечали, поэтому исправность посчитать не по чему — история пустая.'
+      // Про ТО здесь не пишем: отсечка по графику может показывать ноль
+      // просрочки просто потому, что отметок нет вовсе. За ТО отвечает
+      // своя вкладка, там это видно честно.
+      : `Ни одной поломки не отмечено · средняя исправность ${h}% за 90 дней`
+  });
 }
 
 function avgHealth(){
   const vals=allEquipment.map(e=>healthOf(e.id)).filter(v=>v!=null);
-  if(!vals.length) return 100;
+  if(!vals.length) return null;   // не «100%», а «считать не по чему»
   return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
 }
 
