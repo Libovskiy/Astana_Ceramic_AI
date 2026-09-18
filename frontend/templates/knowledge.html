@@ -56,6 +56,12 @@
         <input class="input" id="searchKb" placeholder="Поиск по оборудованию или симптому...">
       </div>
 
+      <!-- База знаний — то, из чего ИИ берёт ответы. Вопрос вкладки:
+           хватает ли её, чтобы он не отвечал «не знаю». -->
+      <div class="verdict calm" id="kbVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Смотрю базу…</div>
+      </div>
+
       <!-- СТАТИСТИКА -->
       <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px" id="kbMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
@@ -85,10 +91,31 @@ async function load() {
   render();
 }
 
+// Из этой базы ИИ берёт решения. Пока она пустая, он честно отвечает
+// «своего описания нет — зову механика», и это видно здесь.
+function renderKbVerdict(m){
+  if(!m.total){
+    ACAI.verdict('kbVerdict', {title:'База знаний пустая',
+      sub:'Ни одного решения не записано — ИИ по таким поломкам отвечает «своего описания нет, зову механика». Решения попадают сюда, когда специалист закрывает обращение с описанием ремонта.'});
+    return;
+  }
+  const unconfirmed = m.total - m.confirmed;
+  if(unconfirmed > 0){
+    ACAI.verdict('kbVerdict', {title:`Решений ${m.total}, не подтверждено ${unconfirmed}`, rows:[{level:'warning',
+      what:`Ждут подтверждения: ${unconfirmed}`,
+      where:'непроверенное решение ИИ выдаёт с оговоркой — подтвердите то, что действительно сработало'}]});
+    return;
+  }
+  ACAI.verdict('kbVerdict', {title:`База знаний: ${m.total} решений`,
+    sub:`Все подтверждены · описано оборудования: ${m.machines}`});
+}
+
 function renderMetrics() {
   const machines = Object.keys(allKnowledge).length;
   const total = Object.values(allKnowledge).reduce((s,a)=>s+a.length,0);
   const confirmed = Object.values(allKnowledge).flat().filter(i=>i.confirmed_by).length;
+
+  renderKbVerdict({machines, total, confirmed});
 
   document.getElementById('kbMetrics').innerHTML = `
     <div class="metric accent">
@@ -185,6 +212,7 @@ document.getElementById('searchKb').addEventListener('input', e => {
   render();
 });
 
+// меню раньше содержимого: от него зависят ссылки в выводе
 initLayout();
 load();
 </script>

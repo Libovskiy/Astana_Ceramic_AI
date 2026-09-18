@@ -50,6 +50,12 @@
     </header>
     <div class="page">
 
+      <!-- Вопрос вкладки: держим ли режим. Ответ словами: что вышло за
+           допуск прямо сейчас — и по каким параметрам живых данных нет. -->
+      <div class="verdict calm" id="techVerdict">
+        <div class="v-title" style="color:var(--text-dim)">Сверяю с допусками…</div>
+      </div>
+
       <!-- МЕТРИКИ -->
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="techMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
@@ -124,6 +130,37 @@ function renderMetrics(){
     <div class="metric accent"><div class="metric-label">С живыми данными</div><div class="metric-value accent">${withLive}</div><div class="metric-sub">WebHMI</div></div>
     <div class="metric ${outOfRange>0?'danger':'ok'}"><div class="metric-label">Вне допуска</div><div class="metric-value ${outOfRange>0?'danger':'ok'}">${outOfRange}</div></div>
     <div class="metric ok"><div class="metric-label">Этапов</div><div class="metric-value ok">${[...new Set(allParams.map(p=>p.stage))].length}</div></div>`;
+
+  renderTechVerdict({total, withLive, outOfRange});
+}
+
+// «Вне допуска: 0» ничего не значит, если живых показаний нет вовсе:
+// сверять не с чем. Так и пишем.
+function renderTechVerdict(m){
+  if(!m.total){
+    ACAI.verdict('techVerdict', {title:'Параметры контроля не заданы',
+      sub:'Ни одного параметра с допусками — отклонения ловить не по чему.'});
+    return;
+  }
+  const live = Object.keys(liveData || {}).length;
+  const rows = [];
+  const bad = [];
+  for(const p of allParams){
+    const k = LIVE_MAP[p.param_name];
+    if(!k || !liveData[k]) continue;
+    const v = parseFloat(liveData[k].value);
+    if((p.min_val!==null && v<p.min_val) || (p.max_val!==null && v>p.max_val))
+      bad.push(`${p.param_name} — ${liveData[k].value}`);
+  }
+  if(bad.length) rows.push({level:'critical', what:`Вне допуска: ${bad.length}`,
+    where:bad.slice(0,3).join(', ')+(bad.length>3?` и ещё ${bad.length-3}`:'')});
+  if(!live || !m.withLive) rows.push({level:'warning',
+    what:'Живых показаний нет',
+    where:'панель WebHMI не отдаёт данные — режим сверять не с чем, параметры остаются справочными'});
+
+  if(rows.length){ ACAI.verdict('techVerdict', {title: bad.length?'Режим нарушен':'Сверять не с чем', rows}); return; }
+  ACAI.verdict('techVerdict', {title:'Режим в допуске',
+    sub:`${m.withLive} параметров сверяются с живыми показаниями, отклонений нет · всего в контроле ${m.total}`});
 }
 
 function getLiveStatus(param, liveVal){
