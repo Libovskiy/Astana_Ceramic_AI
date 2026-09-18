@@ -275,8 +275,25 @@ def create_equipment_route(
 def update_equipment_route(
     equipment_id: int,
     request: UpdateEquipmentRequest,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(get_current_user)
 ):
+    """
+    Правка карточки станка: название, тип, цех, дисциплина.
+
+    Раньше сюда пускало только admin, хотя форму и кнопку «Сохранить»
+    страница показывает главному инженеру, директору, главному
+    механику и главному электрику. Они заполняли поля, жали «Сохранить»
+    и получали 403 без объяснения — так и было при внесении документов
+    по станку 18.09.2026.
+
+    Кто на самом деле отвечает за структуру завода, записано в одном
+    месте — regulation_rbac, действие structure.edit. Берём оттуда,
+    чтобы правило не разъезжалось по файлам ещё раз.
+    """
+    from backend.services.regulation_rbac import can, DENIED_REASON
+
+    if not can(user, "structure.edit"):
+        raise HTTPException(status_code=403, detail=DENIED_REASON["structure.edit"])
 
     try:
 

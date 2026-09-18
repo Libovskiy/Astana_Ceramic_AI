@@ -25,6 +25,7 @@ ORDER = [
     "test_restore.py",
     "test_layout_init.py",
     "test_parts_writeoff.py",
+    "test_buttons_match_rights.py",
 ]
 
 failed = []

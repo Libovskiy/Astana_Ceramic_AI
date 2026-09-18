@@ -528,10 +528,28 @@ async function loadDocStatus(id){
   }
 }
 
+
+// Сервер объясняет отказ в поле detail («Менять структуру производства
+// могут…»), а страница читала только message и показывала голое
+// «Ошибка». Человек не понимал, сломалось это или так задумано.
+async function explain(response){
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (response.ok && data.success !== false) return null;
+  return data.detail || data.message
+      || (response.status === 403 ? 'Это действие вам не разрешено.'
+       :  response.status === 413 ? 'Файл слишком большой.'
+       :  `Не получилось (код ${response.status}).`);
+}
+
 async function deleteDoc(eqId,docId){
   if(!confirm('Удалить документ?'))return;
   try{
-    await fetch(`/api/equipment/${eqId}/documents/${docId}`,{method:'DELETE',credentials:'include'});
+    // Раньше ответ не проверялся вовсе: при отказе страница всё равно
+    // писала «Удалено», а документ оставался на месте.
+    const r=await fetch(`/api/equipment/${eqId}/documents/${docId}`,{method:'DELETE',credentials:'include'});
+    const problem=await explain(r);
+    if(problem){ACAI.toast(problem,'danger');return;}
     ACAI.toast('Удалено');loadDocs(eqId);
   }catch(e){ACAI.toast(e.message,'danger');}
 }
@@ -547,9 +565,9 @@ async function uploadDoc(id,input){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({filename:file.name,data:b64})
       });
-      const rd=await r.json();
-      if(rd.success){ACAI.toast('Документ загружен ✓','ok');loadDocs(id);}
-      else ACAI.toast(rd.message||'Ошибка','danger');
+      const problem=await explain(r);
+      if(problem){ACAI.toast(problem,'danger');return;}
+      ACAI.toast('Документ загружен ✓','ok');loadDocs(id);
     }catch(e){ACAI.toast(e.message,'danger');}
   };
   reader.readAsDataURL(file);
@@ -565,7 +583,8 @@ async function saveEquipment(id){
   if(!name){errEl.textContent='Введите название';return;}
   try{
     const r=await fetch(`/api/settings/equipment/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,stage:location,location})});
-    const rd=await r.json();if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
+    const problem=await explain(r);
+    if(problem){errEl.textContent=problem;return;}
     const eq=allEquipment.find(e=>e.id===id);
     if(eq&&eq.status!==status)await ACAI.post(`/api/equipment/${id}/set-status`,{status});
     ACAI.toast('Сохранено ✓','ok');ACAI.closeModal();await loadEquipment();
