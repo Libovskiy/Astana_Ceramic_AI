@@ -167,6 +167,12 @@ from backend.services import usage_service, push_service
 if not _os_env.environ.get("ACAI_LIVE_PROXY"):
     push_service.start_checks()
 
+    # Отметка «сервер на месте» раз в минуту. Нужна, чтобы потом
+    # честно сказать, когда системы для цеха не существовало: ноутбук
+    # уснул, сел, унесли, пропал Wi-Fi.
+    from backend.services import availability_service
+    availability_service.start()
+
 # =========================================
 # STATIC FILES
 # =========================================

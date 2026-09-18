@@ -168,8 +168,32 @@ function render() {
     return true;
   });
 
+  // Был ли сервер на месте. «Никто не заходил» и «сайт не открывался»
+  // выглядят в отчёте одинаково, а это разные беды: во втором случае
+  // люди пробовали и получили пустой экран.
+  const up = d.uptime || {};
+  let uptimeNote = '';
+  const times = n => n % 10 === 1 && n % 100 !== 11 ? 'раз'
+                   : [2, 3, 4].includes(n % 10) && !(n % 100 >= 12 && n % 100 <= 14) ? 'раза' : 'раз';
+  const forHuman = m => {
+    const h = Math.floor(m / 60);
+    return h ? `${h} ч ${m % 60} мин` : `${m} мин`;
+  };
+  // '2026-09-17 14:00' → '17.09 14:00': в цеху читают день, а не месяц.
+  const when = v => `${v.slice(8, 10)}.${v.slice(5, 7)} ${v.slice(11, 16)}`;
+
+  if (up.known && up.gaps_count) {
+    const last = (up.gaps || [])[0];
+    uptimeNote = `Сервер был недоступен ${up.gaps_count} ${times(up.gaps_count)}, всего ${forHuman(up.minutes_down)}`
+      + (last ? ` — последний раз ${when(last.from)}, ${forHuman(last.minutes)}` : '')
+      + '. В это время сайт не открывался ни у кого: ноутбук уснул, сел или пропала сеть.';
+  } else if (up.known) {
+    uptimeNote = `Сервер был на месте всё время наблюдения (с ${dayLabel(up.since.slice(0, 10))}).`;
+  }
+
   document.getElementById('usPage').innerHTML = `
     ${trackingNote ? `<div class="us-note">ℹ️ ${trackingNote}</div>` : ''}
+    ${uptimeNote ? `<div class="us-note"${up.gaps_count ? ' style="border-color:var(--warn)"' : ''}>${up.gaps_count ? '⚠️' : '✅'} ${uptimeNote}</div>` : ''}
 
     <div class="us-grid">
       <div class="us-kpi">

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.acai.awake</string>
+
+    <!-- Не даём компьютеру уснуть.
+
+         Этот Mac — сервер завода: на нём сайт, уведомления и запись
+         показаний. Когда он засыпает, для цеха система просто
+         исчезает: телефон не открывает сайт, уведомления не приходят,
+         показания не пишутся. В журнале сна видно, что 18.09 он спал
+         с 07:48 до 08:54 — почти час рабочего утра.
+
+         caffeinate прав администратора не требует:
+           -i  не засыпать от простоя
+           -m  не усыплять диск
+           -s  не засыпать, пока включён в розетку
+
+         Экран это не держит (-d намеренно нет): крышку можно закрывать,
+         но тогда Mac всё равно уснёт — для сервера его лучше держать
+         открытым и в розетке. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-ims</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>

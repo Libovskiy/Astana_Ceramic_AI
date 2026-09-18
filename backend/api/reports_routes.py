@@ -167,4 +167,15 @@ def get_audit_log_route(
 
 @router.get("/api/usage/summary")
 def usage_summary(days: int = 7, user: dict = Depends(require_roles("director", "chief_engineer"))):
-    return {"success": True, **usage_service.summary(days)}
+    # Вместе с тем, пользуются ли системой, отдаём и то, была ли она
+    # вообще доступна: «никто не заходил» и «сервер спал» — разные
+    # вещи, а выглядят одинаково.
+    from backend.services import availability_service
+
+    try:
+        uptime = availability_service.summary(days)
+    except Exception as error:
+        print(f"[usage] доступность не посчитана: {error}")
+        uptime = {"known": False, "days": days}
+
+    return {"success": True, **usage_service.summary(days), "uptime": uptime}
