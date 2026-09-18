@@ -759,9 +759,12 @@ function renderQuickReplies(messages, caseData, role) {
 
     const last = messages[messages.length - 1];
 
+    // Кнопки нужны тому, кто стоит у станка, а это не только рабочий:
+    // мастер смены, механик и главный инженер пишут из той же
+    // переписки. Раньше кнопки видел лишь worker, остальные набирали
+    // «не помогло» руками — и ИИ на это не отвечал вовсе.
     const show =
-        role === "worker"
-        && caseData.status === "Открыто"
+        caseData.status === "Открыто"
         && last && last.role === "assistant"
         && !sending;
 
@@ -777,10 +780,12 @@ function renderQuickReplies(messages, caseData, role) {
     box.dataset.forMessage = String(last.id || messages.length);
     box.style.display = "flex";
 
+    // «Позвать мастера» — только заявителю: специалист сам и есть тот,
+    // кого зовут, а сервер эту кнопку другим ролям и не разрешает.
     box.innerHTML = `
         <button type="button" class="quick-yes">✓ Помогло</button>
         <button type="button" class="quick-next">✕ Не помогло</button>
-        <button type="button" class="quick-call">🙋 Позвать мастера</button>
+        ${role === "worker" ? '<button type="button" class="quick-call">🙋 Позвать мастера</button>' : ''}
     `;
 
     box.querySelector(".quick-yes").addEventListener("click", async function () {
@@ -793,7 +798,7 @@ function renderQuickReplies(messages, caseData, role) {
         sendMessage("Не помогло");
     });
 
-    box.querySelector(".quick-call").addEventListener("click", async function () {
+    box.querySelector(".quick-call")?.addEventListener("click", async function () {
         hideQuickReplies();
         try {
             const response = await fetch(`/api/conversation/${activeCaseId}/escalate`, { method: "POST" });
@@ -1225,6 +1230,13 @@ function renderActions(actions, caseData) {
         buttons.push(`<button type="button" class="act act-approve" data-act="approve">Подтвердить закрытие</button>`);
     }
 
+    // Когда обращение уже у людей, ИИ в разговор не лезет — но позвать
+    // его должно быть можно: механик у станка вправе спросить совет,
+    // а не только читать переписку.
+    if (["Требует специалиста", "В работе"].includes(caseData.status)) {
+        buttons.push(`<button type="button" class="act act-ask" data-act="ask-ai">🤖 Спросить ИИ</button>`);
+    }
+
     if (!buttons.length) {
         bar.style.display = "none";
         bar.innerHTML = "";
@@ -1260,6 +1272,28 @@ const ACTION_PROMPT = {
 async function runAction(action, button, draftText) {
 
     if (!activeCaseId) return;
+
+    // Совет ИИ по требованию: следующий шаг по этому же обращению.
+    if (action === "ask-ai") {
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/conversation/${activeCaseId}/retry`, { method: "POST" });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                alert(data.detail || "Не получилось спросить ИИ.");
+                return;
+            }
+            if (!data.reply || data.reply.type === "escalated" || !data.reply.message) {
+                alert("ИИ больше нечего предложить по этому обращению.");
+            }
+            await loadThread();
+        } catch (error) {
+            alert("Нет связи с сервером.");
+        } finally {
+            button.disabled = false;
+        }
+        return;
+    }
 
     let comment = "";
 
