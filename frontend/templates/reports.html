@@ -50,6 +50,12 @@
     </header>
     <div class="page">
 
+      <!-- Сначала вывод, потом таблицы: директор открывает отчёты с
+           вопросом «как неделя прошла», а не «покажите мне числа». -->
+      <div class="card" id="reportConclusion" style="margin-bottom:16px;padding:18px 20px">
+        <div style="font-size:14px;color:var(--text-dim)">Считаю…</div>
+      </div>
+
       <!-- БЫСТРЫЕ ОТЧЁТЫ -->
       <div class="report-section">
         <div class="section-title">Быстрые отчёты</div>
@@ -81,6 +87,18 @@
         </div>
       </div>
 
+      <!-- ОТКУДА ЧИСЛА -->
+      <!-- Отчёт без этого блока врёт молчанием: пустая таблица простоев
+           читается как «простоев не было», хотя за неделю никто не
+           создал ни одного обращения. Здесь по каждому источнику видно,
+           вносили ли данные, когда последняя запись и куда идти вносить. -->
+      <div class="report-section">
+        <div class="section-title">Откуда числа</div>
+        <div class="card" style="margin-bottom:20px"><div class="card-body" style="padding:6px 14px" id="sourcesBox">
+          <div class="empty">Загрузка…</div>
+        </div></div>
+      </div>
+
       <!-- СВОДНАЯ СТАТИСТИКА -->
       <div id="reportContent">
         <div class="report-section" id="summarySection">
@@ -99,6 +117,77 @@
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 const PERIOD_LABELS = {today:'Сегодня',week:'7 дней',month:'30 дней'};
+let LAST = null;   // последняя сводка — её же используют отчёты
+
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hm = x => { x = Math.round(x||0); const h = Math.floor(x/60); return h ? `${h} ч ${x%60} мин` : `${x} мин`; };
+const period = () => document.getElementById('periodSelect').value;
+const periodDates = () => {
+  const to = new Date(), from = new Date();
+  from.setDate(to.getDate() - ({today:0, week:6, month:29}[period()]));
+  return { from: ACAI.localDate(from), to: ACAI.localDate(to) };
+};
+
+// Вывод словами: сначала отклонения, потом справка. Где не вносили — так и пишем.
+function renderConclusion(s, d) {
+  const box = document.getElementById('reportConclusion');
+  const src = s.sources || {};
+  const dt = s.downtime || {}, m = s.maintenance || {}, c = s.checklist || {};
+  const pw = {today:'Сегодня', week:'За неделю', month:'За 30 дней'}[period()];
+  const lines = [];
+  const worst = (dt.by_equipment||[])[0];
+
+  if (!(src.cases||{}).period && !(src.downtime||{}).period) {
+    lines.push([1, `${pw.toLowerCase()} не было ни одного обращения — простои не фиксировались.`]);
+  } else if ((dt.total_minutes||0) > 0) {
+    lines.push([2, `${pw} простоев ${hm(dt.total_minutes)}${worst ? `, больше всего — ${worst.equipment_name}` : ''}.`]);
+  } else {
+    lines.push([0, `${pw} простоев не было.`]);
+  }
+  if (m && m.due) {
+    if (!(src.maintenance||{}).total) lines.push([1, `ТО не отмечается: по графику ${m.due} работ, отметок нет ни одной.`]);
+    else if (m.overdue) lines.push([2, `ТО отстаёт: сделано ${m.done} из ${m.due}.`]);
+    else lines.push([0, `ТО по графику: ${m.done} из ${m.due}.`]);
+  }
+  if (!(src.production||{}).period) lines.push([1, 'Выпуск не вносили — выполнение плана неизвестно.']);
+  if (!c.rounds_count) lines.push([1, 'Обходов смены не было.']);
+  lines.sort((a,b) => b[0]-a[0]);
+  const dot = w => `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:8px;background:${w===2?'var(--danger)':w===1?'var(--warn)':'var(--border)'}"></span>`;
+  box.innerHTML = lines.slice(0,4).map((l,i) => `
+    <div style="display:flex;gap:10px;align-items:flex-start;${i?'margin-top:9px':''}">
+      ${dot(l[0])}<div style="font-size:${i?15:19}px;font-weight:${i?400:700};line-height:1.4">${esc(l[1])}</div>
+    </div>`).join('');
+}
+
+// Ссылку даём только туда, куда этой роли открыт вход (у аналитика нет
+// ни ТО, ни обхода — иначе отчёт вёл бы его на 403).
+const canOpen = l => !!document.querySelector(`.nav-item[href="${l}"]`);
+
+const SOURCES = [
+  { key:'cases',         name:'Обращения о поломках',   link:'/cases',       where:'создаёт цех в «Обращениях»' },
+  { key:'downtime',      name:'Простои',                link:'/cases',       where:'пишутся сами вместе с обращением' },
+  { key:'production',    name:'Выпуск за смену',        link:'/production',  where:'вносит мастер смены' },
+  { key:'shift_reports', name:'Сменные отчёты',         link:'/production',  where:'сдаёт мастер в конце смены' },
+  { key:'maintenance',   name:'Отметки ТО',             link:'/maintenance', where:'ставит механик по графику' },
+  { key:'rounds',        name:'Обходы смены',           link:'/checklist',   where:'заполняет мастер на обходе' },
+];
+
+function renderSources(src) {
+  const box = document.getElementById('sourcesBox');
+  box.innerHTML = SOURCES.map(s => {
+    const d = src[s.key] || {};
+    const has = (d.period || 0) > 0;
+    const state = has ? `${d.period} за период`
+                : d.total ? `за период нет · последняя ${ACAI.shortDate(d.last)}`
+                : 'ни одной записи';
+    const hint = has ? '' : ` — ${s.where}`;
+    const label = canOpen(s.link) ? `<a href="${s.link}" style="color:var(--text);text-decoration:none">${s.name} ›</a>` : s.name;
+    return `<div class="stat-row">
+      <span class="stat-label">${label}<span style="color:var(--text-dim)">${esc(hint)}</span></span>
+      <span class="stat-val" style="color:${has ? 'var(--text)' : 'var(--warn)'};font-weight:${has?700:400}">${esc(state)}</span>
+    </div>`;
+  }).join('');
+}
 
 document.getElementById('periodSelect').addEventListener('change', () => {
   document.getElementById('periodLabel').textContent = PERIOD_LABELS[document.getElementById('periodSelect').value];
@@ -116,6 +205,9 @@ async function loadSummary() {
   const d = dash.value;
   if (!s?.success || !d) { document.getElementById('summaryGrids').innerHTML='<div class="empty">Ошибка загрузки</div>'; return; }
 
+  LAST = s;
+  renderConclusion(s, d);
+  renderSources(s.sources || {});
   const eq = d.equipment||[];
   const working = eq.filter(e=>e.status==='Работает').length;
   const problems = eq.filter(e=>e.status!=='Работает').length;
@@ -210,8 +302,83 @@ async function showReport(type) {
       </div>
       <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>
     `);
+  } else if (type === 'cases') {
+    const { from, to } = periodDates();
+    const r = await ACAI.get(`/api/case-events?date_from=${from}&date_to=${to}`);
+    // проверочные обращения в отчёт руководству не идут
+    const items = (r.events || r.cases || []).filter(c => !c.is_test);
+    const closed = items.filter(c => c.status === 'Закрыто');
+    const solved = closed.map(c => (new Date(String(c.closed_at).replace(' ','T')) - new Date(String(c.created_at).replace(' ','T'))) / 60000)
+                         .filter(v => isFinite(v) && v >= 0);
+    const avg = solved.length ? Math.round(solved.reduce((a,b)=>a+b,0) / solved.length) : null;
+
+    ACAI.showModal(`
+      <h3>Обращения · ${PERIOD_LABELS[period()]}</h3>
+      ${items.length ? `
+      <div style="display:flex;gap:18px;margin:8px 0 12px;font-size:13px">
+        <div><b style="font-family:var(--mono);font-size:20px">${items.length}</b> создано</div>
+        <div><b style="font-family:var(--mono);font-size:20px">${closed.length}</b> закрыто</div>
+        <div><b style="font-family:var(--mono);font-size:20px">${avg != null ? hm(avg) : '—'}</b> среднее решение</div>
+      </div>
+      <div style="max-height:400px;overflow-y:auto">
+        <table class="table"><thead><tr><th>Дата</th><th>Станок</th><th>Проблема</th><th>Статус</th><th>Решено за</th></tr></thead>
+        <tbody>${items.map(c => {
+          const min = c.closed_at ? Math.round((new Date(String(c.closed_at).replace(' ','T')) - new Date(String(c.created_at).replace(' ','T')))/60000) : null;
+          return `<tr>
+            <td>${ACAI.shortDate(c.created_at)}</td>
+            <td>${esc(c.equipment_name || c.machine || '—')}</td>
+            <td>${esc(c.symptom || c.worker_question || '—')}</td>
+            <td>${esc(c.status)}</td>
+            <td class="mono">${min != null ? hm(min) : '—'}</td>
+          </tr>`; }).join('')}</tbody></table>
+      </div>`
+      : `<div class="empty" style="padding:18px 0;line-height:1.5">
+           <div style="font-size:14px;font-weight:600;color:var(--text)">Обращений за период не было</div>
+           <div style="font-size:13px;margin-top:4px">Это не значит, что не было поломок: значит, о них не сообщали через систему.</div>
+         </div>`}
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+        ${items.length ? '<button class="btn primary" onclick="printReport()">🖨 Печать</button>' : ''}
+      </div>
+    `);
+
+  } else if (type === 'downtime') {
+    const s = LAST || await ACAI.get(`/api/reports/summary?period=${period()}`);
+    const dt = s.downtime || {};
+    const rows = dt.by_equipment || [];
+    const stale = dt.stale || [];
+
+    ACAI.showModal(`
+      <h3>Простои · ${PERIOD_LABELS[period()]}</h3>
+      ${rows.length ? `
+      <div style="display:flex;gap:18px;margin:8px 0 12px;font-size:13px">
+        <div><b style="font-family:var(--mono);font-size:20px">${hm(dt.total_minutes)}</b> всего</div>
+        <div><b style="font-family:var(--mono);font-size:20px">${dt.incidents_count||0}</b> случаев</div>
+        <div>механика ${hm(dt.by_discipline?.mechanical)} · электрика ${hm(dt.by_discipline?.electrical)}</div>
+      </div>
+      ${(dt.open_count||0) ? `<div style="font-size:13px;color:var(--warn);margin-bottom:8px">
+        Из них ${hm(dt.open_minutes)} ещё идёт — эти минуты продолжают капать.</div>` : ''}
+      <div style="max-height:360px;overflow-y:auto">
+        <table class="table"><thead><tr><th>Оборудование</th><th>Случаев</th><th>Простой</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${esc(r.equipment_name || '—')}</td>
+          <td class="mono">${r.incidents_count || 0}</td>
+          <td class="mono">${hm(r.total_minutes)}</td></tr>`).join('')}</tbody></table>
+      </div>
+      ${stale.length ? `<div style="font-size:13px;color:var(--warn);margin-top:10px">
+        ⚠ Дольше смены: ${stale.map(x => esc(x.equipment_name)).join(', ')} — похоже, забыли закрыть обращение.</div>` : ''}`
+      : `<div class="empty" style="padding:18px 0;line-height:1.5">
+           <div style="font-size:14px;font-weight:600;color:var(--text)">Простоев за период не зафиксировано</div>
+           <div style="font-size:13px;margin-top:4px">Простой начинается вместе с обращением о поломке. Обращений не было — значит, и простои никто не фиксировал.</div>
+         </div>`}
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
+        ${rows.length ? '<button class="btn primary" onclick="printReport()">🖨 Печать</button>' : ''}
+      </div>
+    `);
+
   } else {
-    ACAI.toast('Используйте страницу Аналитика для детальных отчётов', 'warn');
+    ACAI.toast('Такого отчёта нет', 'warn');
   }
 }
 
@@ -219,9 +386,11 @@ function printReport() {
   window.print();
 }
 
-initLayout();
+// Сначала меню, потом сводка: блок «Откуда числа» и выводы ставят
+// ссылки только на страницы, открытые этой роли, а узнают об этом по
+// нарисованному меню.
 document.getElementById('periodLabel').textContent = PERIOD_LABELS[document.getElementById('periodSelect').value];
-loadSummary();
+initLayout().then(loadSummary, loadSummary);
 </script>
 </body>
 </html>

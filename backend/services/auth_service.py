@@ -540,10 +540,79 @@ def update_user_role(user_id, new_role):
     conn.close()
 
 
+def user_traces(user_id) -> dict:
+    """
+    Что человек уже успел сделать в системе.
+
+    Нужно, чтобы не стирать историю вместе с учёткой: фамилия стоит в
+    закрытых обращениях, сменных отчётах, обходах, журнале действий. Для
+    ухода человека есть «закрыть доступ» — он не войдёт, а история цела.
+    Удалять можно только пустую учётку, заведённую по ошибке.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    row = cursor.execute(
+        "SELECT username, full_name FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        raise ValueError("Пользователь не найден.")
+
+    names = [n for n in (row["username"], row["full_name"]) if n]
+    marks = ",".join("?" for _ in names)
+
+    by_name = [
+        ("обращения", f"SELECT COUNT(*) FROM cases WHERE assigned_to IN ({marks}) OR closed_by IN ({marks}) OR draft_closed_by IN ({marks})", names * 3),
+        ("сообщения в обращениях", f"SELECT COUNT(*) FROM chat_history WHERE author IN ({marks})", names),
+        ("журнал действий", f"SELECT COUNT(*) FROM audit_log WHERE username IN ({marks})", names),
+        ("обходы смены", f"SELECT COUNT(*) FROM checklist_rounds WHERE username IN ({marks})", names),
+        ("сменные отчёты", f"SELECT COUNT(*) FROM shift_reports WHERE created_by IN ({marks}) OR submitted_by IN ({marks}) OR approved_by IN ({marks})", names * 3),
+        ("учёт выпуска", f"SELECT COUNT(*) FROM shift_production_log WHERE entered_by IN ({marks})", names),
+        ("отметки ТО", f"SELECT COUNT(*) FROM maintenance_log WHERE done_by IN ({marks})", names),
+        ("лаборатория", f"SELECT COUNT(*) FROM lab_log WHERE created_by IN ({marks})", names),
+        ("склад", f"SELECT COUNT(*) FROM parts_log WHERE changed_by IN ({marks})", names),
+    ]
+    by_id = [
+        ("переписка", "SELECT COUNT(*) FROM team_messages WHERE user_id = ?", (user_id,)),
+        ("задачи", "SELECT COUNT(*) FROM tasks WHERE created_by = ? OR completed_by = ?", (user_id, user_id)),
+        ("работа в системе", "SELECT COUNT(*) FROM usage_daily WHERE user_id = ?", (user_id,)),
+    ]
+
+    traces = {}
+
+    for label, query, params in by_name + by_id:
+        try:
+            count = cursor.execute(query, params).fetchone()[0]
+        except Exception:
+            count = 0
+        if count:
+            traces[label] = count
+
+    conn.close()
+    return traces
+
+
 def delete_user(user_id):
-    """Удаляет пользователя полностью — вместе с его сессиями и
-    назначенным оборудованием (иначе останутся висящие записи,
-    ссылающиеся на несуществующего пользователя)."""
+    """
+    Удаляет учётку — только если следов в системе нет.
+
+    Для человека, который работал, удаление означает потерю истории:
+    его фамилия стоит в закрытых обращениях, обходах и отчётах. Поэтому
+    увольнение и отпуск — это «закрыть доступ» (set_active), а удаление
+    оставлено для учёток, заведённых по ошибке.
+    """
+
+    traces = user_traces(user_id)
+
+    if traces:
+        details = ", ".join(f"{label}: {count}" for label, count in traces.items())
+        raise ValueError(
+            "У сотрудника есть история в системе — удалять нельзя, закройте доступ. "
+            f"Найдено — {details}."
+        )
 
     conn = get_connection()
     cursor = conn.cursor()

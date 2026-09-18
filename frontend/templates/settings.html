@@ -135,8 +135,26 @@ function renderUsers(){
         ${off
           ? `<button class="btn primary sm" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`
           : `<button class="btn danger sm" onclick="setUserActive(${u.id},false,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Закрыть доступ</button>`}
+        ${u.can_delete
+          ? `<button class="btn secondary sm" title="Учётка пустая — ни одной записи в системе"
+               onclick="deleteEmptyUser(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Удалить пустую</button>`
+          : ''}
       </div>
     </div>`;}).join('')||'<div class="empty">Нет пользователей</div>';
+}
+
+// Удалить можно только учётку без единой записи — заведённую по ошибке.
+// У всех остальных удаление стёрло бы фамилию из закрытых обращений,
+// обходов и отчётов, поэтому там только «закрыть доступ».
+async function deleteEmptyUser(id, name){
+  if(!confirm(`Удалить учётку «${name}»?\n\nВ системе за ней нет ни одной записи — удалится без следа.`)) return;
+  try{
+    const r = await fetch(`/api/settings/users/${id}`, {method:'DELETE', credentials:'include'});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok || d.success===false) throw new Error(d.message || d.detail || 'Не получилось');
+    ACAI.toast('Учётка удалена');
+    loadUsers();
+  }catch(e){ ACAI.toast(e.message, 'danger'); }
 }
 
 // Увольнение и отпуск: доступ закрывается, а фамилия остаётся в

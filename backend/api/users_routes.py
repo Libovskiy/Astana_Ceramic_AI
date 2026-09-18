@@ -53,9 +53,22 @@ def get_users_route(
     user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
 ):
 
+    from backend.services.auth_service import user_traces
+
+    users = get_all_users()
+
+    # Удалять можно только пустую учётку (завели по ошибке). У того, кто
+    # работал, история останется в обращениях и отчётах — ему «закрыть доступ».
+    for item in users:
+        try:
+            item["traces"] = user_traces(item["id"])
+        except ValueError:
+            item["traces"] = {}
+        item["can_delete"] = not item["traces"]
+
     return {
         "success": True,
-        "users": get_all_users(),
+        "users": users,
         "valid_roles": list(VALID_ROLES)
     }
 
