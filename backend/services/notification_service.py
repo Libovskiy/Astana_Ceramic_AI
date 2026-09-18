@@ -80,6 +80,33 @@ def _passes_role_filter(
     return True
 
 
+
+def _writeoff_notifications(user):
+    """
+    Ответственному за склад: ремонт сделан, запчасть, похоже, взяли.
+
+    Видит только тот, кто за эту часть отвечает: механика — главный
+    механик, электрика — главный энергетик. Слесарю и электрику это
+    не нужно: списанием занимаются не они.
+    """
+    from backend.services.part_usage_service import pending
+
+    items = pending(user)
+    if not items:
+        return []
+
+    return [{
+        "type": "part_writeoff",
+        "severity": "warning",
+        "icon": "📦",
+        "title": f"Списать со склада: {len(items)}",
+        "subtitle": ", ".join(
+            item.get("equipment_name") or "—" for item in items[:2]
+        ) + (" и ещё" if len(items) > 2 else ""),
+        "url": "/parts",
+    }]
+
+
 def get_notifications(user):
 
     role = user["role"]
@@ -240,6 +267,11 @@ def get_notifications(user):
         notifications.extend(_sensor_notifications(user))
     except Exception as error:
         print(f"[notification_service] Датчики пропущены: {error}")
+
+    try:
+        notifications.extend(_writeoff_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] Списание пропущено: {error}")
 
     # Сортируем ещё раз после добавления задач, ТО и бэкапа — раньше
     # сортировка шла до них, и просроченная задача оказывалась ниже

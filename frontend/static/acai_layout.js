@@ -498,8 +498,14 @@ const BELL_LINKS = {
 
 // Сервер знает точный адрес (станок, обращение) — идём туда. Раньше
 // поле url не читалось, и любое оповещение уводило в общий список.
+//
+// Но адрес бывает закрыт для роли: аналитику колокольчик показывает
+// простой и эскалацию, а /chat и /equipment ему не открыты — переход
+// заканчивался страницей «нет доступа». Такой пункт оставляем текстом,
+// без перехода: знать о простое ему полезно, идти некуда.
 function bellLink(item) {
-  return item.url || item.link || BELL_LINKS[item.type] || '/cases';
+  const url = item.url || item.link || BELL_LINKS[item.type] || '/cases';
+  return ACAI.canOpen(url) ? url : null;
 }
 
 // Разрешение на уведомления уже дано — подгружаем push.js, он сам
@@ -601,12 +607,14 @@ async function loadBell() {
         title="Звук новых оповещений" style="border:none;background:none;cursor:pointer;
         font-size:14px;color:var(--text-dim);flex-shrink:0">${AcaiSound.isEnabled()?'🔊':'🔇'}</button>
     </div>
-    ${items.map(item => `
-      <div onclick="window.location.href='${bellLink(item)}'"
+    ${items.map(item => {
+      const link = bellLink(item);
+      return `
+      <div ${link ? `onclick="window.location.href='${link}'"` : ''}
            style="padding:11px 14px;border-bottom:1px solid var(--border);
-                  cursor:pointer;display:flex;gap:10px"
-           onmouseover="this.style.background='var(--surface-2)'"
-           onmouseout="this.style.background=''">
+                  cursor:${link ? 'pointer' : 'default'};display:flex;gap:10px"
+           onmouseover="${link ? "this.style.background='var(--surface-2)'" : ''}"
+           onmouseout="${link ? "this.style.background=''" : ''}">
         <span style="font-size:15px;line-height:1.2">${BELL_ICONS[item.type]||'•'}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:12.5px;font-weight:600;line-height:1.35;
@@ -619,7 +627,7 @@ async function loadBell() {
              color:var(--accent);margin-top:2px">⚙ ${item.equipment_name||item.machine}</span>`:''}
         </span>
       </div>
-    `).join('')}
+    `;}).join('')}
   ` : `
     <div style="padding:26px 14px;text-align:center;font-size:12px;color:var(--text-dim)">
       Ничего не требует внимания

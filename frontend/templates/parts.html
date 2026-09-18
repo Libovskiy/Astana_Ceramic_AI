@@ -45,6 +45,17 @@
         <div class="v-title" style="color:var(--text-dim)">Смотрю склад…</div>
       </div>
 
+      <!-- ЖДУТ СПИСАНИЯ. Слесарь ремонт сделал и запчасть взял, а
+           списывает ответственный: гл. механик по механике, гл.
+           энергетик по электрике. Система подсказывает, что, судя по
+           тексту ремонта и совету ИИ, скорее всего ушло со склада. -->
+      <div id="writeoffsCard" class="card" style="display:none;margin-bottom:16px;border-color:var(--warn)">
+        <div class="card-head"><h2>Ждут списания</h2>
+          <span id="writeoffsCount" style="font-size:11px;color:var(--warn);background:var(--surface-2);padding:2px 8px;border-radius:999px"></span>
+        </div>
+        <div class="card-body" style="padding:10px 14px" id="writeoffsList"></div>
+      </div>
+
       <div class="metrics" id="partsMetrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -63,19 +74,93 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=23"></script>
+<script src="/static/acai_layout.js?v=24"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 let allParts=[];let activeFilter='';
 
 const CAT_LABELS={mechanical:'Механика',electrical:'Электрика',consumable:'Расходники',other:'Прочее'};
 
+let writeoffs=[];
+
 async function load(){
   try{
     const r=await ACAI.get('/api/parts');
     allParts=r.parts||[];
   }catch{allParts=[];}
-  renderMetrics();renderParts();
+  // Заявки видит только ответственный за эту часть — сервер сам решает,
+  // что показать, здесь молча принимаем пустой список.
+  try{
+    const w=await ACAI.get('/api/parts/writeoffs');
+    writeoffs=w.writeoffs||[];
+  }catch{writeoffs=[];}
+  renderWriteoffs();renderMetrics();renderParts();
+}
+
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function renderWriteoffs(){
+  const card=document.getElementById('writeoffsCard');
+  if(!writeoffs.length){
+    card.style.display='none';
+    document.getElementById('writeoffsList').innerHTML='';  // не оставляем старое в скрытом блоке
+    return;
+  }
+  card.style.display='';
+  document.getElementById('writeoffsCount').textContent=`${writeoffs.length}`;
+
+  document.getElementById('writeoffsList').innerHTML=writeoffs.map(w=>`
+    <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+        <div style="font-size:14px;font-weight:700">${esc(w.equipment_name||'—')}
+          <span style="font-weight:400;color:var(--text-dim)">· обращение №${w.case_id}</span></div>
+        <a href="/chat?case=${w.case_id}" style="font-size:12px;color:var(--accent);text-decoration:none">Открыть обращение ›</a>
+      </div>
+      ${w.repair_text?`<div style="font-size:13px;color:var(--text-dim);margin-top:4px">Ремонт: «${esc(w.repair_text)}»</div>`:''}
+      <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Скорее всего взяли — проверьте и поправьте количество:</div>
+      <div style="margin-top:6px">
+        ${(w.suggested||[]).map(sg=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px">
+            <input type="checkbox" class="wo-pick" data-wo="${w.id}" data-part="${sg.part_id}" checked>
+            <span style="flex:1;min-width:0">${esc(sg.name)}
+              <span style="color:var(--text-dim)">${sg.part_number?`· ${esc(sg.part_number)} `:''}· на складе ${Number(sg.stock).toLocaleString('ru-RU')} ${esc(sg.unit)}${sg.why?` · ${esc(sg.why)}`:''}</span></span>
+            <input type="number" class="input wo-qty" data-wo="${w.id}" data-part="${sg.part_id}"
+                   value="1" min="0" step="1" style="width:74px">
+          </label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn primary sm" onclick="applyWriteoff(${w.id})">Списать отмеченное</button>
+        <button class="btn secondary sm" onclick="skipWriteoff(${w.id})">Ничего не брали</button>
+      </div>
+    </div>`).join('');
+}
+
+async function applyWriteoff(id){
+  const items=[...document.querySelectorAll(`.wo-pick[data-wo="${id}"]`)]
+    .filter(cb=>cb.checked)
+    .map(cb=>({part_id:+cb.dataset.part,
+               quantity:+(document.querySelector(`.wo-qty[data-wo="${id}"][data-part="${cb.dataset.part}"]`)?.value||0)}))
+    .filter(it=>it.quantity>0);
+  if(!items.length){ACAI.toast('Отметьте, что списать, или нажмите «Ничего не брали»','warn');return;}
+  try{
+    const r=await fetch(`/api/parts/writeoffs/${id}/apply`,{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Не получилось');
+    ACAI.toast(d.shortages?.length?d.shortages.join('; '):'Списано','ok');
+    await load();
+  }catch(e){ACAI.toast(e.message,'danger');}
+}
+
+async function skipWriteoff(id){
+  try{
+    const r=await fetch(`/api/parts/writeoffs/${id}/skip`,{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'Не получилось');
+    ACAI.toast('Отмечено: со склада не брали');
+    await load();
+  }catch(e){ACAI.toast(e.message,'danger');}
 }
 
 function renderMetrics(){
@@ -94,12 +179,14 @@ function renderMetrics(){
 // Сначала то, чего нет совсем, потом то, что на минимуме. Пустой склад —
 // это «не заполняли», а не «всё есть».
 function renderPartsVerdict(m){
-  if(!m.total){
+  if(!m.total && !writeoffs.length){
     ACAI.verdict('partsVerdict', {title:'Склад не заполнен',
       sub:'Ни одной позиции не внесено — когда станок встанет, искать запчасть будет негде. Добавьте хотя бы то, что меняют чаще всего.'});
     return;
   }
   const rows=[];
+  if(writeoffs.length) rows.push({level:'warning', what:`Ждут списания: ${writeoffs.length}`,
+    where:'ремонт сделан, запчасть, похоже, взяли — проверьте и спишите ниже'});
   const out=allParts.filter(p=>p.quantity===0);
   const low=allParts.filter(p=>p.quantity>0&&p.quantity<=p.min_quantity);
   if(out.length) rows.push({level:'critical', what:`Нет совсем: ${out.length}`,
@@ -107,7 +194,11 @@ function renderPartsVerdict(m){
   if(low.length) rows.push({level:'warning', what:`На минимуме: ${low.length}`,
     where:low.slice(0,3).map(p=>`${p.name} — ${p.quantity} ${p.unit||'шт'}`).join(', ')});
 
-  if(rows.length){ ACAI.verdict('partsVerdict', {title:'Нужно заказать', rows}); return; }
+  if(rows.length){
+    const order = out.length || low.length;
+    ACAI.verdict('partsVerdict', {title: order ? 'Нужно заказать' : 'Ждут вашего решения', rows});
+    return;
+  }
   ACAI.verdict('partsVerdict', {title:'Запас в норме',
     sub:`${m.total} позиций, все выше минимума`});
 }

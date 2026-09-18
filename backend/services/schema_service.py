@@ -33,6 +33,7 @@ def ensure_schema() -> None:
     from backend.services.usage_service import init_usage
     from backend.services.push_service import init_push
     from backend.services.observation_service import init_observation
+    from backend.services.part_usage_service import init_part_usage
 
     steps = (
         init_equipment, init_cases_tables, init_auth_tables, init_knowledge_base,
@@ -40,6 +41,7 @@ def ensure_schema() -> None:
         init_procedures_tables, init_regulation_extensions, init_task_tables,
         init_plc_error_table, init_protection_tables, init_shift_report_tables,
         init_team_chat, init_state_events, init_usage, init_push, init_observation,
+        init_part_usage,
     )
 
     for step in steps:

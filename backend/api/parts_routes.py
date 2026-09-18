@@ -73,3 +73,67 @@ def move_part(part_id: int, request: dict, user: dict = Depends(require_roles(*P
          user["full_name"] or user["username"], now))
     conn.commit(); conn.close()
     return {"success": True, "new_quantity": new_qty}
+
+
+# =========================================
+# СПИСАНИЕ ПО РЕМОНТУ
+# =========================================
+# Слесарь и электрик списанием не занимаются: за склад отвечают
+# главный механик (запчасти оборудования) и главный энергетик
+# (электрика, кабель, контакторы). Поэтому при отметке ремонта
+# система не трогает остаток, а заводит заявку ответственному —
+# с догадкой, что именно взяли, по тексту ремонта и совету ИИ.
+
+@router.get("/api/parts/writeoffs")
+def get_writeoffs(user: dict = Depends(get_current_user)):
+    from backend.services.part_usage_service import pending
+    return {"success": True, "writeoffs": pending(user)}
+
+
+@router.post("/api/parts/writeoffs/{writeoff_id}/apply")
+def apply_writeoff(writeoff_id: int, request: dict, user: dict = Depends(get_current_user)):
+    from fastapi import HTTPException
+    from backend.services.part_usage_service import apply
+    from backend.services.audit_service import log_action
+
+    try:
+        result = apply(writeoff_id, request.get("items") or [], user, note=request.get("note") or "")
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="parts_written_off", target=f"case:{result['case_id']}",
+        details="; ".join(result["written"]) or "ничего не списано",
+    )
+    return {"success": True, **result}
+
+
+@router.post("/api/parts/writeoffs/{writeoff_id}/skip")
+def skip_writeoff(writeoff_id: int, request: dict, user: dict = Depends(get_current_user)):
+    from fastapi import HTTPException
+    from backend.services.part_usage_service import skip
+    from backend.services.audit_service import log_action
+
+    try:
+        result = skip(writeoff_id, user, note=request.get("note") or "")
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="parts_writeoff_skipped", target=f"case:{result['case_id']}",
+        details=request.get("note") or "ничего со склада не брали",
+    )
+    return {"success": True, **result}
+
+
+@router.get("/api/parts/{part_id}/history")
+def part_history(part_id: int, user: dict = Depends(require_roles(*PARTS_ROLES))):
+    """На что ушла деталь: обращение, станок, кто списал."""
+    from backend.services.part_usage_service import history_for_part
+    return {"success": True, "history": history_for_part(part_id)}

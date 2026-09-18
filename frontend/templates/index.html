@@ -202,7 +202,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=23"></script>
+<script src="/static/acai_layout.js?v=24"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -574,15 +574,21 @@ async function renderVerdict(d, working, total){
   box.className='verdict alert'+(critical?'':' only-warn');
   const n=urgent.length;
   const word=(n%10===1&&n%100!==11)?'вопрос':(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?'вопроса':'вопросов';
-  const rows=urgent.slice(0,3).map(x=>`
-    <a class="v-row" href="${esc(bellLink(x))}">
+  // Ссылку ставим только туда, куда этой роли открыт вход: аналитик
+  // видит простой и эскалацию, но /chat и /equipment ему закрыты —
+  // такая строка вела прямо на «нет доступа».
+  const rows=urgent.slice(0,3).map(x=>{
+    const link=bellLink(x);
+    const inner=`
       <span class="v-mark" style="background:${x.severity==='critical'?'var(--danger)':'var(--warn)'}"></span>
       <span style="min-width:0">
         <div class="v-what">${esc(x.title)}</div>
         <div class="v-where">${esc(x.subtitle||x.message||'')}</div>
-      </span>
-      <span class="v-go">›</span>
-    </a>`).join('');
+      </span>`;
+    return link
+      ? `<a class="v-row" href="${esc(link)}">${inner}<span class="v-go">›</span></a>`
+      : `<div class="v-row">${inner}</div>`;
+  }).join('');
   box.innerHTML=`
     <div class="v-head">
       <span class="v-title">Требует решения: ${n} ${word}</span>
@@ -775,7 +781,10 @@ function nextMonth(){calDate.setMonth(calDate.getMonth()+1);renderFullCal();}
 
 // ── ЗАПУСК ────────────────────────────────────────────────
 async function refresh(){await fetchLive();await renderDashboard();}
-initLayout();refresh();loadTasks();
+// Меню строится раньше содержимого: плашка-вывод ставит ссылку только
+// туда, куда этой роли открыт вход, а узнаёт она это по меню.
+initLayout().then(() => { refresh(); loadTasks(); },
+                  () => { refresh(); loadTasks(); });
 setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
 </script>
 

@@ -380,6 +380,47 @@ def _case_ready_now(case_id: int) -> None:
     )
 
 
+def notify_part_writeoff(writeoff_id: int) -> None:
+    """
+    Ответственному за склад: по ремонту, похоже, взяли деталь.
+
+    Механика — главному механику, электрика — главному энергетику
+    (chief_electrician). Слесаря и электрика не трогаем: они списанием
+    не занимаются, лишнее уведомление им только мешает.
+    """
+    _defer(1, _part_writeoff_now, writeoff_id)
+
+
+def _part_writeoff_now(writeoff_id: int) -> None:
+    from backend.services.part_usage_service import RESPONSIBLE
+
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM part_writeoffs WHERE id = ? AND status = 'pending'", (writeoff_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return
+
+    import json
+    try:
+        names = [item["name"] for item in json.loads(row["suggested"] or "[]")][:3]
+    except ValueError:
+        names = []
+
+    roles = RESPONSIBLE.get(row["discipline"], ())
+    if not roles:
+        return
+
+    send_to_roles(
+        roles,
+        f"📦 Списать со склада? {row['equipment_name'] or '—'}",
+        (f"Похоже, взяли: {', '.join(names)}" if names else "Проверьте, что уходило со склада")
+        + f"\nРемонт по обращению №{row['case_id']}",
+        url="/parts", tag=f"writeoff-{writeoff_id}",
+    )
+
+
 def task_assigned(task_id: int, user_id: int, assigned_by: int) -> None:
     if not enabled() or user_id == assigned_by:
         return

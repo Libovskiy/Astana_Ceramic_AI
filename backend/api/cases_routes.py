@@ -446,6 +446,13 @@ def chat(
         answer_data["recommendation"]
     )
 
+    # Есть ли названная деталь на складе — отдельной строкой в переписке.
+    try:
+        from backend.services.part_usage_service import add_stock_note
+        add_stock_note(result["case_id"], answer_data["recommendation"])
+    except Exception as error:
+        print(f"[parts] подсказка по складу не добавлена: {error}")
+
 
     return {
 

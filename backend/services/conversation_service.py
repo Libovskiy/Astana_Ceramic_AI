@@ -151,6 +151,21 @@ def _dialogue_text(messages, limit=12):
     return "\n".join(lines)
 
 
+
+def _stock_hint(case_id, advice_text):
+    """
+    Строка про склад к совету: «подшипник — на складе 3 шт» или «нет».
+
+    Слесарь не должен идти к полке наугад. Падать на этом нельзя:
+    совет важнее подсказки, поэтому любая ошибка тут только в лог.
+    """
+    try:
+        from backend.services.part_usage_service import add_stock_note
+        add_stock_note(case_id, advice_text)
+    except Exception as error:
+        print(f"[parts] подсказка по складу не добавлена: {error}")
+
+
 def _tried_actions(messages):
     """Что ИИ уже предлагал — чтобы не повторялся."""
 
@@ -334,6 +349,7 @@ def generate_reply(case_id):
             set_step(case_id, current_step + 1)
 
             add_message(case_id, "assistant", remaining[0], author="ACAI")
+            _stock_hint(case_id, remaining[0])
 
             return {
                 "type": "answer",
@@ -360,6 +376,7 @@ def generate_reply(case_id):
             set_step(case_id, current_step + 1)
 
             add_message(case_id, "assistant", remaining[0], author="ACAI")
+            _stock_hint(case_id, remaining[0])
 
             return {
                 "type": "answer",
@@ -451,6 +468,7 @@ def generate_reply(case_id):
     set_step(case_id, current_step + 1)
 
     add_message(case_id, "assistant", suggestion, author="ACAI")
+    _stock_hint(case_id, suggestion)
 
     return {
         "type": "answer",

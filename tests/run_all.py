@@ -24,6 +24,7 @@ ORDER = [
     "test_routes_unique.py",
     "test_restore.py",
     "test_layout_init.py",
+    "test_parts_writeoff.py",
 ]
 
 failed = []

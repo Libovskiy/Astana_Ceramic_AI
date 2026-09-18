@@ -716,7 +716,10 @@ function renderMessages(messages) {
     box.innerHTML = messages.map(item => {
 
         if (item.role === "system") {
-            return `<div class="msg-system">${escapeHtml(item.message)}</div>`;
+            // Строка про склад («📦 подшипник — на складе 3 шт») читается
+            // как часть совета, поэтому выделяем её из прочих отметок.
+            const stock = String(item.message || "").startsWith("📦") ? " msg-stock" : "";
+            return `<div class="msg-system${stock}">${escapeHtml(item.message)}</div>`;
         }
 
         const mine = item.role === "worker";

@@ -410,6 +410,19 @@ def draft(case_id: int, request: CommentRequest, user: dict = Depends(current_us
         details=request.comment
     )
 
+    # Склад сам не узнает, что со полки что-то взяли. Заводим заявку
+    # ответственному за эту часть — гл. механику или гл. энергетику:
+    # он сверяет догадку с фактом и списывает одной кнопкой.
+    # Ошибка здесь не должна мешать закрыть ремонт.
+    try:
+        from backend.services.part_usage_service import open_writeoff
+        writeoff_id = open_writeoff(case_id, repair_text=request.comment)
+        if writeoff_id:
+            from backend.services.push_service import notify_part_writeoff
+            notify_part_writeoff(writeoff_id)
+    except Exception as error:
+        print(f"[parts] заявка на списание не создана: {error}")
+
     return {"success": True, "messages": get_messages(case_id)}
 
 
