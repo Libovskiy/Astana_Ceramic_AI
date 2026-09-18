@@ -93,7 +93,9 @@ const ROLE_LABELS={admin:'Администратор',director:'Директор
 const ROLE_ORDER={admin:0,director:1,chief_engineer:2,engineer:3,shift_supervisor:4,analyst:5,technologist:6,lab_technician:7,chief_mechanic:8,chief_electrician:9,mechanic:10,electrician:11,worker:12};
 let allUsers=[];let validRoles=[];
 
-function avatarColor(n){const c=['#2563eb','#7c3aed','#be185d','#b45309','#047857','#b91c1c'];  // тёмные: инициалы белыеlet h=0;for(const ch of n||'')h=(h*31+ch.charCodeAt(0))&0xffffffff;return c[Math.abs(h)%c.length];}
+// Кружки с инициалами: буквы белые, поэтому фон нужен тёмный —
+// на прежних светлых оттенках контраст был около 2:1.
+function avatarColor(n){const c=['#2563eb','#7c3aed','#be185d','#b45309','#047857','#b91c1c'];let h=0;for(const ch of n||'')h=(h*31+ch.charCodeAt(0))&0xffffffff;return c[Math.abs(h)%c.length];}
 function initials(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();}
 
 async function load(){
