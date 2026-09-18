@@ -57,7 +57,13 @@ PUBLIC = {
     ("GET", "/login"), ("POST", "/auth/login"), ("POST", "/auth/logout"),
     ("GET", "/favicon.ico"), ("GET", "/favicon.svg"),
     ("GET", "/sw.js"), ("GET", "/manifest.webmanifest"),
-    ("GET", "/cert"), ("GET", "/cert/acai-ca.crt"),   # ставят на телефон до входа
+    # Ставят на телефон, ноутбук и компьютер цеха ДО входа: пока
+    # сертификата нет, защищённый адрес не открывается вовсе, а значит
+    # и войти некуда. Ключ сертификата при этом не отдаётся — только
+    # открытая часть. Адреса сервера (/api/cert/address) и QR с ними
+    # видны всем, кто и так в этой сети.
+    ("GET", "/cert"), ("GET", "/cert/acai-ca.crt"),
+    ("GET", "/cert/qr.svg"), ("GET", "/api/cert/address"),
 }
 # Защищены ключом датчиков, а не сессией
 SENSOR_KEY = {("POST", "/api/sensors/live"), ("POST", "/api/sensors/push")}

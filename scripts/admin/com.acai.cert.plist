@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.acai.cert</string>
+
+    <!-- Раз в 15 минут проверяет, совпадает ли сертификат с текущими
+         адресами компьютера. Если IP сменился — перевыпускает бумажку
+         сервера и перезапускает https. Корневой сертификат при этом
+         не меняется, поэтому на телефонах и ноутбуках ничего
+         переустанавливать не нужно. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/champ_01/Documents/FactoryAssistant/venv/bin/python</string>
+        <string>/Users/champ_01/Documents/FactoryAssistant/scripts/admin/cert_reissue.py</string>
+        <string>--apply</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/cert.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/champ_01/Documents/FactoryAssistant/logs/cert.log</string>
+</dict>
+</plist>
