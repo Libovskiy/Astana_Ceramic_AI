@@ -106,9 +106,10 @@ def record_presence(user_id: int, force: bool = False) -> None:
 # (название, SQL количества за период [from, to), SQL «кто и когда»)
 WORK_METRICS = [
     ("Обращений о поломках создано", "🛠",
-     "SELECT COUNT(*) FROM cases WHERE created_at >= ? AND created_at < ?"),
+     "SELECT COUNT(*) FROM cases WHERE COALESCE(is_test, 0) = 0 AND created_at >= ? AND created_at < ?"),
     ("Обращений закрыто", "✅",
-     "SELECT COUNT(*) FROM cases WHERE status = 'Закрыто' AND closed_at >= ? AND closed_at < ?"),
+     "SELECT COUNT(*) FROM cases WHERE status = 'Закрыто' AND COALESCE(is_test, 0) = 0 "
+     "AND closed_at >= ? AND closed_at < ?"),
     ("Сообщений в обращениях", "💬",
      "SELECT COUNT(*) FROM chat_history WHERE role IN ('worker','specialist') AND created_at >= ? AND created_at < ?"),
     ("Обходов смены проведено", "📋",

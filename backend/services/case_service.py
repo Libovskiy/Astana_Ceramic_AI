@@ -507,7 +507,7 @@ def search_case_events(
 
     query = """
         SELECT
-            cases.*,
+            cases.*,   -- вместе с is_test: проверочные видно в журнале с пометкой
             equipment.stage AS equipment_stage,
             equipment.name AS equipment_name,
             equipment.discipline AS equipment_discipline
@@ -583,6 +583,7 @@ def get_recurring_issues(days=14, min_occurrences=3, limit=10):
             cases.equipment_id IS NOT NULL
             AND cases.symptom IS NOT NULL
             AND cases.symptom != ''
+            AND COALESCE(cases.is_test, 0) = 0
             AND cases.created_at >= datetime('now', ?)
         ORDER BY cases.created_at DESC
         """,
@@ -696,6 +697,9 @@ def init_cases_tables():
         ("brigade", "TEXT"),
         ("shift", "TEXT"),
         ("required_discipline", "TEXT"),
+        # проверочное обращение: видно в журнале с пометкой, но в сводку,
+        # топ неисправностей и колокольчик не идёт
+        ("is_test", "INTEGER NOT NULL DEFAULT 0"),
     ]
 
     for column_name, column_type in cases_migrations:

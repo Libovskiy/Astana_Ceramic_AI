@@ -175,6 +175,7 @@ def read_conversation(case_id: int, request: Request, user: dict = Depends(curre
             "created_at": case.get("created_at"),
             "assigned_to": case.get("assigned_to"),
             "required_discipline": case.get("required_discipline"),
+            "is_test": case.get("is_test") or 0,
             "draft_closed_by": case.get("draft_closed_by"),
             "draft_resolution_comment": case.get("draft_resolution_comment")
         },

@@ -507,7 +507,7 @@ async function loadConversations() {
                     <span class="chat-item-name">${unread ? '<span class="chat-unread-dot"></span>' : ""}${escapeHtml(machineName(item))}</span>
                     <span class="chat-item-time">${formatTime(item.last_at || item.created_at)}</span>
                 </div>
-                <div class="chat-item-last">${escapeHtml(item.last_message || item.worker_question || "")}</div>
+                <div class="chat-item-last">${item.is_test ? "🧪 " : ""}${escapeHtml(item.last_message || item.worker_question || "")}</div>
                 <div class="chat-item-status ${turn.mine ? "chat-item-status-mine" : ""}">
                     ${escapeHtml(turn.text)}${item.brigade && seesAllShifts
                         ? ` · смена ${escapeHtml(item.brigade)} (${escapeHtml(item.shift || "")})`
@@ -672,7 +672,7 @@ async function loadThread() {
             machineName(caseData) || "Обращение";
 
         document.getElementById("chatSubtitle").innerHTML =
-            `№${caseData.id} · ${escapeHtml(caseData.status || "")}`;   // цвет — у плашки «чей ход»
+            `№${caseData.id} · ${escapeHtml(caseData.status || "")}${caseData.is_test ? " · 🧪 проверка" : ""}`;
 
         document.getElementById("chatComposer").style.display =
             data.can_write ? "flex" : "none";

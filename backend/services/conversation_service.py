@@ -1011,7 +1011,8 @@ def get_conversations(user, scope="active", limit=50, date_from=None, date_to=No
               WHERE chat_history.case_id = cases.id
               ORDER BY chat_history.id DESC LIMIT 1) AS last_role,
             cases.assigned_to,
-            cases.required_discipline
+            cases.required_discipline,
+            COALESCE(cases.is_test, 0) AS is_test
         FROM cases
         LEFT JOIN equipment ON equipment.id = cases.equipment_id
         WHERE cases.status IN ({placeholders}) {extra}

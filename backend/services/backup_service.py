@@ -145,4 +145,9 @@ def restore_backup(filename: str, user: dict) -> dict:
             destination.close()
             source.close()
 
+    # Вчерашняя копия не знает колонок, появившихся сегодня. Без этого
+    # сайт после восстановления падал (учение tests/test_restore.py).
+    from backend.services.schema_service import ensure_schema
+    ensure_schema()
+
     return {"success": True, "restored": candidate.name, "pre_restore_backup": pre_restore["file"]}

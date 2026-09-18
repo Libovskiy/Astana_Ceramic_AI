@@ -15,17 +15,7 @@
 """
 
 from backend.config import ALLOWED_ORIGINS
-from backend.services.audit_service import init_audit_table
-from backend.services.auth_service import get_user_by_session, init_auth_tables
-from backend.services.case_service import init_cases_tables
-from backend.services.downtime_service import init_downtime_table
-from backend.services.equipment_service import init_equipment
-from backend.services.knowledge_service import init_knowledge_base
-from backend.services.mix_service import init_mix_table
-from backend.services.procedures_service import init_procedures_tables
-from backend.services.production_log_service import init_production_tables
-from backend.services.regulation_service import init_regulation_extensions
-from backend.services.task_service import init_task_tables
+from backend.services.auth_service import get_user_by_session
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -164,53 +154,18 @@ app.add_middleware(
 # INITIALIZE EQUIPMENT
 # =========================================
 
-init_equipment()
-init_cases_tables()
-init_auth_tables()
-init_knowledge_base()
-init_mix_table()
-init_audit_table()
-init_production_tables()
-init_downtime_table()
-init_procedures_tables()
-init_regulation_extensions()
-init_task_tables()
-
-from backend.services.plc_error_service import init_plc_error_table
-init_plc_error_table()
-
-# Запросы на удаление важных данных (решает владелец). Функцию
-# импортировали, но не вызывали — таблицы не было, и список запросов
-# у администратора падал с ошибкой 500.
-from backend.services.protection_service import init_protection_tables
-init_protection_tables()
-
-from backend.services.shift_report_service import init_shift_report_tables
-init_shift_report_tables()
-
-from backend.services.team_chat_service import init_team_chat
-init_team_chat()
+# Схема базы — в одном месте (backend/services/schema_service.py):
+# тот же список зовётся после восстановления из бэкапа.
+from backend.services.schema_service import ensure_schema
+ensure_schema()
 
 import os as _os_env
-from backend.services import usage_service
-usage_service.init_usage()
-
-from backend.services import push_service
-push_service.init_push()
-
-from backend.services.observation_service import init_observation
-init_observation()
+from backend.services import usage_service, push_service
 
 # Проверки состояния (датчики, бэкап) — только в основном экземпляре
 # (порт 8000); HTTPS-экземпляр запущен с ACAI_LIVE_PROXY.
 if not _os_env.environ.get("ACAI_LIVE_PROXY"):
     push_service.start_checks()
-
-from backend.services.equipment_state_service import (
-    init_state_events
-)
-
-init_state_events()
 
 # =========================================
 # STATIC FILES

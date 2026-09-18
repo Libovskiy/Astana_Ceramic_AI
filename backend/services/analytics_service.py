@@ -415,7 +415,7 @@ def get_data_sources(days: int = 7) -> dict:
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
 
     sources = {
-        "cases": ("cases", "created_at", None),
+        "cases": ("cases", "created_at", "COALESCE(is_test, 0) = 0"),
         "downtime": ("downtime_log", "started_at", None),
         "production": ("shift_production_log", "created_at", None),
         "shift_reports": ("shift_reports", "submitted_at", "submitted_at IS NOT NULL"),

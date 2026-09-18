@@ -156,6 +156,7 @@ function renderCases(){
         </div>
         <div class="case-badges">
           <span class="badge" style="background:${color}20;color:${color}">${label}</span>
+          ${c.is_test?'<span class="badge neutral" title="Проверка системы — в аналитику и топ неисправностей не идёт">проверка</span>':''}
           ${c.draft_resolution_comment?'<span class="badge neutral">Комментарий</span>':''}
         </div>
       </div>

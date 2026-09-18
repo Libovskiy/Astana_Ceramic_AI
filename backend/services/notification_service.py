@@ -128,6 +128,9 @@ def get_notifications(user):
 
     for case in escalated_cases:
 
+        if case.get("is_test"):
+            continue
+
         equipment_id = case.get("equipment_id")
 
         if not _passes_role_filter(
@@ -165,6 +168,9 @@ def get_notifications(user):
         draft_cases = search_case_events(status="Черновик закрытия", limit=20)
 
         for case in draft_cases:
+
+            if case.get("is_test"):
+                continue
 
             equipment_id = case.get("equipment_id")
 

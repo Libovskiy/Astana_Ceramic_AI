@@ -32,6 +32,10 @@ def get_dashboard_data():
             equipment.name AS equipment_name
         FROM cases
         LEFT JOIN equipment ON equipment.id = cases.equipment_id
+        -- проверочные обращения (пометка is_test) в сводку не идут: иначе
+        -- «Ошибка на панели ×2» из проверок висит в топе неисправностей
+        -- завода, где настоящих поломок ещё нет
+        WHERE COALESCE(cases.is_test, 0) = 0
         ORDER BY cases.id DESC
     """)
 
@@ -518,7 +522,8 @@ def get_top_problems_for_analytics(days=30, limit=10):
     date_from = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
 
     cursor.execute(
-        "SELECT symptom FROM cases WHERE symptom IS NOT NULL AND symptom != '' AND created_at >= ?",
+        "SELECT symptom FROM cases WHERE symptom IS NOT NULL AND symptom != '' "
+        "AND COALESCE(is_test, 0) = 0 AND created_at >= ?",
         (date_from,)
     )
 
