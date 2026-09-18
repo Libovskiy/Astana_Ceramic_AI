@@ -53,7 +53,7 @@ uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
 - `backend/api/main.py` — точка входа: `ensure_schema()`, подключение
   роутеров, статика, `PAGE_ROLES` (кому какая страница открыта).
   Роутеры разбиты по областям: `backend/api/*_routes.py` (36 файлов).
-- `backend/services/` — бизнес-логика (47 файлов): обращения и ответы
+- `backend/services/` — бизнес-логика (46 модулей): обращения и ответы
   ИИ, простои, аналитика, регламенты, склад, уведомления, бэкапы,
   доступность сервера. Роутеры тонкие и зовут сервисы.
 - `backend/models.py`, `backend/schemas.py`, `backend/database.py` —

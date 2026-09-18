@@ -53,7 +53,7 @@
 4. Откройте в Chrome вкладку `http://192.168.1.74/lp` и войдите в панель.
 
 Если сервер ACAI не на этой же машине, замените `localhost:8000` в
-`content.js` (`ACAI_LIVE`, `ACAI_PUSH`) и в `manifest.json`
+`content.js` (константа `ACAI_LIVE`) и в `manifest.json`
 (`host_permissions`) на его адрес.
 
 ## Обновление с v4
