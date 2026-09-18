@@ -192,9 +192,9 @@ async function loadWorkQueue() {
         renderWorkQueueSummary(data.queue);
 
         const statusColors = {
-            "Требует специалиста": "#dc2626",
-            "Открыто": "#d97706",
-            "В работе": "#3b5bfd"
+            "Требует специалиста": "var(--danger)",
+            "Открыто": "var(--warn)",
+            "В работе": "var(--accent)"
         };
 
         const currentUserName = window.currentUser
@@ -203,7 +203,7 @@ async function loadWorkQueue() {
 
         container.innerHTML = data.queue.map(item => {
 
-            const color = statusColors[item.status] || "#888";
+            const color = statusColors[item.status] || "var(--text-dim)";
             const problem = escapeHtml(item.worker_question || item.symptom || "Неисправность");
             const equipmentName = escapeHtml(item.equipment_name || item.machine || "Оборудование");
 
@@ -215,7 +215,7 @@ async function loadWorkQueue() {
 
                 actionHtml = isMine
                     ? `<button type="button" class="btn btn-success btn-sm" onclick="openCompleteRepairPrompt(${item.id})">Завершить ремонт</button>`
-                    : `<span style="font-size: 12px; color: #888;">В работе — ${escapeHtml(item.assigned_to || "")}</span>`;
+                    : `<span style="font-size: 12px; color: var(--text-dim);">В работе — ${escapeHtml(item.assigned_to || "")}</span>`;
 
             } else {
 
@@ -566,10 +566,10 @@ window.showEquipmentPassport = async function (equipmentId) {
         modal.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000;";
 
         modal.innerHTML = `
-            <div style="background: #fff; border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
+            <div style="background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h2 style="margin: 0;">Руководство оборудования</h2>
-                    <button type="button" onclick="document.getElementById('passportModal').remove()" style="border: none; background: none; font-size: 20px; cursor: pointer;">×</button>
+                    <button type="button" onclick="document.getElementById('passportModal').remove()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-dim);">×</button>
                 </div>
                 <div id="passportModalBody">Загрузка...</div>
             </div>
@@ -621,7 +621,7 @@ window.showEquipmentPassport = async function (equipmentId) {
                     📄 ${escapeHtml(doc.name)}
                 </a>
             `).join("")
-            : `<div style="color: #888; font-size: 13px; padding: 8px 0;">Документация ещё не загружена для этого станка.</div>`;
+            : `<div style="color: var(--text-dim); font-size: 13px; padding: 8px 0;">Документация ещё не загружена для этого станка.</div>`;
 
         const casesHtml = (
     casesData.success &&
@@ -647,14 +647,14 @@ window.showEquipmentPassport = async function (equipmentId) {
                 )}
             </div>
 
-            <div style="margin-top: 4px; color: #888;">
+            <div style="margin-top: 4px; color: var(--text-dim);">
                 Статус: ${escapeHtml(caseItem.status || "—")}
             </div>
         </div>
     `).join("")
     : `
         <div style="
-            color: #888;
+            color: var(--text-dim);
             font-size: 13px;
             padding: 8px 0;
         ">
@@ -673,7 +673,7 @@ window.showEquipmentPassport = async function (equipmentId) {
 
         const downtimeHtml = activeDowntime
             ? `
-                <div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 10px;">
+                <div style="margin-top: 16px; padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--warn); color: var(--text);">
                     <div style="font-weight: 600; font-size: 13px;">🔴 Простой идёт с ${formatDate(activeDowntime.started_at)}</div>
                     <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Причина: ${escapeHtml(activeDowntime.reason || "не указана")}</div>
                     <button type="button" onclick="endDowntimeFromPassport(${activeDowntime.id}, ${equipmentId})" class="btn btn-success btn-block btn-sm" style="margin-top: 10px;">Завершить простой</button>
@@ -685,15 +685,15 @@ window.showEquipmentPassport = async function (equipmentId) {
             <h3 style="margin-top: 0;">${escapeHtml(item.name)}</h3>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 13px;">
-                <div><span style="color: #888;">Статус:</span> <strong>${escapeHtml(item.status)}</strong></div>
-                <div><span style="color: #888;">Тип:</span> <strong>${escapeHtml(item.type || "—")}</strong></div>
-                <div><span style="color: #888;">Здоровье:</span> <strong>${item.health ?? "—"}%</strong></div>
-                <div><span style="color: #888;">Готовность:</span> <strong>${item.readiness ?? "—"}%</strong></div>
-                <div><span style="color: #888;">Расположение:</span> <strong>${escapeHtml(item.location || "—")}</strong></div>
-                <div><span style="color: #888;">Последняя проверка:</span> <strong>${formatDate(item.last_check)}</strong></div>
+                <div><span style="color: var(--text-dim);">Статус:</span> <strong>${escapeHtml(item.status)}</strong></div>
+                <div><span style="color: var(--text-dim);">Тип:</span> <strong>${escapeHtml(item.type || "—")}</strong></div>
+                <div><span style="color: var(--text-dim);">Здоровье:</span> <strong>${item.health ?? "—"}%</strong></div>
+                <div><span style="color: var(--text-dim);">Готовность:</span> <strong>${item.readiness ?? "—"}%</strong></div>
+                <div><span style="color: var(--text-dim);">Расположение:</span> <strong>${escapeHtml(item.location || "—")}</strong></div>
+                <div><span style="color: var(--text-dim);">Последняя проверка:</span> <strong>${formatDate(item.last_check)}</strong></div>
             </div>
 
-            <div style="margin-bottom: 8px; font-size: 13px; color: #888;">Последняя проблема: ${escapeHtml(item.last_issue || "нет данных")}</div>
+            <div style="margin-bottom: 8px; font-size: 13px; color: var(--text-dim);">Последняя проблема: ${escapeHtml(item.last_issue || "нет данных")}</div>
 
             <h4 style="margin-bottom: 4px;">Документы</h4>
             ${documentsHtml}
@@ -861,10 +861,10 @@ window.showEquipmentJournal = async function (equipmentId) {
         modal.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000;";
 
         modal.innerHTML = `
-            <div style="background: #fff; border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
+            <div style="background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h2 style="margin: 0;">История оборудования</h2>
-                    <button type="button" onclick="document.getElementById('journalModal').remove()" style="border: none; background: none; font-size: 20px; cursor: pointer;">×</button>
+                    <button type="button" onclick="document.getElementById('journalModal').remove()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-dim);">×</button>
                 </div>
                 <div id="journalModalBody">Загрузка...</div>
             </div>
@@ -900,19 +900,30 @@ window.showEquipmentJournal = async function (equipmentId) {
             return;
         }
 
+        // Сервер отдаёт события, но названия станка в ответе нет.
+        // Страница читала data.equipment.name, падала на этом и писала
+        // «Ошибка соединения с сервером» — при том, что сервер ответил
+        // нормально, а история просто пуста. Берём название из списка,
+        // который уже загружен на странице.
+        const known = (equipmentData || []).find(item => item.id === equipmentId);
+        const title = escapeHtml((data.equipment && data.equipment.name) || (known && known.name) || "станка");
+
         if (!data.events.length) {
-            body.innerHTML = `<div class="empty-state">История пока пуста для «${escapeHtml(data.equipment.name)}».</div>`;
+            body.innerHTML = `<div class="empty-state">История пока пуста для «${title}».</div>`;
             return;
         }
 
         body.innerHTML = `
-            <h3 style="margin-top: 0;">${escapeHtml(data.equipment.name)}</h3>
+            <h3 style="margin-top: 0;">${title}</h3>
             ${data.events.map(createJournalEventRow).join("")}
         `;
 
     } catch (error) {
 
-        body.innerHTML = `<div class="empty-state error-state">Ошибка соединения с сервером.</div>`;
+        // Не выдаём поломку страницы за обрыв связи: человек иначе
+        // ищет проблему в сети и перезагружает роутер.
+        console.error("[journal]", error);
+        body.innerHTML = `<div class="empty-state error-state">Не удалось показать историю. Сообщите: ${escapeHtml(String(error && error.message || error))}</div>`;
 
     }
 
@@ -927,8 +938,8 @@ function createJournalEventRow(event) {
 
         return `
             <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: #16a34a; font-size: 13px;">🔧 Обслуживание выполнено</span>
-                <div style="font-size: 12px; color: #888;">${date} · ${escapeHtml(event.username || "—")}</div>
+                <span style="color: var(--ok); font-size: 13px;">🔧 Обслуживание выполнено</span>
+                <div style="font-size: 12px; color: var(--text-dim);">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
         `;
 
@@ -937,7 +948,7 @@ function createJournalEventRow(event) {
     return `
         <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
             <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
-            <div style="font-size: 12px; color: #888;">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
+            <div style="font-size: 12px; color: var(--text-dim);">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>
     `;
 

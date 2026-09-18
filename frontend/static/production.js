@@ -99,7 +99,7 @@ async function submitProductionLog() {
     const resultBox = document.getElementById("logResult");
 
     if (!logDate || !pallets || pallets <= 0) {
-        resultBox.innerHTML = `<span style="color: #dc2626;">Укажите дату и количество поддонов больше нуля.</span>`;
+        resultBox.innerHTML = `<span style="color: var(--danger);">Укажите дату и количество поддонов больше нуля.</span>`;
         return;
     }
 
@@ -122,18 +122,18 @@ async function submitProductionLog() {
         }
 
         if (response.status === 403) {
-            resultBox.innerHTML = `<span style="color: #dc2626;">У вашей роли нет доступа к вводу производства.</span>`;
+            resultBox.innerHTML = `<span style="color: var(--danger);">У вашей роли нет доступа к вводу производства.</span>`;
             return;
         }
 
         const data = await response.json();
 
         if (!data.success) {
-            resultBox.innerHTML = `<span style="color: #dc2626;">${escapeHtml(data.message || "Не удалось сохранить.")}</span>`;
+            resultBox.innerHTML = `<span style="color: var(--danger);">${escapeHtml(data.message || "Не удалось сохранить.")}</span>`;
             return;
         }
 
-        resultBox.innerHTML = `<span style="color: #16a34a;">Сохранено: ${data.pieces} шт. Сегодня всего: ${data.today.produced} / ${data.today.target} (${data.today.percent}%)</span>`;
+        resultBox.innerHTML = `<span style="color: var(--ok);">Сохранено: ${data.pieces} шт. Сегодня всего: ${data.today.produced} / ${data.today.target} (${data.today.percent}%)</span>`;
 
         document.getElementById("logPallets").value = "";
 
@@ -141,7 +141,7 @@ async function submitProductionLog() {
 
     } catch (error) {
 
-        resultBox.innerHTML = `<span style="color: #dc2626;">Ошибка соединения с сервером.</span>`;
+        resultBox.innerHTML = `<span style="color: var(--danger);">Ошибка соединения с сервером.</span>`;
 
     }
 
@@ -180,7 +180,7 @@ async function loadMonthlyPlan() {
 
         container.innerHTML = Object.entries(data.plans).map(([brickType, target]) => `
             <div>
-                <label style="display: block; font-size: 12px; color: #888; margin-bottom: 4px; text-transform: capitalize;">${escapeHtml(brickType)}</label>
+                <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: capitalize;">${escapeHtml(brickType)}</label>
                 <input type="number" data-brick-type="${escapeHtml(brickType)}" class="plan-input" value="${target}" style="width: 160px;">
             </div>
         `).join("") + `
@@ -232,11 +232,11 @@ async function loadPlanSummary(monthlyPlans) {
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="text-align: left; border-bottom: 2px solid var(--border);">
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Вид</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">План месяца</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Произведено сегодня</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">% выполнения (сутки)</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Осталось на сутки</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Вид</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">План месяца</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Произведено сегодня</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">% выполнения (сутки)</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Осталось на сутки</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -244,15 +244,15 @@ async function loadPlanSummary(monthlyPlans) {
 
                         const monthlyTarget = monthlyPlans[brickType] || 0;
                         const remaining = Math.max(item.target - item.produced, 0);
-                        const color = item.percent >= 100 ? "#16a34a" : item.percent >= 50 ? "#3b5bfd" : "#d97706";
+                        const color = item.percent >= 100 ? "var(--ok)" : item.percent >= 50 ? "var(--accent)" : "var(--warn)";
 
                         return `
                             <tr style="border-bottom: 1px solid var(--border);">
                                 <td style="padding: 8px; font-size: 13px; font-weight: 600;">${BRICK_TYPE_LABELS[brickType] || brickType}</td>
-                                <td style="padding: 8px; font-size: 13px; color: #888;">${formatNumber(monthlyTarget)}</td>
+                                <td style="padding: 8px; font-size: 13px; color: var(--text-dim);">${formatNumber(monthlyTarget)}</td>
                                 <td style="padding: 8px; font-size: 13px;">${formatNumber(item.produced)}</td>
                                 <td style="padding: 8px; font-size: 13px; color: ${color}; font-weight: 600;">${item.target ? item.percent + "%" : "—"}</td>
-                                <td style="padding: 8px; font-size: 13px; color: #888;">${item.target ? formatNumber(remaining) : "—"}</td>
+                                <td style="padding: 8px; font-size: 13px; color: var(--text-dim);">${item.target ? formatNumber(remaining) : "—"}</td>
                             </tr>
                         `;
 
@@ -389,22 +389,22 @@ async function loadShiftHistory() {
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="text-align: left; border-bottom: 2px solid var(--border);">
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Дата</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Смена</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">Произведено</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">План</th>
-                        <th style="padding: 8px; font-size: 12px; color: #888;">%</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Дата</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Смена</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">Произведено</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">План</th>
+                        <th style="padding: 8px; font-size: 12px; color: var(--text-dim);">%</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${data.entries.map(entry => {
-                        const color = entry.percent >= 100 ? "#16a34a" : entry.percent >= 70 ? "#d97706" : "#dc2626";
+                        const color = entry.percent >= 100 ? "var(--ok)" : entry.percent >= 70 ? "var(--warn)" : "var(--danger)";
                         return `
                             <tr style="border-bottom: 1px solid var(--border);">
                                 <td style="padding: 8px; font-size: 13px;">${entry.date}</td>
                                 <td style="padding: 8px; font-size: 13px;">${escapeHtml(entry.shift)}</td>
                                 <td style="padding: 8px; font-size: 13px;">${formatNumber(entry.produced)}</td>
-                                <td style="padding: 8px; font-size: 13px; color: #888;">${formatNumber(entry.target)}</td>
+                                <td style="padding: 8px; font-size: 13px; color: var(--text-dim);">${formatNumber(entry.target)}</td>
                                 <td style="padding: 8px; font-size: 13px; color: ${color}; font-weight: 600;">${entry.percent}%</td>
                             </tr>
                         `;

@@ -35,11 +35,11 @@ const QUICK_PROBLEMS = [
 ];
 
 const STATUS_COLORS = {
-    "Открыто": "#3b5bfd",
-    "Требует специалиста": "#dc2626",
-    "В работе": "#d97706",
-    "Черновик закрытия": "#d97706",
-    "Закрыто": "#16a34a"
+    "Открыто": "var(--accent)",
+    "Требует специалиста": "var(--danger)",
+    "В работе": "var(--warn)",
+    "Черновик закрытия": "var(--warn)",
+    "Закрыто": "var(--ok)"
 };
 
 
@@ -909,11 +909,11 @@ function renderBasis(explanation) {
 
     if (!box || !explanation) return;
 
-    const colors = { "Высокая": "#16a34a", "Средняя": "#d97706", "Низкая": "#dc2626" };
+    const colors = { "Высокая": "var(--ok)", "Средняя": "var(--warn)", "Низкая": "var(--danger)" };
 
     box.style.display = "block";
     box.innerHTML =
-        `<b style="color:${colors[explanation.confidence] || "#666"}">` +
+        `<b style="color:${colors[explanation.confidence] || "var(--text-dim)"}">` +
         `${escapeHtml(explanation.confidence)} уверенность</b>` +
         (explanation.basis && explanation.basis.length
             ? " · " + explanation.basis.map(escapeHtml).join(" · ")

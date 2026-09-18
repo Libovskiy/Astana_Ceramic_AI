@@ -546,7 +546,7 @@ window.showEquipmentJournal = async function (equipmentId) {
         modal.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000;";
 
         modal.innerHTML = `
-            <div style="background: #fff; border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
+            <div style="background: var(--surface); color: var(--text); border-radius: 16px; padding: 28px; width: min(600px, 90vw); max-height: 80vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h2 style="margin: 0;">История оборудования</h2>
                     <button type="button" onclick="document.getElementById('journalModal').remove()" style="border: none; background: none; font-size: 20px; cursor: pointer;">×</button>
@@ -612,8 +612,8 @@ function createJournalEventRow(event) {
 
         return `
             <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: #16a34a; font-size: 13px;">🔧 Обслуживание выполнено</span>
-                <div style="font-size: 12px; color: #888;">${date} · ${escapeHtml(event.username || "—")}</div>
+                <span style="color: var(--ok); font-size: 13px;">🔧 Обслуживание выполнено</span>
+                <div style="font-size: 12px; color: var(--text-dim);">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
         `;
 
@@ -622,7 +622,7 @@ function createJournalEventRow(event) {
     return `
         <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
             <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
-            <div style="font-size: 12px; color: #888;">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
+            <div style="font-size: 12px; color: var(--text-dim);">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>
     `;
 
@@ -1096,7 +1096,7 @@ function renderExplanation(explanation) {
 
         container = document.createElement("div");
         container.id = "diagnosticExplanation";
-        container.style.cssText = "margin-top: 10px; font-size: 12px; color: #888;";
+        container.style.cssText = "margin-top: 10px; font-size: 12px; color: var(--text-dim);";
 
         parent.parentNode.insertBefore(container, parent.nextSibling);
 
@@ -1108,12 +1108,12 @@ function renderExplanation(explanation) {
     }
 
     const confidenceColors = {
-        "Высокая": "#16a34a",
-        "Средняя": "#d97706",
-        "Низкая": "#dc2626"
+        "Высокая": "var(--ok)",
+        "Средняя": "var(--warn)",
+        "Низкая": "var(--danger)"
     };
 
-    const color = confidenceColors[explanation.confidence] || "#888";
+    const color = confidenceColors[explanation.confidence] || "var(--text-dim)";
 
     container.innerHTML = `
         <strong style="color: ${color};">Уверенность: ${escapeHtml(explanation.confidence)}</strong>

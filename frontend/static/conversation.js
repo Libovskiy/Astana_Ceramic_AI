@@ -139,16 +139,16 @@ function renderStatus(caseData, canWrite) {
     if (label && caseData) {
 
         const colors = {
-            "Открыто": "#3b5bfd",
-            "Требует специалиста": "#dc2626",
-            "В работе": "#d97706",
-            "Черновик закрытия": "#d97706",
-            "Закрыто": "#16a34a"
+            "Открыто": "var(--accent)",
+            "Требует специалиста": "var(--danger)",
+            "В работе": "var(--warn)",
+            "Черновик закрытия": "var(--warn)",
+            "Закрыто": "var(--ok)"
         };
 
         label.innerHTML =
             `Обращение №${caseData.id} · ` +
-            `<span style="color:${colors[caseData.status] || "#333"};font-weight:600">` +
+            `<span style="color:${colors[caseData.status] || "var(--text)"};font-weight:600">` +
             `${escapeHtml(caseData.status)}</span>`;
     }
 
@@ -280,11 +280,11 @@ function renderExplanation(explanation) {
 
     if (!box || !explanation) return;
 
-    const colors = { "Высокая": "#16a34a", "Средняя": "#d97706", "Низкая": "#dc2626" };
+    const colors = { "Высокая": "var(--ok)", "Средняя": "var(--warn)", "Низкая": "var(--danger)" };
 
     box.style.display = "block";
     box.innerHTML =
-        `<span style="color:${colors[explanation.confidence] || "#666"};font-weight:600">` +
+        `<span style="color:${colors[explanation.confidence] || "var(--text-dim)"};font-weight:600">` +
         `Уверенность: ${escapeHtml(explanation.confidence)}</span>` +
         (explanation.basis && explanation.basis.length
             ? ` · ${explanation.basis.map(escapeHtml).join(" · ")}`

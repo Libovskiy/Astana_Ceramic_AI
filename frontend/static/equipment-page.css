@@ -146,7 +146,7 @@
 
 /* ── Кнопки-модификаторы (рядом с базовым .btn из acai.css) ── */
 .btn-primary { background: var(--accent); color: #fff; }
-.btn-success { background: var(--ok); color: #fff; }
+.btn-success { background: var(--ok-solid); color: #fff; }
 .btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn-block { width: 100%; display: block; }

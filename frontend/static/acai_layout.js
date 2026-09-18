@@ -200,7 +200,10 @@ const ACAI = {
 
   // Цвет аватара по имени
   avatarColor(name) {
-    const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#ef4444','#06b6d4'];
+    // Инициалы пишутся белым, поэтому фон нужен достаточно тёмный.
+    // Прежние оттенки (#f59e0b, #10b981, #06b6d4) давали контраст
+    // около 2:1 — буквы на кружке в цеху было не разобрать.
+    const colors = ['#2563eb','#7c3aed','#be185d','#b45309','#047857','#b91c1c','#0e7490'];
     let h = 0;
     for (const c of (name||'')) h = (h*31 + c.charCodeAt(0)) & 0xffffffff;
     return colors[Math.abs(h) % colors.length];
