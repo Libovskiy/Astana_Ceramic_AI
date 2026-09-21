@@ -110,6 +110,16 @@ async function load() {
   render(grouped);
 }
 
+// В базе симптом хранится вместе с названием станка («Дробилка DTE 117.
+// стучит вал»), а на карточке станок и так написан отдельной строкой.
+// Показываем только саму жалобу.
+function shortSymptom(text, machine) {
+  const value = String(text || '').trim();
+  const name = String(machine || '').trim();
+  if (!name || !value.toLowerCase().startsWith(name.toLowerCase())) return value;
+  return value.slice(name.length).replace(/^[\s.,:;—-]+/, '') || value;
+}
+
 function render(grouped) {
   const q = document.getElementById('searchInst')?.value.toLowerCase() || '';
   const page = document.getElementById('pageContent');
@@ -139,7 +149,7 @@ function render(grouped) {
         ${filtered.map(item => `
           <div class="k-card" onclick="openInstruction(${JSON.stringify(item).replace(/"/g,'&quot;')})">
             <div class="k-icon">📋</div>
-            <div class="k-title">${item.symptom||'Инструкция'}</div>
+            <div class="k-title">${shortSymptom(item.symptom, machine)||'Инструкция'}</div>
             <div class="k-machine">${machine}</div>
             <div class="k-desc">${(item.resolution||'').slice(0,80)}${(item.resolution||'').length>80?'...':''}</div>
             <div class="k-footer">
@@ -171,7 +181,7 @@ function openInstruction(item) {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
       <span style="font-size:24px">📋</span>
       <div>
-        <h3 style="margin:0">${item.symptom||'Инструкция'}</h3>
+        <h3 style="margin:0">${shortSymptom(item.symptom, item.machine)||'Инструкция'}</h3>
         <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${item.machine||''}</div>
       </div>
     </div>

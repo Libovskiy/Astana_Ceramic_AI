@@ -28,6 +28,7 @@ ORDER = [
     "test_buttons_match_rights.py",
     "test_dark_theme.py",
     "test_ai_answers_everyone.py",
+    "test_knowledge_shows_content.py",
 ]
 
 failed = []

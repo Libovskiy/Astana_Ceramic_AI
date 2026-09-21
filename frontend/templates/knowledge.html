@@ -136,6 +136,16 @@ function renderMetrics() {
   `;
 }
 
+// В базе симптом хранится вместе с названием станка («Дробилка DTE 117.
+// стучит вал»), а на карточке станок и так написан отдельной строкой.
+// Показываем только саму жалобу.
+function shortSymptom(text, machine) {
+  const value = String(text || '').trim();
+  const name = String(machine || '').trim();
+  if (!name || !value.toLowerCase().startsWith(name.toLowerCase())) return value;
+  return value.slice(name.length).replace(/^[\s.,:;—-]+/, '') || value;
+}
+
 function render() {
   const q = searchQ.toLowerCase();
   const sections = Object.entries(allKnowledge).filter(([machine, items]) => {
@@ -164,7 +174,7 @@ function render() {
       ${filtered.map(item => `
         <div class="kb-card ${item.confirmed_by?'confirmed':''}" onclick="openItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">
           <div class="kb-machine">${machine}</div>
-          <div class="kb-symptom">${item.symptom || 'Общее решение'}</div>
+          <div class="kb-symptom">${shortSymptom(item.symptom, machine) || 'Общее решение'}</div>
           <div class="kb-resolution">${(item.resolution||'').slice(0,120)}${(item.resolution||'').length>120?'...':''}</div>
           <div class="kb-footer">
             ${item.confirmed_by ? `<span class="badge ok">✓ Подтверждено: ${item.confirmed_by}</span>` : '<span class="badge neutral">Из документации</span>'}
@@ -182,7 +192,7 @@ function openItem(item) {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
       <span style="font-size:24px">📋</span>
       <div>
-        <h3 style="margin:0">${item.symptom || 'Решение'}</h3>
+        <h3 style="margin:0">${shortSymptom(item.symptom, item.machine) || 'Решение'}</h3>
         <div style="font-size:12px;color:var(--accent);margin-top:2px">${item.machine || '—'}</div>
       </div>
       ${item.confirmed_by ? '<span class="badge ok">✓ Подтверждено</span>' : ''}
