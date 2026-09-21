@@ -99,6 +99,26 @@
         <div id="logResult" style="margin-top: 12px; font-size: 13px;"></div>
       </section>
 
+      <!-- СМЕННЫЙ ОТЧЁТ ИЗ ЭКСЕЛЯ -->
+      <!-- Начальник производства ведёт отчёт в Экселе (файл в Битриксе).
+           Связь односторонняя: Эксель главный, сайт читает. Всё, что не
+           разобралось, показываем вслух — молча показанное неверное
+           число хуже, чем не показанное вовсе. -->
+      <section class="dashboard-card" id="xlsCard">
+        <div class="card-header">
+          <h2>Сменный отчёт из Экселя</h2>
+          <p>Файл начальника производства. Сайт только читает — в файл ничего не пишет</p>
+        </div>
+        <div id="xlsBody"><div class="loading-state">Загрузка…</div></div>
+        <div id="xlsActions" style="display:none;margin-top:14px;gap:8px;flex-wrap:wrap;align-items:center">
+          <label class="btn secondary sm" style="cursor:pointer">
+            📥 Загрузить файл отчёта
+            <input type="file" id="xlsFile" accept=".xlsx,.xlsm" style="display:none">
+          </label>
+          <span id="xlsHint" style="font-size:12px;color:var(--text-dim)"></span>
+        </div>
+      </section>
+
       <!-- MONTHLY PLAN -->
       <section class="dashboard-card" id="planSection" style="display: none;">
         <div class="card-header">
@@ -134,7 +154,135 @@
 <script src="/static/shift-report.js?v=4"></script>
 <script>
 // Сначала меню (от него зависят ссылки в выводе), потом сам вывод.
-initLayout().then(ctx => { initShiftReport(); renderProdVerdict(ctx?.user?.role); });
+initLayout().then(ctx => {
+  initShiftReport();
+  renderProdVerdict(ctx?.user?.role);
+  loadXls(ctx?.user?.role);
+});
+
+// ── Сменный отчёт из Экселя ──────────────────────────────
+// Кто может загружать файл — список должен совпадать с
+// REPORT_IMPORT_ROLES на сервере, иначе кнопка приведёт к 403.
+const XLS_IMPORT_ROLES = ['admin', 'director', 'chief_engineer', 'shift_supervisor'];
+
+const xlsEsc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const xlsHours = m => { m = Math.round(m||0); const h = Math.floor(m/60); return h ? `${h} ч ${m%60} мин` : `${m} мин`; };
+
+// «402 простоя», а не «402 простоев»: мелочь, но по ней видно,
+// писал это человек или машина.
+const xlsPlural = (n, one, few, many) => {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  if (b === 1) return one;
+  return many;
+};
+
+async function loadXls(role){
+  const body = document.getElementById('xlsBody');
+  const actions = document.getElementById('xlsActions');
+
+  if (XLS_IMPORT_ROLES.includes(role)) {
+    actions.style.display = 'flex';
+    document.getElementById('xlsFile').addEventListener('change', uploadXls);
+  }
+
+  let data = {};
+  try { data = await ACAI.get('/api/production/report-import'); } catch { data = {}; }
+
+  if (!data.loaded) {
+    body.innerHTML = `<div class="empty-state" style="line-height:1.5">
+      <div style="font-weight:600;color:var(--text)">Отчёт ещё не загружали</div>
+      <div style="font-size:13px;margin-top:4px">Пока файла нет, сайт про смены и простои из него ничего не знает — и не показывает вместо них нули.</div>
+    </div>`;
+    return;
+  }
+
+  const run = data.run || {};
+  const problems = data.problems || [];
+  const sections = data.by_section || [];
+
+  body.innerHTML = `
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:12px">
+      <div><b style="font-family:var(--mono);font-size:20px">${run.shifts||0}</b> ${xlsPlural(run.shifts||0,'смена','смены','смен')}</div>
+      <div><b style="font-family:var(--mono);font-size:20px">${run.downtime||0}</b> ${xlsPlural(run.downtime||0,'простой','простоя','простоев')} · ${xlsHours(run.minutes)}</div>
+      <div><b style="font-family:var(--mono);font-size:20px">${run.notes||0}</b> ${xlsPlural(run.notes||0,'запись','записи','записей')} журнала ремонтов</div>
+    </div>
+
+    ${problems.length ? `
+      <div style="border:1px solid var(--warn);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-weight:700;color:var(--warn);margin-bottom:6px">Не разобрал ${problems.length} ${xlsPlural(problems.length,'запись','записи','записей')}</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">Эти строки в расчёт не попали. Ноль вместо них не рисуем — поправьте в файле и загрузите заново.</div>
+        <div style="max-height:180px;overflow-y:auto;font-size:12px;line-height:1.6">
+          ${problems.slice(0,50).map(p => `<div>• <b>${xlsEsc(p.sheet)}</b>, строка ${p.row}: ${xlsEsc(p.what)}</div>`).join('')}
+          ${problems.length>50 ? `<div style="color:var(--text-dim);margin-top:4px">…и ещё ${problems.length-50}</div>` : ''}
+        </div>
+      </div>` : ''}
+
+    ${sections.length ? `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Участок</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Случаев</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Простой</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Не разобрано</th>
+        </tr></thead>
+        <tbody>
+          ${sections.map(x => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:8px">${xlsEsc(x.section_title)}</td>
+            <td style="padding:8px;font-family:var(--mono)">${x.cases}</td>
+            <td style="padding:8px;font-family:var(--mono)">${xlsHours(x.minutes)}</td>
+            <td style="padding:8px;font-family:var(--mono);color:${x.unparsed?'var(--warn)':'var(--text-dim)'}">${x.unparsed||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+
+    <div style="font-size:12px;color:var(--text-dim);margin-top:10px">
+      Файл «${xlsEsc(run.filename||'—')}» загрузил ${xlsEsc(run.uploaded_by||'—')}, ${xlsEsc((run.uploaded_at||'').slice(0,16))}.
+      ${data.last_shift_date ? `Последняя смена в файле — ${xlsEsc(data.last_shift_date)}.` : ''}
+    </div>`;
+
+  const hint = document.getElementById('xlsHint');
+  if (hint) hint.textContent = 'Загрузка заменяет данные за год целиком — файл главнее сайта.';
+}
+
+async function uploadXls(event){
+  const input = event.target;
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  const hint = document.getElementById('xlsHint');
+  hint.textContent = 'Читаю файл…';
+
+  const reader = new FileReader();
+  reader.onload = async function(){
+    try {
+      const response = await fetch('/api/production/report-import', {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          filename: file.name,
+          data: String(reader.result).split(',')[1],
+          year: new Date().getFullYear(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        hint.textContent = '';
+        alert(data.detail || 'Не получилось прочитать файл.');
+        return;
+      }
+      hint.textContent = '';
+      await loadXls((await ACAI.get('/auth/me'))?.user?.role || (await ACAI.get('/auth/me'))?.role);
+    } catch (error) {
+      hint.textContent = '';
+      alert('Нет связи с сервером.');
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
 
 // Выпуск за сутки против плана. Если за сегодня не вносили ни строчки —
 // пишем это прямо, а не «0% выполнения плана».

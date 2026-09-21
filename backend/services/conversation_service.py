@@ -454,8 +454,9 @@ def generate_reply(case_id):
     doc_context = "\n\n".join(context_chunks[:3])
 
     hints = get_relevant_resolutions(case.get("machine") or "", question)
+    journal = _journal_hints(case.get("equipment_id"), case.get("machine") or "", question)
 
-    if not context_chunks and not hints:
+    if not context_chunks and not hints and not journal:
         return _escalate(case_id, case, messages, "нет своей документации и решений",
                          honest_unknown(title, has_documentation))
 
@@ -473,7 +474,8 @@ def generate_reply(case_id):
         question=full_question,
         doc_context=doc_context,
         tried_actions=tried,
-        knowledge_hints=hints
+        knowledge_hints=hints,
+        journal_hints=journal
     )
 
     # -----------------------------------------
@@ -489,9 +491,12 @@ def generate_reply(case_id):
     # 4. Ответ
     # -----------------------------------------
 
-    confidence, source = _confidence(hints, context_chunks, suggestion)
+    confidence, source = _confidence(hints, context_chunks, suggestion, journal_hints=journal)
 
     basis = [f"Совет {source}"]
+
+    if journal and not context_chunks:
+        basis.append(f"журнал ремонтов участка ({len(journal)})")
 
     if hints:
         basis.append(_case_word(len(hints)) + " на этом станке в базе знаний")
@@ -504,7 +509,7 @@ def generate_reply(case_id):
         }
         basis.append("Руководство: " + ", ".join(sorted(files)) if files else "Руководство по этому станку")
 
-    if confidence == "Низкая":
+    if confidence == "Низкая" and not journal:
         basis.append("Документации по этому станку не нашлось")
 
     set_step(case_id, current_step + 1)
@@ -522,7 +527,40 @@ def generate_reply(case_id):
 
 
 
-def _confidence(hints, context_chunks, suggestion):
+
+def _journal_hints(equipment_id, machine, question):
+    """
+    Записи журнала ремонтов по участку этого станка.
+
+    По 26 станкам из 49 своего руководства нет, и раньше ИИ по ним
+    сразу звал специалиста. В сменном отчёте лежит 361 запись живого
+    опыта — «Замена скребков УСМ-40», «Ремонт червячного вала
+    Мессерси». Источник слабее подтверждённого решения, поэтому идёт
+    отдельно и помечается честно.
+    """
+    try:
+        from backend.services.equipment_service import get_equipment
+        from backend.services.production_import_service import repairs_for_machine
+
+        location = None
+        if equipment_id:
+            equipment = get_equipment(equipment_id) or {}
+            location = equipment.get("location") or equipment.get("stage")
+
+        if not location:
+            return []
+
+        found = repairs_for_machine(machine, location, question)
+        return [
+            f"{(row.get('date') or '')[:10]}, {row.get('section_title') or ''}: {row.get('text')}"
+            for row in found
+        ]
+    except Exception as error:
+        print(f"[journal] подсказки из отчёта не собраны: {error}")
+        return []
+
+
+def _confidence(hints, context_chunks, suggestion, journal_hints=None):
     """
     Честная оценка, на что опёрся совет.
 
@@ -550,6 +588,10 @@ def _confidence(hints, context_chunks, suggestion):
         return "Высокая", "по прошлому подтверждённому случаю"
     if context_chunks:
         return "Средняя", "по руководству этого станка"
+    if journal_hints:
+        # Журнал говорит, что на участке делали, но не говорит, помогло
+        # ли это при такой неисправности. Обещать больше нельзя.
+        return "Низкая", "по журналу ремонтов участка — руководства по станку нет"
     return "Низкая", "общие знания ИИ"
 
 

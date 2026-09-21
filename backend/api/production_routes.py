@@ -423,3 +423,98 @@ def get_production_shift_chart_route(
         "success": True,
         **get_shift_chart_data(log_date=log_date, shift=shift)
     }
+
+
+# =========================================
+# СМЕННЫЙ ОТЧЁТ ИЗ ЭКСЕЛЯ
+# =========================================
+# Начальник производства ведёт отчёт в Экселе (файл в Битриксе, доступа
+# у сайта нет — загружают руками). Связь односторонняя: Эксель главный,
+# сайт читает. Обратной записи нет и не будет: портить чужую отчётность
+# нельзя.
+
+# Кто загружает отчёт. Это данные всего завода за год, поэтому список
+# узкий — те же, кто отвечает за производство в целом.
+REPORT_IMPORT_ROLES = ("admin", "director", "chief_engineer", "shift_supervisor")
+
+MAX_REPORT_BYTES = 25 * 1024 * 1024
+
+
+@router.post("/api/production/report-import")
+def import_production_report(
+    request: dict,
+    user: dict = Depends(require_roles(*REPORT_IMPORT_ROLES))
+):
+    """
+    Загрузка файла отчёта: читаем, показываем что прочиталось и что нет.
+
+    Файл принимается целиком в base64 — так же, как документы станков:
+    отдельная форма multipart ради одного файла в год не нужна.
+    """
+    import base64
+    import tempfile
+    from datetime import datetime
+    from pathlib import Path
+
+    from fastapi import HTTPException
+
+    from backend.services.production_report_import import read_workbook
+    from backend.services.production_import_service import save_workbook
+
+    filename = (request.get("filename") or "").strip() or "отчёт.xlsx"
+
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Нужен файл Excel (.xlsx).")
+
+    try:
+        binary = base64.b64decode(request.get("data") or "", validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Файл не прочитался — попробуйте загрузить заново.")
+
+    if not binary:
+        raise HTTPException(status_code=400, detail="Пустой файл.")
+
+    if len(binary) > MAX_REPORT_BYTES:
+        raise HTTPException(status_code=413, detail="Файл больше 25 МБ.")
+
+    try:
+        year = int(request.get("year") or datetime.now().year)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Не понял год отчёта.")
+
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "report.xlsx"
+        path.write_bytes(binary)
+
+        try:
+            data = read_workbook(str(path), year)
+        except Exception as error:
+            # Читать чужой файл — дело ненадёжное: его могли
+            # пересохранить, защитить паролем, сломать. Говорим прямо,
+            # что не смогли, и ничего не записываем.
+            raise HTTPException(
+                status_code=400,
+                detail=f"Не смог прочитать файл: {error}. Данные на сайте не менялись."
+            )
+
+    result = save_workbook(data, filename, user.get("full_name") or user.get("username"))
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="production_report_imported", target=f"year:{year}",
+        details=(f"{filename}: смен {result['run']['shifts']}, простоев {result['run']['downtime']}, "
+                 f"записей журнала {result['run']['notes']}, не разобрано {result['run']['problems']}")
+    )
+
+    return {"success": True, **result}
+
+
+@router.get("/api/production/report-import")
+def production_report_state(
+    year: int | None = None,
+    user: dict = Depends(get_current_user)
+):
+    """Что сейчас прочитано из Экселя и что не разобралось."""
+    from backend.services.production_import_service import summary, history
+
+    return {"success": True, **summary(year), "history": history(5)}

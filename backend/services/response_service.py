@@ -34,6 +34,39 @@ def machine_title(machine, equipment_id=None):
     return (machine or "").strip()
 
 
+
+def _journal_hints(equipment_id, machine, question):
+    """
+    Записи журнала ремонтов по участку этого станка.
+
+    По 26 станкам из 49 своего руководства нет, и раньше ИИ по ним
+    сразу звал специалиста. В сменном отчёте лежит 361 запись живого
+    опыта — «Замена скребков УСМ-40», «Ремонт червячного вала
+    Мессерси». Источник слабее подтверждённого решения, поэтому идёт
+    отдельно и помечается честно.
+    """
+    try:
+        from backend.services.equipment_service import get_equipment
+        from backend.services.production_import_service import repairs_for_machine
+
+        location = None
+        if equipment_id:
+            equipment = get_equipment(equipment_id) or {}
+            location = equipment.get("location") or equipment.get("stage")
+
+        if not location:
+            return []
+
+        found = repairs_for_machine(machine, location, question)
+        return [
+            f"{(row.get('date') or '')[:10]}, {row.get('section_title') or ''}: {row.get('text')}"
+            for row in found
+        ]
+    except Exception as error:
+        print(f"[journal] подсказки из отчёта не собраны: {error}")
+        return []
+
+
 def build_answer(
     case_id,
     machine,
@@ -165,10 +198,12 @@ def build_answer(
     doc_context = "\n\n".join(context_chunks[:3])
 
     knowledge_hints = get_relevant_resolutions(machine, question)
+    journal_hints = _journal_hints(equipment_id, machine, question)
 
     # Опереться не на что — честно говорим и зовём специалиста, а не
-    # выдаём общие советы с видом знатока
-    if not context_chunks and not knowledge_hints:
+    # выдаём общие советы с видом знатока. Журнал ремонтов участка тоже
+    # опора: слабая, но своя, с этого завода.
+    if not context_chunks and not knowledge_hints and not journal_hints:
         return {
             "case_id": case_id,
             "machine": machine.capitalize(),
@@ -183,16 +218,21 @@ def build_answer(
         question=question,
         doc_context=doc_context,
         tried_actions=exclude_actions,
-        knowledge_hints=knowledge_hints
+        knowledge_hints=knowledge_hints,
+        journal_hints=journal_hints
     )
 
     if suggestion:
 
         from backend.services.conversation_service import _confidence, _case_word
 
-        confidence, source = _confidence(knowledge_hints, context_chunks, suggestion)
+        confidence, source = _confidence(knowledge_hints, context_chunks, suggestion,
+                                         journal_hints=journal_hints)
 
         basis = [f"Совет {source}"]
+
+        if journal_hints and not context_chunks:
+            basis.append(f"журнал ремонтов участка ({len(journal_hints)})")
 
         if knowledge_hints:
             basis.append(_case_word(len(knowledge_hints)) + " на этом станке в базе знаний")
@@ -202,7 +242,7 @@ def build_answer(
                 f"Руководство по этому станку ({min(len(context_chunks), 3)} фрагм.)"
             )
 
-        if confidence == "Низкая":
+        if confidence == "Низкая" and not journal_hints:
             basis.append("Подтверждённых случаев и документации по станку не нашлось")
 
         return {

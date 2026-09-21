@@ -157,7 +157,7 @@ def ask_management_ai(question, dashboard_data):
         print(f"[ai_service] Ошибка запроса к OpenAI (management): {error}")
         return None
 
-def suggest_next_action(machine, question, doc_context, tried_actions, knowledge_hints):
+def suggest_next_action(machine, question, doc_context, tried_actions, knowledge_hints, journal_hints=None):
     """
     Предлагает ОДНО следующее диагностическое действие — не список,
     а именно следующий шаг, с учётом того, что уже пробовали и не помогло.
@@ -185,6 +185,16 @@ def suggest_next_action(machine, question, doc_context, tried_actions, knowledge
         "\n".join(f"- {hint}" for hint in knowledge_hints)
         if knowledge_hints
         else "(похожих подтверждённых решений в базе знаний пока нет)"
+    )
+
+    # Журнал ремонтов из сменного отчёта: что РЕАЛЬНО делали на этом
+    # участке. Источник слабее подтверждённого решения — там не сказано,
+    # помогло ли и при той ли неисправности, — но по станкам без
+    # руководства это единственный живой опыт завода.
+    journal_text = (
+        "\n".join(f"- {hint}" for hint in (journal_hints or []))
+        if journal_hints
+        else "(записей журнала по этому участку нет)"
     )
 
     try:
@@ -226,6 +236,14 @@ def suggest_next_action(machine, question, doc_context, tried_actions, knowledge
                         "БЕЗОПАСНОСТЬ: если шаг требует лезть к движущимся "
                         "частям, в электрошкаф или к горячему — первым делом "
                         "скажи остановить станок и снять питание.\n"
+                        "ЖУРНАЛ РЕМОНТОВ УЧАСТКА — это записи сменного "
+                        "отчёта: что здесь уже чинили и меняли. Он слабее "
+                        "подтверждённого решения: там не сказано, помогло ли "
+                        "и при той ли неисправности. Опирайся на него, когда "
+                        "руководства по станку нет, и говори честно: «в "
+                        "журнале по этому участку есть запись — …, стоит "
+                        "проверить это». Не выдавай запись журнала за "
+                        "проверенное решение.\n"
                         "ПОДТВЕРЖДЁННЫЕ СЛУЧАИ ВАЖНЕЕ ВСЕГО ОСТАЛЬНОГО. "
                         "Если ниже есть решения похожих случаев на ЭТОМ же "
                         "станке — это то, что уже чинили руками на этом "
@@ -249,6 +267,9 @@ def suggest_next_action(machine, question, doc_context, tried_actions, knowledge
 
 Подтверждённые решения похожих случаев из базы знаний:
 {knowledge_text}
+
+Журнал ремонтов этого участка (что уже делали руками):
+{journal_text}
 
 Проблема рабочего:
 {question}
