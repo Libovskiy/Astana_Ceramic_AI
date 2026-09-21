@@ -188,25 +188,22 @@ def build_answer(
 
     if suggestion:
 
-        basis = []
+        from backend.services.conversation_service import _confidence, _case_word
+
+        confidence, source = _confidence(knowledge_hints, context_chunks, suggestion)
+
+        basis = [f"Совет {source}"]
 
         if knowledge_hints:
-            basis.append(
-                f"{len(knowledge_hints)} подтверждённых похожих случаев в базе знаний"
-            )
+            basis.append(_case_word(len(knowledge_hints)) + " на этом станке в базе знаний")
 
         if context_chunks:
             basis.append(
                 f"Руководство по этому станку ({min(len(context_chunks), 3)} фрагм.)"
             )
 
-        if knowledge_hints:
-            confidence = "Высокая"
-        elif context_chunks:
-            confidence = "Средняя"
-        else:
-            confidence = "Низкая"
-            basis.append("Общие знания ИИ — подтверждённых случаев или документации не найдено")
+        if confidence == "Низкая":
+            basis.append("Подтверждённых случаев и документации по станку не нашлось")
 
         return {
             "case_id": case_id,

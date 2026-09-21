@@ -459,10 +459,12 @@ def generate_reply(case_id):
     # 4. Ответ
     # -----------------------------------------
 
-    basis = []
+    confidence, source = _confidence(hints, context_chunks, suggestion)
+
+    basis = [f"Совет {source}"]
 
     if hints:
-        basis.append(f"{len(hints)} подтверждённых похожих случаев")
+        basis.append(_case_word(len(hints)) + " на этом станке в базе знаний")
 
     if context_chunks:
         files = {
@@ -472,13 +474,8 @@ def generate_reply(case_id):
         }
         basis.append("Руководство: " + ", ".join(sorted(files)) if files else "Руководство по этому станку")
 
-    if hints:
-        confidence = "Высокая"
-    elif context_chunks:
-        confidence = "Средняя"
-    else:
-        confidence = "Низкая"
-        basis.append("Общие знания ИИ — документации по этому станку не нашлось")
+    if confidence == "Низкая":
+        basis.append("Документации по этому станку не нашлось")
 
     set_step(case_id, current_step + 1)
 
@@ -492,6 +489,47 @@ def generate_reply(case_id):
         "step": current_step + 1,
         "explanation": {"confidence": confidence, "basis": basis}
     }
+
+
+
+def _confidence(hints, context_chunks, suggestion):
+    """
+    Честная оценка, на что опёрся совет.
+
+    Раньше «Высокая» ставилась, как только в базе знаний нашёлся хоть
+    один похожий случай — даже если ответ был целиком из руководства и
+    прошлое решение в нём не упоминалось. Человек видел «Высокая
+    уверенность · 1 подтверждённых похожих случаев», читал общий совет
+    и справедливо не верил подписи (21.09.2026).
+
+    Теперь «Высокая» — только если совет ДЕЙСТВИТЕЛЬНО про то, что уже
+    помогало на этом станке: значимые слова прошлого решения встречаются
+    в ответе.
+    """
+    from backend.services.knowledge_service import _keywords
+
+    used_past = False
+
+    for hint in hints or []:
+        words = _keywords(hint)
+        if words and len(words & _keywords(suggestion)) >= max(1, len(words) // 3):
+            used_past = True
+            break
+
+    if used_past:
+        return "Высокая", "по прошлому подтверждённому случаю"
+    if context_chunks:
+        return "Средняя", "по руководству этого станка"
+    return "Низкая", "общие знания ИИ"
+
+
+def _case_word(n):
+    """«1 подтверждённый случай», а не «1 подтверждённых случаев»."""
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} подтверждённый случай"
+    if n % 10 in (2, 3, 4) and not (12 <= n % 100 <= 14):
+        return f"{n} подтверждённых случая"
+    return f"{n} подтверждённых случаев"
 
 
 NOT_HELPED_PHRASES = {"не помогло", "не помогло, что дальше?", "не помогло, что дальше"}

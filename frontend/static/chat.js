@@ -757,7 +757,18 @@ function renderQuickReplies(messages, caseData, role) {
 
     if (!box) return;
 
-    const last = messages[messages.length - 1];
+    // Последний СОВЕТ, а не последнее сообщение вообще. После совета
+    // система дописывает служебные строки — «🔎 уже было похожее» и
+    // «📦 на складе N шт». Пока проверялось последнее сообщение, после
+    // них кнопки пропадали, и человеку приходилось печатать «не
+    // помогло» руками (21.09.2026).
+    let last = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const item = messages[i];
+        if (item.role === "assistant") { last = item; break; }
+        // Человек ответил после совета — кнопки уже отработали.
+        if (item.role === "worker" || item.role === "specialist") break;
+    }
 
     // Кнопки нужны тому, кто стоит у станка, а это не только рабочий:
     // мастер смены, механик и главный инженер пишут из той же
@@ -765,7 +776,7 @@ function renderQuickReplies(messages, caseData, role) {
     // «не помогло» руками — и ИИ на это не отвечал вовсе.
     const show =
         caseData.status === "Открыто"
-        && last && last.role === "assistant"
+        && last
         && !sending;
 
     const confirmOpen = document.getElementById("chatConfirm").style.display === "flex";
