@@ -66,6 +66,7 @@ def init_production_import():
             master TEXT,
             forming_plan REAL, forming_fact REAL,
             packing_plan REAL, packing_fact REAL,
+            defect_pieces REAL,
             sheet TEXT, row INTEGER
         )
     """)
@@ -103,6 +104,21 @@ def init_production_import():
     """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS xls_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            shift TEXT,
+            sheet TEXT,
+            title TEXT NOT NULL,       -- «1 4 НФ пустотел», как в файле
+            column_name TEXT,          -- полный заголовок колонки
+            unit TEXT NOT NULL,        -- шт / м3 — тоже как в файле
+            value REAL NOT NULL
+        )
+    """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS xls_problems (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id INTEGER NOT NULL,
@@ -112,11 +128,16 @@ def init_production_import():
         )
     """)
 
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(xls_shifts)")}
+    if "defect_pieces" not in columns:
+        conn.execute("ALTER TABLE xls_shifts ADD COLUMN defect_pieces REAL")
+
     for statement in (
         "CREATE INDEX IF NOT EXISTS idx_xls_shifts_date ON xls_shifts(date)",
         "CREATE INDEX IF NOT EXISTS idx_xls_downtime_date ON xls_downtime(date)",
         "CREATE INDEX IF NOT EXISTS idx_xls_downtime_section ON xls_downtime(section)",
         "CREATE INDEX IF NOT EXISTS idx_xls_notes_section ON xls_notes(section)",
+        "CREATE INDEX IF NOT EXISTS idx_xls_products_date ON xls_products(date)",
     ):
         conn.execute(statement)
 
@@ -214,20 +235,33 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
 
         # Файл — источник правды: прошлая версия этого года уходит целиком,
         # иначе удалённая из Экселя строка осталась бы жить на сайте.
-        for table in ("xls_shifts", "xls_downtime", "xls_notes", "xls_problems"):
+        for table in ("xls_shifts", "xls_downtime", "xls_notes", "xls_problems", "xls_products"):
             conn.execute(f"DELETE FROM {table} WHERE year = ?", (year,))
 
         conn.executemany(
             """
             INSERT INTO xls_shifts
                 (run_id, year, date, shift, master,
-                 forming_plan, forming_fact, packing_plan, packing_fact, sheet, row)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 forming_plan, forming_fact, packing_plan, packing_fact,
+                 defect_pieces, sheet, row)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [(run_id, year, item["date"], item["shift"], item.get("master"),
               item.get("forming_plan"), item.get("forming_fact"),
               item.get("packing_plan"), item.get("packing_fact"),
+              item.get("defect_pieces"),
               item.get("sheet"), item.get("row")) for item in shifts]
+        )
+
+        conn.executemany(
+            """
+            INSERT INTO xls_products
+                (run_id, year, date, shift, sheet, title, column_name, unit, value)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(run_id, year, item["date"], item.get("shift"), item.get("sheet"),
+              product["title"], product["column"], product["unit"], product["value"])
+             for item in shifts for product in item.get("products") or []]
         )
 
         conn.executemany(
@@ -881,4 +915,117 @@ def planned_stops(year: int | None = None, month: int | None = None) -> dict:
         "count": len(planned),
         "minutes": sum(row["minutes"] or 0 for row in planned),
         "items": planned[:20],
+    }
+
+
+# Сколько кубометров в одной штуке — чтобы перевести м³ в кирпичи.
+# Владелец, 21.09.2026: «блок 10,7НФ — 0,0208 м³», остальное «ведут
+# поштучно». Выдумывать коэффициенты нельзя: ошибка здесь искажает
+# весь выпуск завода, поэтому чего не сказали — оставляем как есть.
+#
+# Ключ — только цифры формата: «10 7НФ», «10,7НФ», «10.7 нф» → «107».
+VOLUME_PER_PIECE = {
+    "107": 0.0208,     # блок 10,7НФ
+}
+
+# Больше этого числа за смену в кубометрах не бывает: 29 000 в колонке,
+# подписанной «м3», — это штуки. Владелец подтвердил: пустотелый и
+# полнотелый ведут поштучно, подпись в шапке осталась от старой версии
+# файла. Такие колонки считаем штуками и пишем об этом в пояснении.
+MAX_CUBIC_PER_SHIFT = 1000
+
+
+def _format_key(title: str) -> str:
+    return "".join(ch for ch in str(title or "") if ch.isdigit())
+
+
+def production_totals(year: int | None = None, month_sheet: str = None) -> dict:
+    """
+    Сколько сделали кирпичей и сколько ушло в брак.
+
+    Единицы берём как в файле. В штуки переводим только то, для чего
+    известен коэффициент (`VOLUME_PER_PIECE`); остальное показываем в
+    кубометрах и честно пишем, что пересчитать не можем.
+    """
+    init_production_import()
+
+    conn = get_connection()
+    try:
+        if year is None:
+            row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
+            year = row[0] if row and row[0] else datetime.now().year
+
+        where = "WHERE year = ?"
+        params = [year]
+        if month_sheet:
+            where += " AND sheet = ?"
+            params.append(month_sheet)
+
+        rows = [dict(row) for row in conn.execute(
+            f"""
+            SELECT title, unit, COUNT(*) AS shifts, SUM(value) AS total, MAX(value) AS biggest
+            FROM xls_products {where}
+            GROUP BY title, unit ORDER BY total DESC
+            """, params
+        )]
+
+        defect = conn.execute(
+            f"SELECT SUM(COALESCE(defect_pieces, 0)), COUNT(defect_pieces) FROM xls_shifts {where}",
+            params
+        ).fetchone()
+    finally:
+        conn.close()
+
+    products, pieces_total, cubic_unknown, suspicious = [], 0, [], []
+
+    for row in rows:
+        item = {
+            "title": row["title"],
+            "unit": row["unit"],
+            "total": row["total"] or 0,
+            "shifts": row["shifts"],
+            "pieces": None,
+            "note": None,
+        }
+
+        if row["unit"] == "шт":
+            item["pieces"] = row["total"] or 0
+            pieces_total += item["pieces"]
+        else:
+            key = _format_key(row["title"])
+            coefficient = VOLUME_PER_PIECE.get(key)
+
+            if coefficient:
+                pass          # известен коэффициент — считаем ниже
+            elif (row["biggest"] or 0) > MAX_CUBIC_PER_SHIFT:
+                # За смену столько кубометров не делают. Владелец
+                # подтвердил: это штуки, подпись в шапке старая.
+                item["pieces"] = row["total"] or 0
+                item["unit_note"] = "шт"
+                item["note"] = "в шапке файла «м³», но ведут поштучно — считаю штуками"
+                pieces_total += item["pieces"]
+                suspicious.append(item["title"])
+                products.append(item)
+                continue
+
+            if coefficient:
+                item["pieces"] = round((row["total"] or 0) / coefficient)
+                item["coefficient"] = coefficient
+                item["note"] = f"пересчитано: {row['total']:.1f} м³ ÷ {coefficient} м³/шт"
+                pieces_total += item["pieces"]
+            else:
+                item["note"] = "коэффициент м³ → штуки не задан, оставляю кубометры"
+                cubic_unknown.append(item["title"])
+
+        products.append(item)
+
+    return {
+        "year": year,
+        "sheet": month_sheet,
+        "products": products,
+        "pieces_total": pieces_total,
+        "defect_pieces": (defect[0] or 0) if defect else 0,
+        "defect_shifts": (defect[1] or 0) if defect else 0,
+        "cubic_unknown": cubic_unknown,
+        "suspicious": suspicious,
     }

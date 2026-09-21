@@ -288,7 +288,56 @@ async function loadXls(role){
   const hint = document.getElementById('xlsHint');
   if (hint) hint.textContent = 'Загрузка заменяет данные за год целиком — файл главнее сайта.';
 
-  loadXlsAnalytics();
+  // Сначала аналитика: она перерисовывает весь контейнер, и если
+  // выпуск нарисовать раньше, его тут же затрёт.
+  await loadXlsAnalytics();
+  await loadXlsOutput();
+}
+
+// Сколько сделали кирпичей и сколько ушло в брак.
+// Единицы — как в файле: где формат записан в кубометрах и известен
+// коэффициент (блок 10,7НФ — 0,028 м³), переводим в штуки и пишем
+// формулу; где коэффициента нет — оставляем кубометры и говорим об
+// этом прямо.
+async function loadXlsOutput(){
+  const box = document.getElementById('xlsOutput');
+  if (!box) return;
+
+  let d = {};
+  try { d = await ACAI.get('/api/production/report-output'); } catch { return; }
+  if (!d.products || !d.products.length) return;
+
+  const num = v => Number(v || 0).toLocaleString('ru-RU', {maximumFractionDigits: 1});
+  const defectShare = d.pieces_total
+    ? (d.defect_pieces / d.pieces_total * 100).toFixed(2) : null;
+
+  box.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">Выпуск и брак за год</div>
+
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:10px">
+      <div><b style="font-family:var(--mono);font-size:20px">${num(d.pieces_total)}</b> шт сделано</div>
+      <div><b style="font-family:var(--mono);font-size:20px">${num(d.defect_pieces)}</b> шт брак и отстрел${
+        defectShare ? ` · ${defectShare}%` : ''}</div>
+    </div>
+
+    <div class="xls-scroll" style="margin-bottom:16px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Вид (как в отчёте)</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Сделано</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">В штуках</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Смен</th>
+      </tr></thead>
+      <tbody>
+        ${d.products.map(p => `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px">${xlsEsc(p.title)}
+            ${p.note ? `<div style="font-size:11px;color:${p.pieces==null?'var(--warn)':'var(--text-dim)'};margin-top:2px">${xlsEsc(p.note)}</div>` : ''}</td>
+          <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${num(p.total)} ${xlsEsc(p.unit)}</td>
+          <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${
+            p.pieces == null ? '<span style="color:var(--text-dim)">—</span>' : num(p.pieces)}</td>
+          <td style="padding:8px;font-family:var(--mono)">${p.shifts}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
 }
 
 async function loadXlsAnalytics(){
@@ -342,6 +391,8 @@ async function loadXlsAnalytics(){
     ${lines.length ? `<div style="border-left:3px solid var(--accent);padding:2px 0 2px 12px;margin-bottom:16px;font-size:14px;line-height:1.7">
       ${lines.map(l => `<div>${l}</div>`).join('')}
     </div>` : ''}
+
+    <div id="xlsOutput"></div>
 
     <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">По месяцам</div>
     <div style="margin-bottom:18px">

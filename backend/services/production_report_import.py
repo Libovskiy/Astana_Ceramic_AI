@@ -161,6 +161,39 @@ def row_has_values(ws, row: int) -> bool:
     )
 
 
+
+# ВЫПУСК ПРОДУКЦИИ И БРАК.
+#
+# Колонки меняются в течение года, и это не ошибка людей, а жизнь:
+# в январе писали «1 4 НФ полнател / штук», в июле появились
+# «4 6 НФ / м3» и «6 9 НФ пустотел / м3», в сентябре — «1,4 НФ
+# пустотел / м3». Поэтому колонки не перечисляем, а узнаём по
+# заголовку: НФ — это формат кирпича.
+#
+# Единицы берём ИЗ ЗАГОЛОВКА и ничего не пересчитываем молча:
+# пересчёт — дело вызывающего кода, который знает коэффициенты
+# (10,7НФ — 0,028 м³ за блок, сказал владелец 21.09.2026).
+PRODUCT_HEADER = re.compile(r"\bнф\b|\d\s*[,.]?\d*\s*нф", re.I)
+DEFECT_HEADER = re.compile(r"брак", re.I)
+
+
+def product_columns(headers: dict) -> dict:
+    """Колонки выпуска: номер → как подписан столбец в файле."""
+    return {
+        col: name
+        for col, name in headers.items()
+        if PRODUCT_HEADER.search(name) and not DEFECT_HEADER.search(name)
+    }
+
+
+def unit_of(header: str) -> str:
+    """«1 4 НФ пустотел / м3» → «м3»; «1.4НФ» → «шт» (по умолчанию)."""
+    low = (header or "").lower()
+    if "м3" in low or "м³" in low or "куб" in low:
+        return "м3"
+    return "шт"
+
+
 def read_month(ws, year: int, month: int) -> dict:
     headers = read_headers(ws)
 
@@ -177,6 +210,9 @@ def read_month(ws, year: int, month: int) -> dict:
         "packing": (find_column(headers, "упаковк", sub="план"),
                     find_column(headers, "упаковк", sub="факт")),
     }
+
+    products_cols = product_columns(headers)
+    defect_col = find_column(headers, "брак")
 
     shifts, downtime, notes, problems = [], [], [], []
     first_row = True
@@ -237,6 +273,30 @@ def read_month(ws, year: int, month: int) -> dict:
                     except ValueError:
                         problems.append({"sheet": ws.title, "row": row,
                                          "what": f"{SECTION_TITLES[key]}, {tag}: «{_clean(v)[:40]}» не число"})
+        # Выпуск по видам продукции и брак — как записано в файле,
+        # вместе с единицей из заголовка. Пересчёт не здесь.
+        record["products"] = []
+        for col, header in products_cols.items():
+            value = ws.cell(row, col).value
+            if isinstance(value, (int, float)) and value:
+                record["products"].append({
+                    "title": header.split(" / ")[0].strip(),
+                    "column": header,
+                    "unit": unit_of(header),
+                    "value": float(value),
+                })
+            elif _clean(value):
+                problems.append({"sheet": ws.title, "row": row,
+                                 "what": f"{header}: «{_clean(value)[:30]}» не число"})
+
+        if defect_col:
+            value = ws.cell(row, defect_col).value
+            if isinstance(value, (int, float)):
+                record["defect_pieces"] = float(value)
+            elif _clean(value):
+                problems.append({"sheet": ws.title, "row": row,
+                                 "what": f"брак: «{_clean(value)[:30]}» не число"})
+
         shifts.append(record)
 
         for key, (mins_col, why_col) in downtime_cols.items():

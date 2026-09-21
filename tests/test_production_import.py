@@ -392,4 +392,66 @@ check("плановые остановки за месяц считаются", 
 check("и это именно плановые",
       all(is_planned(item["reason"]) for item in stops["items"]), stops["items"][:2])
 
+print("\n11. Выпуск и брак: единицы как в файле")
+
+from backend.services.production_import_service import production_totals, VOLUME_PER_PIECE
+
+# Лист с выпуском: штуки, кубометры блока и «кубометры», которые на
+# самом деле штуки — всё как в живом файле.
+output = folder / "с-выпуском.xlsx"
+book = openpyxl.load_workbook(path)
+sheet = book.active
+last = sheet.max_column
+sheet.cell(1, last + 1, "Брак и отстрел"); sheet.cell(2, last + 1, "штук")
+sheet.cell(1, last + 2, "1.4НФ")
+sheet.cell(1, last + 3, "10,7НФ"); sheet.cell(2, last + 3, "м3")
+sheet.cell(1, last + 4, "4,6 НФ"); sheet.cell(2, last + 4, "м3")
+
+sheet.cell(3, last + 1, 900)        # брак
+sheet.cell(3, last + 2, 34000)      # 1.4НФ, штуки
+sheet.cell(3, last + 3, 20.8)       # 10,7НФ, м³ → 1000 шт при 0,0208
+sheet.cell(3, last + 4, 50)         # 4,6НФ, м³ — коэффициента нет
+book.save(output)
+
+data_out = read_workbook(str(output), 2026)
+save_workbook(data_out, "с-выпуском.xlsx", "Проверка")
+totals = production_totals(2026)
+
+by_title = {(item["title"], item["unit"]): item for item in totals["products"]}
+
+check("штуки прочитаны как штуки",
+      by_title.get(("1.4НФ", "шт"), {}).get("pieces") == 34000, by_title.get(("1.4НФ", "шт")))
+check("брак посчитан отдельно от выпуска",
+      totals["defect_pieces"] == 900, totals["defect_pieces"])
+
+block = by_title.get(("10,7НФ", "м3"), {})
+check("блок пересчитан по коэффициенту владельца (0,0208 м³)",
+      block.get("pieces") == 1000, block)
+check("и в пояснении видно, как посчитано",
+      "0.0208" in (block.get("note") or ""), block.get("note"))
+
+unknown = by_title.get(("4,6 НФ", "м3"), {})
+check("без коэффициента в штуки не переводим", unknown.get("pieces") is None, unknown)
+check("и говорим об этом прямо",
+      "коэффициент" in (unknown.get("note") or ""), unknown.get("note"))
+check("формат назван в списке «нет коэффициента»",
+      "4,6 НФ" in totals["cubic_unknown"], totals["cubic_unknown"])
+
+check("коэффициенты лежат в одном месте", "107" in VOLUME_PER_PIECE, VOLUME_PER_PIECE)
+
+# Колонка, подписанная «м³», но с тысячами за смену — это штуки.
+sheet.cell(1, last + 5, "1,4 НФ пустотел"); sheet.cell(2, last + 5, "м3")
+sheet.cell(3, last + 5, 29000)
+book.save(output)
+save_workbook(read_workbook(str(output), 2026), "с-выпуском.xlsx", "Проверка")
+totals = production_totals(2026)
+strange = next(item for item in totals["products"]
+               if item["title"] == "1,4 НФ пустотел" and item["unit"] == "м3")
+# Владелец подтвердил: пустотелый и полнотелый ведут поштучно, а
+# подпись «м3» в шапке осталась от старой версии файла.
+check("колонка с тысячами за смену считается штуками",
+      strange["pieces"] == 29000, strange)
+check("и человеку сказано, почему",
+      "ведут поштучно" in (strange["note"] or ""), strange["note"])
+
 finish("Сменный отчёт из Экселя")

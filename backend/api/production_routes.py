@@ -562,3 +562,22 @@ def production_report_analytics(
     from backend.services.production_import_service import analytics, last_day_summary
 
     return {"success": True, **analytics(year), "last_day": last_day_summary()}
+
+
+@router.get("/api/production/report-output")
+def production_report_output(
+    year: int | None = None,
+    sheet: str | None = None,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Сколько сделали кирпичей и сколько ушло в брак — по сменному отчёту.
+
+    Единицы — как в файле. В штуки переводим только то, для чего
+    владелец назвал коэффициент (блок 10,7НФ — 0,028 м³). Остальное
+    остаётся в кубометрах с честной пометкой: выдуманный коэффициент
+    исказил бы весь выпуск завода.
+    """
+    from backend.services.production_import_service import production_totals
+
+    return {"success": True, **production_totals(year, sheet)}
