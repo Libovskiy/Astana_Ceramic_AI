@@ -120,6 +120,47 @@ def _report_import_notifications(user):
     }]
 
 
+# Кому напоминать про обход — тем, кто его проводит (ROUND_ROLES в
+# checklist_routes).
+ROUND_ROLES = ("director", "chief_engineer", "engineer", "shift_supervisor",
+               "chief_mechanic", "chief_electrician")
+
+
+def _checklist_notifications(user):
+    """
+    Напоминание про обход смены: срок недельный (владелец, 21.09.2026).
+
+    Раньше про обход не напоминали вовсе, и срока не было — значит,
+    забыть его было нечем. Напоминаем не в последний день: обойти цех
+    за пять минут нельзя, и «пора сегодня» почти всегда означало бы
+    «уже поздно».
+    """
+    if user.get("role") not in ROUND_ROLES:
+        return []
+
+    from backend.services.checklist_service import status
+
+    state = status()
+
+    if state["state"] not in ("overdue", "soon", "never"):
+        return []
+
+    titles = {
+        "overdue": f"Обход смены просрочен на {state.get('overdue_days')} дн.",
+        "soon": "Обход смены — на этой неделе",
+        "never": "Обход смены ещё ни разу не делали",
+    }
+
+    return [{
+        "type": "checklist_round",
+        "severity": "warning" if state["state"] == "overdue" else "info",
+        "icon": "✅",
+        "title": titles[state["state"]],
+        "subtitle": state["text"],
+        "url": "/checklist",
+    }]
+
+
 def _writeoff_notifications(user):
     """
     Ответственному за склад: ремонт сделан, запчасть, похоже, взяли.
@@ -316,6 +357,11 @@ def get_notifications(user):
         notifications.extend(_report_import_notifications(user))
     except Exception as error:
         print(f"[notification_service] Отчёт из Экселя пропущен: {error}")
+
+    try:
+        notifications.extend(_checklist_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] Обход смены пропущен: {error}")
 
     # Сортируем ещё раз после добавления задач, ТО и бэкапа — раньше
     # сортировка шла до них, и просроченная задача оказывалась ниже

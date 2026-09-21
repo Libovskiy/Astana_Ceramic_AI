@@ -66,6 +66,11 @@
         <div class="v-title" style="color:var(--text-dim)">Готовлю обход…</div>
       </div>
 
+      <!-- Срок обхода. Его задал владелец: раз в неделю. Раньше срока
+           не было нигде, и человек не мог понять, ждут от него обхода
+           сегодня или нет. -->
+      <div id="clSchedule" style="display:none;font-size:13px;margin-bottom:12px"></div>
+
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <span style="font-size:13px;font-weight:600">Прогресс обхода</span>
         <span id="progressLabel" style="font-size:13px;color:var(--text-dim)">0 / 0</span>
@@ -393,7 +398,23 @@ window.addEventListener('beforeunload',ev=>{
 });
 
 // меню раньше содержимого: ссылки в выводе зависят от него
+// Когда следующий обход. Показываем до того, как человек начнёт
+// отмечать станки: если срок ещё не подошёл, он вправе это знать.
+async function showSchedule(){
+  const box=document.getElementById('clSchedule');
+  if(!box) return;
+  let st={};
+  try { st = await ACAI.get('/api/checklist/status'); } catch { return; }
+  if(!st.text) return;
+
+  const colors={overdue:'var(--warn)', soon:'var(--warn)', ok:'var(--text-dim)', never:'var(--text-dim)'};
+  box.style.display='';
+  box.style.color=colors[st.state]||'var(--text-dim)';
+  box.innerHTML=(st.state==='overdue'?'⚠️ ':'')+st.text;
+}
+
 initLayout().then(loadEquipment, loadEquipment);
+showSchedule();
 </script>
 </body>
 </html>

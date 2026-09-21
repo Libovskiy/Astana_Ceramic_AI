@@ -169,7 +169,9 @@ const SOURCES = [
   { key:'production',    name:'Выпуск за смену',        link:'/production',  where:'вносит мастер смены' },
   { key:'shift_reports', name:'Сменные отчёты',         link:'/production',  where:'сдаёт мастер в конце смены' },
   { key:'maintenance',   name:'Отметки ТО',             link:'/maintenance', where:'ставит механик по графику' },
-  { key:'rounds',        name:'Обходы смены',           link:'/checklist',   where:'заполняет мастер на обходе' },
+  // Обход — недельный (владелец, 21.09.2026). Без этой оговорки строка
+  // «за период нет» на суточном отчёте читалась бы как нарушение.
+  { key:'rounds',        name:'Обходы смены',           link:'/checklist',   where:'заполняет мастер, раз в неделю' },
 ];
 
 function renderSources(src) {

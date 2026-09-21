@@ -31,6 +31,7 @@ ORDER = [
     "test_knowledge_shows_content.py",
     "test_production_import.py",
     "test_downtime_cost.py",
+    "test_checklist_schedule.py",
 ]
 
 failed = []

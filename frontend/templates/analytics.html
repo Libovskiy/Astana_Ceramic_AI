@@ -458,17 +458,32 @@ function renderMaintenance(m){
 
 // Обходы смены. Повторяющееся замечание важнее единичного: если один
 // и тот же узел всплывает в каждом обходе, туда пора идти с ремонтом.
-function renderChecklist(c){
+// Срок обхода — недельный (владелец, 21.09.2026). Поэтому «за сегодня
+// обходов нет» — не нарушение, а норма, и писать это красным нельзя:
+// после пары ложных упрёков перестают верить и настоящим.
+let _clStatus=null;
+async function checklistStatus(){
+  if(_clStatus) return _clStatus;
+  try { _clStatus = await ACAI.get('/api/checklist/status'); } catch { _clStatus = {}; }
+  return _clStatus;
+}
+
+async function renderChecklist(c){
   const box=document.getElementById('checklistBox');
   const note=document.getElementById('clNote');
   if(!box) return;
+  const st=await checklistStatus();
+  if(note) note.textContent = st.every_days ? `раз в ${st.every_days} дней` : '';
+
   if(!c || !c.rounds_count){
-    box.innerHTML=noDataNote(`Обходы смены ${PERIOD_WORD[currentPeriod]||'за период'} не проводились — ${lastSeen('rounds')}.`);
-    if(note) note.textContent='';
+    const overdue = st.state==='overdue';
+    box.innerHTML = `<div style="font-size:13px;line-height:1.6;color:${overdue?'var(--warn)':'var(--text-dim)'}">
+      ${overdue?'⚠️ ':''}${st.text || 'Обходы смены за период не проводились.'}
+      ${st.state==='ok' ? '<br>За выбранный период обходов нет — по недельному сроку это нормально.' : ''}</div>`;
     return;
   }
   if(note && c.last_round)
-    note.textContent='последний ' + ACAI.shortDate(c.last_round.started_at);
+    note.textContent=`раз в ${st.every_days||7} дней · последний ` + ACAI.shortDate(c.last_round.started_at);
 
   const rows=(c.top_problems||[]).map(t=>`
     <div class="downtime-item">
