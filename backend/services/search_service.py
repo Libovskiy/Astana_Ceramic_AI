@@ -339,6 +339,12 @@ def continue_diagnosis(case_id: int, helped: bool):
     save_message(case_id, "assistant", answer_data["recommendation"])
 
     try:
+        from backend.services.knowledge_service import add_similar_note
+        add_similar_note(case_id, case["worker_question"])
+    except Exception as error:
+        print(f"[knowledge] похожий случай не добавлен: {error}")
+
+    try:
         from backend.services.part_usage_service import add_stock_note
         add_stock_note(case_id, answer_data["recommendation"])
     except Exception as error:

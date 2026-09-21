@@ -133,23 +133,12 @@ def _same_machine(one, two):
     return one == two or one in two or two in one
 
 
-def get_relevant_resolutions(machine, question, limit=3):
+def find_similar(machine, question, limit=3):
     """
-    Поиск подтверждённых решений по этому станку.
-
-    Раньше сравнивались слова как есть: «температура бруса высокая»
-    находила запись, а «греется брус» или «брус горячий» — уже нет,
-    хотя речь об одном и том же. Механик формулирует иначе, чем
-    оператор, и знание, ради которого базу и ведут, до него не
-    доходило (нашли 21.09.2026).
-
-    Теперь сравниваются основы значимых слов, а искать можно и по
-    тексту самого решения: механик пишет «клапан воды», и запись про
-    клапан находится, даже если в жалобе было про температуру.
-
-    Векторного поиска здесь намеренно нет: на нынешнем объёме он не
-    нужен. Если база вырастет до тысяч записей — переносить в ChromaDB,
-    инфраструктура есть в vector_service.py.
+    Похожие подтверждённые случаи по этому станку — целиком, а не
+    только текст решения: нужны ещё жалоба, номер обращения, кто
+    подтвердил и когда. Человеку важно «когда это было и кто чинил»,
+    ИИ — сама формулировка.
     """
 
     conn = get_connection()
@@ -157,7 +146,8 @@ def get_relevant_resolutions(machine, question, limit=3):
 
     cursor.execute(
         """
-        SELECT machine, resolution_comment, symptom_text
+        SELECT id, machine, symptom_text, resolution_comment,
+               case_id, confirmed_by, created_at
         FROM resolution_knowledge_base
         WHERE COALESCE(status, 'active') = 'active'
         ORDER BY id DESC
@@ -165,7 +155,7 @@ def get_relevant_resolutions(machine, question, limit=3):
         """
     )
 
-    rows = cursor.fetchall()
+    rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
     if not rows:
@@ -188,11 +178,93 @@ def get_relevant_resolutions(machine, question, limit=3):
         score = 2 * len(asked & symptom) + len(asked & _keywords(row["resolution_comment"]))
 
         if score:
-            scored.append((score, row["resolution_comment"]))
+            scored.append((score, row))
 
     scored.sort(key=lambda item: item[0], reverse=True)
 
-    return [comment for _, comment in scored[:limit]]
+    return [row for _, row in scored[:limit]]
+
+
+def similar_note(machine, question):
+    """
+    Строка для переписки: что уже помогало на этом станке.
+
+    Её видит человек напрямую — она не зависит от того, захочет ли ИИ
+    воспользоваться подсказкой. Ради этого база знаний и ведётся:
+    в прошлый раз кто-то потратил смену, чтобы это выяснить.
+    """
+    found = find_similar(machine, question, limit=2)
+    if not found:
+        return ""
+
+    lines = ["🔎 На этом станке уже было похожее:"]
+
+    for row in found:
+        when = (row.get("created_at") or "")[:10]
+        when = ".".join(reversed(when.split("-"))) if when else ""
+        who = row.get("confirmed_by") or "—"
+        case = f"обращение №{row['case_id']}" if row.get("case_id") else "прошлый случай"
+        lines.append(f"• «{(row.get('symptom_text') or '').strip()}» → {(row.get('resolution_comment') or '').strip()}")
+        lines.append(f"  ({case}, подтвердил {who}{', ' + when if when else ''})")
+
+    return "\n".join(lines)
+
+
+def add_similar_note(case_id, question):
+    """
+    Дописать эту строку в переписку — отдельным сообщением с ролью
+    `system`, как и подсказку по складу. Внутрь совета ИИ её класть
+    нельзя: советы сравниваются с уже сказанным (`_tried_actions`),
+    и приписка заставила бы ИИ ходить по шагам по кругу.
+
+    Повторно одно и то же не пишем.
+    """
+    conn = get_connection()
+    try:
+        case = conn.execute(
+            "SELECT machine, worker_question, symptom FROM cases WHERE id = ?", (case_id,)
+        ).fetchone()
+        if not case:
+            return None
+
+        note = similar_note(case["machine"], question or case["worker_question"] or case["symptom"] or "")
+        if not note:
+            return None
+
+        already = conn.execute(
+            "SELECT 1 FROM chat_history WHERE case_id = ? AND role = 'system' AND message = ? LIMIT 1",
+            (case_id, note)
+        ).fetchone()
+        if already:
+            return None
+    finally:
+        conn.close()
+
+    from backend.services.conversation_service import add_message
+    add_message(case_id, "system", note, author="ACAI")
+    return note
+
+
+def get_relevant_resolutions(machine, question, limit=3):
+    """
+    Поиск подтверждённых решений по этому станку.
+
+    Раньше сравнивались слова как есть: «температура бруса высокая»
+    находила запись, а «греется брус» или «брус горячий» — уже нет,
+    хотя речь об одном и том же. Механик формулирует иначе, чем
+    оператор, и знание, ради которого базу и ведут, до него не
+    доходило (нашли 21.09.2026).
+
+    Теперь сравниваются основы значимых слов, а искать можно и по
+    тексту самого решения: механик пишет «клапан воды», и запись про
+    клапан находится, даже если в жалобе было про температуру.
+
+    Векторного поиска здесь намеренно нет: на нынешнем объёме он не
+    нужен. Если база вырастет до тысяч записей — переносить в ChromaDB,
+    инфраструктура есть в vector_service.py.
+    """
+
+    return [row["resolution_comment"] for row in find_similar(machine, question, limit)]
 
 
 def get_all_resolutions(limit=100):

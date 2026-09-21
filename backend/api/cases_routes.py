@@ -446,6 +446,15 @@ def chat(
         answer_data["recommendation"]
     )
 
+    # Что уже помогало на этом станке — отдельной строкой в переписке.
+    # Это не зависит от того, воспользовался ли подсказкой сам ИИ:
+    # человек должен увидеть прошлое решение дословно.
+    try:
+        from backend.services.knowledge_service import add_similar_note
+        add_similar_note(result["case_id"], request.message)
+    except Exception as error:
+        print(f"[knowledge] похожий случай не добавлен: {error}")
+
     # Есть ли названная деталь на складе — отдельной строкой в переписке.
     try:
         from backend.services.part_usage_service import add_stock_note

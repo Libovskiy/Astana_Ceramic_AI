@@ -152,6 +152,19 @@ def _dialogue_text(messages, limit=12):
 
 
 
+def _similar_hint(case_id, question):
+    """
+    «На этом станке уже было похожее» — прошлое подтверждённое решение
+    дословно. Показываем человеку сами, не полагаясь на то, что ИИ
+    вспомнит о подсказке в своём ответе.
+    """
+    try:
+        from backend.services.knowledge_service import add_similar_note
+        add_similar_note(case_id, question)
+    except Exception as error:
+        print(f"[knowledge] похожий случай не добавлен: {error}")
+
+
 def _stock_hint(case_id, advice_text):
     """
     Строка про склад к совету: «подшипник — на складе 3 шт» или «нет».
@@ -349,6 +362,7 @@ def generate_reply(case_id):
             set_step(case_id, current_step + 1)
 
             add_message(case_id, "assistant", remaining[0], author="ACAI")
+            _similar_hint(case_id, question)
             _stock_hint(case_id, remaining[0])
 
             return {
@@ -376,6 +390,7 @@ def generate_reply(case_id):
             set_step(case_id, current_step + 1)
 
             add_message(case_id, "assistant", remaining[0], author="ACAI")
+            _similar_hint(case_id, question)
             _stock_hint(case_id, remaining[0])
 
             return {
@@ -468,6 +483,7 @@ def generate_reply(case_id):
     set_step(case_id, current_step + 1)
 
     add_message(case_id, "assistant", suggestion, author="ACAI")
+    _similar_hint(case_id, question)
     _stock_hint(case_id, suggestion)
 
     return {
