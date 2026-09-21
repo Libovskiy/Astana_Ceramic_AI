@@ -176,3 +176,61 @@ def start(live_cache: dict):
     _started = True
     threading.Thread(target=_loop, args=(live_cache,), daemon=True,
                      name="sensor-recorder").start()
+
+
+def warm_from_history(live_cache: dict) -> int:
+    """
+    Заполнить живой кэш последними записанными значениями.
+
+    Панель присылает только ИЗМЕНИВШИЕСЯ регистры, а частоты приводов
+    при ровной работе не меняются часами. После перезапуска сервера
+    кэш пуст, и главная показывала бункеры, но ни одной частоты —
+    выглядело так, будто их вообще нет (нашли 21.09.2026).
+
+    Берём из истории последнее значение каждого показания с его
+    настоящим временем. Свежесть не подделываем: время остаётся
+    прежним, поэтому проверка «данные не обновляются» продолжает
+    работать как раньше, а человек видит число и понимает, когда оно
+    получено.
+    """
+    try:
+        from backend.database import SessionLocal
+        from backend.models import SensorReading
+        from sqlalchemy import func
+
+        session = SessionLocal()
+        try:
+            latest = (
+                session.query(
+                    SensorReading.sensor_name,
+                    func.max(SensorReading.recorded_at).label("at"),
+                )
+                .group_by(SensorReading.sensor_name)
+                .all()
+            )
+
+            filled = 0
+            for name, at in latest:
+                if not name or name in live_cache:
+                    continue
+                row = (
+                    session.query(SensorReading)
+                    .filter(SensorReading.sensor_name == name,
+                            SensorReading.recorded_at == at)
+                    .first()
+                )
+                if not row:
+                    continue
+                live_cache[name] = {
+                    "value": str(row.value),
+                    "updated_at": at.isoformat() if hasattr(at, "isoformat") else str(at),
+                }
+                filled += 1
+        finally:
+            session.close()
+
+        print(f"[webhmi] в кэш подняты последние значения: {filled}")
+        return filled
+    except Exception as error:
+        print(f"[webhmi] не поднял последние значения: {error}")
+        return 0

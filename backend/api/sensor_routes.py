@@ -62,6 +62,10 @@ LIVE_PROXY = (os.environ.get("ACAI_LIVE_PROXY") or "").rstrip("/")
 
 # В базу из этого кэша пишет сервер сам, раз в 30 секунд.
 if not LIVE_PROXY:
+    # Сначала поднимаем последние записанные значения: панель шлёт
+    # только изменившиеся регистры, и после перезапуска частоты
+    # приводов не появлялись на экране часами.
+    sensor_recorder.warm_from_history(_live_cache)
     sensor_recorder.start(_live_cache)
 
 
