@@ -137,3 +137,18 @@ def part_history(part_id: int, user: dict = Depends(require_roles(*PARTS_ROLES))
     """На что ушла деталь: обращение, станок, кто списал."""
     from backend.services.part_usage_service import history_for_part
     return {"success": True, "history": history_for_part(part_id)}
+
+
+@router.get("/api/parts/from-report")
+def parts_from_report(user: dict = Depends(require_roles(*PARTS_ROLES))):
+    """
+    Что меняли и чинили по сменному отчёту начальника производства.
+
+    Подсказка, что держать на складе: если «скребки» встречаются
+    двадцать раз за девять месяцев, их стоит иметь в запасе. Остатки
+    склада это не трогает — только показывает; списание по-прежнему
+    проводит ответственный.
+    """
+    from backend.services.production_import_service import parts_mentioned
+
+    return {"success": True, "parts": parts_mentioned()}

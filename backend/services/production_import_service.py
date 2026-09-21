@@ -20,6 +20,7 @@
 загрузок (кто, когда, сколько прочиталось) остаётся в `xls_imports`.
 """
 
+import re
 import sqlite3
 from datetime import datetime
 
@@ -494,6 +495,31 @@ def repairs_for_machine(machine_name: str, location: str, question: str, limit: 
     return find_repairs(section, question, limit)
 
 
+# Слова, по которым простой считается ПЛАНОВЫМ, а не поломкой.
+# Проточка вальцов, переход на другой формат, профилактика — это
+# обслуживание: линия стоит, но чинить нечего. Если валить их в одну
+# кучу с авариями, «самая дорогая причина» окажется плановой работой,
+# и директор будет чинить то, что чинить не надо.
+#
+# Список намеренно живёт в одном месте — дополнять сюда. Пишут и
+# по-русски, и по-казахски, поэтому слова ищем по вхождению.
+PLANNED_WORDS = (
+    "проточк",      # проточка вальцов, оптимы
+    "перехон",      # так пишут «переход» в отчёте
+    "переход",      # переход на другой кирпич
+    "профилакт",
+    "планов",       # плановая остановка, плановый ремонт
+    "регламент",
+    "жоспар",       # «плановый» по-казахски
+)
+
+
+def is_planned(reason: str) -> bool:
+    """Плановая остановка или поломка — по тексту причины."""
+    text = " ".join(str(reason or "").split()).lower().replace("ё", "е")
+    return any(word in text for word in PLANNED_WORDS)
+
+
 def analytics(year: int | None = None) -> dict:
     """
     Девять месяцев собственной работы начальника производства — сведённые.
@@ -561,26 +587,60 @@ def analytics(year: int | None = None) -> dict:
 
         # Причины пишут вручную и по-разному («Проточка СМК-102» и
         # «Проточка СМК-102.»), поэтому группируем по очищенному тексту,
-        # а показываем — как написано в файле.
+        # а показываем — как написано в файле. Плановое и аварийное
+        # считаем раздельно: смешивать их нельзя, иначе самой дорогой
+        # «поломкой» окажется проточка вальцов.
         reasons = {}
+        planned_minutes = incident_minutes = 0
+        planned_cases = incident_cases = 0
+        singles = []
+
         for row in conn.execute(
             """
-            SELECT reason, section_title, COALESCE(minutes, 0) AS minutes
+            SELECT reason, section_title, date, COALESCE(minutes, 0) AS minutes
             FROM xls_downtime
             WHERE year = ? AND COALESCE(TRIM(reason), '') != ''
             """, (year,)
         ):
-            key = " ".join(str(row["reason"]).split()).strip(" .;").lower()
-            item = reasons.setdefault(key, {"reason": " ".join(str(row["reason"]).split()).strip(" .;"),
-                                            "cases": 0, "minutes": 0, "sections": set()})
+            text = " ".join(str(row["reason"]).split()).strip(" .;")
+            planned = is_planned(text)
+
+            if planned:
+                planned_minutes += row["minutes"] or 0
+                planned_cases += 1
+            else:
+                incident_minutes += row["minutes"] or 0
+                incident_cases += 1
+
+            singles.append({
+                "reason": text, "section_title": row["section_title"],
+                "date": row["date"], "minutes": row["minutes"] or 0,
+                "planned": planned,
+            })
+
+            key = text.lower()
+            item = reasons.setdefault(key, {"reason": text, "cases": 0, "minutes": 0,
+                                            "sections": set(), "planned": planned})
             item["cases"] += 1
             item["minutes"] += row["minutes"] or 0
             if row["section_title"]:
                 item["sections"].add(row["section_title"])
 
-        top_reasons = sorted(reasons.values(), key=lambda item: -item["minutes"])[:10]
-        for item in top_reasons:
+        # «Повторяющиеся» — значит повторяющиеся: одиночное событие в
+        # этом списке ничего не объясняет.
+        repeated = [item for item in reasons.values() if item["cases"] >= 2]
+        repeated.sort(key=lambda item: -item["minutes"])
+        for item in repeated:
             item["sections"] = ", ".join(sorted(item["sections"]))
+
+        # Разовые, но долгие — отдельным списком: их тоже полезно
+        # видеть, просто это другой разговор.
+        singles.sort(key=lambda item: -item["minutes"])
+        longest = [item for item in singles
+                   if reasons.get(item["reason"].lower(), {}).get("cases", 0) < 2][:5]
+
+        top_reasons = repeated[:10]
+        worst_incident = next((item for item in repeated if not item["planned"]), None)
 
         by_shift = [dict(row) for row in conn.execute(
             """
@@ -607,13 +667,218 @@ def analytics(year: int | None = None) -> dict:
             "months": months,
             "by_section": by_section,
             "top_reasons": top_reasons,
+            "longest": longest,
+            "worst_incident": worst_incident,
             "by_shift": by_shift,
             "totals": {
                 "cases": totals["cases"] or 0,
                 "minutes": totals["minutes"] or 0,
                 "unparsed": totals["unparsed"] or 0,
                 "notes": notes_total,
+                "planned_minutes": planned_minutes,
+                "planned_cases": planned_cases,
+                "incident_minutes": incident_minutes,
+                "incident_cases": incident_cases,
             },
         }
     finally:
         conn.close()
+
+
+def recent_shifts(limit: int = 6) -> list:
+    """
+    Последние смены из отчёта — чтобы страница не писала «данных нет»,
+    когда они есть в Экселе.
+
+    Единицы плана и факта здесь — как в отчёте (вагонетки за смену), а
+    не штуки, как в ручном учёте выпуска. Смешивать их нельзя, поэтому
+    наружу отдаём как есть и подписываем источник.
+    """
+    init_production_import()
+    conn = get_connection()
+    try:
+        return [dict(row) for row in conn.execute(
+            """
+            SELECT date, shift, master,
+                   forming_plan, forming_fact, packing_plan, packing_fact
+            FROM xls_shifts
+            ORDER BY date DESC, shift
+            LIMIT ?
+            """, (limit,)
+        )]
+    finally:
+        conn.close()
+
+
+def last_day_summary() -> dict:
+    """Итог последнего дня из отчёта: день + ночь вместе."""
+    rows = recent_shifts(limit=10)
+    if not rows:
+        return {}
+
+    day = rows[0]["date"]
+    same = [row for row in rows if row["date"] == day]
+
+    def total(field):
+        values = [row.get(field) for row in same if row.get(field) is not None]
+        return sum(values) if values else None
+
+    return {
+        "date": day,
+        "shifts": len(same),
+        "forming_plan": total("forming_plan"),
+        "forming_fact": total("forming_fact"),
+        "packing_plan": total("packing_plan"),
+        "packing_fact": total("packing_fact"),
+        "masters": ", ".join(sorted({row["master"] for row in same if row.get("master")})),
+    }
+
+
+# По каким словам в тексте узнаётся деталь. Держим рядом с
+# PLANNED_WORDS: дополнять в одном месте.
+#
+# Зачем отдельный список, а не только склад: склад пока пуст, и
+# сопоставлять не с чем — значит, подсказки «что держать в запасе» не
+# было бы вовсе.
+#
+# Образцы, а не простое вхождение: «цеп» ловил «цепной стол», а «вал»
+# — «вальцы» и «валков», и детали насчитывались втрое (проверено на
+# живом отчёте 21.09.2026). Границы слова важнее краткости записи.
+PART_PATTERNS = {
+    "Подшипники": r"подшипник",
+    "Скребки": r"скреб",
+    "Лента конвейера": r"\bлент[аыуе]?\b|\bленты\b",
+    "Полотно": r"полотн",
+    "Ножи": r"\bнож[аиеюй]?\b|\bножей\b",
+    "Валы": r"\bвал[аыуе]?\b|\bвалов\b",
+    "Вальцы": r"вальц",
+    "Ремни": r"\bремн|\bремен[ьия]",
+    "Цепи": r"\bцеп[ьияей]\b",
+    "Ролики": r"ролик",
+    "Шнеки": r"шнек",
+    "Броня": r"\bброн[яию]\b|бронеплит",
+    "Муштук": r"муштук|мунштук",
+    "Фартуки": r"фартук",
+    "Сальники": r"сальник",
+    "Редукторы": r"редуктор",
+    "Датчики": r"датчик",
+    "Контакторы": r"контактор",
+    "Шкивы": r"шкив",
+    "Звёздочки": r"звездочк|жулдызш",
+    "Фильтры": r"фильтр",
+    "Тросы": r"\bтрос",
+    "Муфты": r"\bмуфт",
+    "Пластины захвата": r"пластин",
+}
+
+_PART_RE = {title: re.compile(pattern) for title, pattern in PART_PATTERNS.items()}
+
+
+def parts_mentioned(year: int | None = None, limit: int = 20) -> list:
+    """
+    Что меняли и чинили по отчёту — по словам из причин и журнала.
+
+    Это подсказка, что держать на складе: если «скребки» встречаются
+    двенадцать раз за девять месяцев, их стоит иметь в запасе. Склад
+    при этом не трогаем — только показываем; списание по-прежнему
+    делает ответственный.
+    """
+    init_production_import()
+
+    conn = get_connection()
+    try:
+        if year is None:
+            row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
+            year = row[0] if row and row[0] else datetime.now().year
+
+        rows = list(conn.execute(
+            """
+            SELECT date, section_title, reason AS text, 'простой' AS kind
+            FROM xls_downtime WHERE year = ? AND COALESCE(TRIM(reason), '') != ''
+            UNION ALL
+            SELECT date, section_title, text, 'журнал' AS kind
+            FROM xls_notes WHERE year = ?
+            """, (year, year)
+        ))
+    finally:
+        conn.close()
+
+    found = {}
+
+    for row in rows:
+        text = " ".join(str(row["text"] or "").split()).lower().replace("ё", "е")
+
+        for title, pattern in _PART_RE.items():
+            if not pattern.search(text):
+                continue
+            item = found.setdefault(title, {
+                "part": title, "cases": 0, "sections": set(),
+                "last_date": None, "examples": [],
+            })
+            item["cases"] += 1
+            if row["section_title"]:
+                item["sections"].add(row["section_title"])
+            if not item["last_date"] or (row["date"] or "") > item["last_date"]:
+                item["last_date"] = row["date"]
+            if len(item["examples"]) < 3:
+                item["examples"].append(" ".join(str(row["text"]).split())[:90])
+
+    # Что из этого уже заведено на складе — чтобы было видно, чего нет.
+    try:
+        from backend.services.part_usage_service import suggest_for_text
+
+        for item in found.values():
+            matches = suggest_for_text(item["part"], limit=1)
+            item["in_stock"] = bool(matches)
+            item["stock_name"] = matches[0]["name"] if matches else None
+            item["stock_left"] = matches[0]["stock"] if matches else None
+    except Exception as error:
+        print(f"[отчёт] склад не сверен: {error}")
+
+    result = sorted(found.values(), key=lambda item: -item["cases"])[:limit]
+    for item in result:
+        item["sections"] = ", ".join(sorted(item["sections"]))
+    return result
+
+
+def planned_stops(year: int | None = None, month: int | None = None) -> dict:
+    """
+    Плановые остановки из отчёта — для «Графика ТО».
+
+    Это НЕ отметка о выполнении работы по графику и не сопоставление с
+    ней: в отчёте написано «проточка СМК-102», а в графике — «проточка
+    валков, 8 ч», и связывать их автоматически нельзя. Показываем
+    рядом, чтобы «ТО не отмечается» не читалось как «ТО не делают».
+    """
+    init_production_import()
+
+    conn = get_connection()
+    try:
+        if year is None:
+            row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
+            year = row[0] if row and row[0] else datetime.now().year
+
+        rows = list(conn.execute(
+            """
+            SELECT date, section_title, reason, COALESCE(minutes, 0) AS minutes
+            FROM xls_downtime
+            WHERE year = ? AND COALESCE(TRIM(reason), '') != ''
+            ORDER BY date DESC
+            """, (year,)
+        ))
+    finally:
+        conn.close()
+
+    planned = [dict(row) for row in rows if is_planned(row["reason"])]
+
+    if month:
+        prefix = f"{year:04d}-{month:02d}"
+        planned = [row for row in planned if str(row["date"]).startswith(prefix)]
+
+    return {
+        "year": year,
+        "month": month,
+        "count": len(planned),
+        "minutes": sum(row["minutes"] or 0 for row in planned),
+        "items": planned[:20],
+    }

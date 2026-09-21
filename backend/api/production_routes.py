@@ -559,6 +559,6 @@ def production_report_analytics(
     её от самого цеха незачем. Считается из того, что прочиталось;
     неразобранное идёт отдельным числом, а не растворяется в итогах.
     """
-    from backend.services.production_import_service import analytics
+    from backend.services.production_import_service import analytics, last_day_summary
 
-    return {"success": True, **analytics(year)}
+    return {"success": True, **analytics(year), "last_day": last_day_summary()}

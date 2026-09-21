@@ -93,6 +93,9 @@ def make_file(path, extra_column=False):
         ("Упаковка", "план"): 90000, ("Упаковка", "факт"): 91000,
         ("Простой оборудования формовка", "мин"): "14:40-20:30",
         ("Простой оборудования формовка", "причина и замечание"): "1 бункердин фартуги ауыстырылды",
+        # плановая остановка: проточка — это обслуживание, не поломка
+        ("Простой оборудования массоподготовка", "мин"): "09:00-11:00",
+        ("Простой оборудования массоподготовка", "причина и замечание"): "Проточка УСМ-40",
     })
     write(4, "1 ночь", "Баянбаев А.Б.", {
         # через полночь: 23:30 → 01:10 = 100 минут
@@ -103,10 +106,16 @@ def make_file(path, extra_column=False):
         # время без интервала — разобрать нельзя, но и нулём считать нельзя
         ("Простой оборудования печь и сушилка", "мин"): "17:20",
         ("Простой оборудования печь и сушилка", "причина и замечание"): "Сервопривод",
+        # одна и та же поломка дважды — чтобы было что назвать
+        # «повторяющейся»; проточка выше повторяться не должна её обгонять
+        ("Простой оборудования упаковка", "мин"): "10:00-10:30",
+        ("Простой оборудования упаковка", "причина и замечание"): "Сломался вал СМК-126",
     })
     write(6, "2 ночь", "Баянбаев А.Б.", {
         # причина без времени — это журнал ремонтов, а не простой
         ("Простой оборудования массоподготовка", "причина и замечание"): "Ремонт червячного вала Мессерси",
+        ("Простой оборудования упаковка", "мин"): "11:00-11:30",
+        ("Простой оборудования упаковка", "причина и замечание"): "Сломался вал СМК-126",
     })
     sheet.cell(7, 1, "Средние значения")
     sheet.cell(7, 5, "#NUM!")
@@ -129,13 +138,15 @@ check("смены прочитаны", len(month.get("shifts") or []) == 4, mont
 check("итоговая строка «Средние значения» не считается сменой",
       all("средн" not in (s.get("row") and "" or "") for s in month.get("shifts") or []))
 
-downtime = {item["section"]: item for item in month.get("downtime") or []}
+# По строке, а не «последний по участку»: на одном участке бывает
+# несколько простоев в разные смены.
+by_row = {(item["row"], item["section"]): item for item in month.get("downtime") or []}
 check("простой формовки посчитан из интервала",
-      downtime.get("forming", {}).get("minutes") == 350, downtime.get("forming"))
+      by_row.get((3, "forming"), {}).get("minutes") == 350, by_row.get((3, "forming")))
 check("ночной простой через полночь посчитан верно",
-      downtime.get("packing", {}).get("minutes") == 100, downtime.get("packing"))
+      by_row.get((4, "packing"), {}).get("minutes") == 100, by_row.get((4, "packing")))
 check("одно время вместо интервала не превратилось в ноль",
-      downtime.get("kiln", {}).get("minutes") is None, downtime.get("kiln"))
+      by_row.get((5, "kiln"), {}).get("minutes") is None, by_row.get((5, "kiln")))
 
 notes = month.get("notes") or []
 check("запись без времени ушла в журнал ремонтов, а не в простои",
@@ -146,18 +157,43 @@ check("неразобранное названо вслух, с листом и 
       any(p["sheet"] == "Сентябрь" and p["row"] == 5 for p in problems), problems)
 
 
+print("\n1а. Строки на будущее не считаются сменами")
+
+# Начальник смены вписывает фамилии на месяц вперёд. Если считать такую
+# строку сменой, сайт покажет «последняя смена 30.09» двадцать первого
+# числа и 60 смен вместо сорока (нашли 21.09.2026 на живом файле).
+future = folder / "с-заготовками.xlsx"
+book = openpyxl.load_workbook(path)
+sheet = book.active
+sheet.cell(8, 1, "3 день")
+sheet.cell(8, 3, "Тукен Д.А")       # только фамилия, показателей нет
+sheet.cell(9, 1, "3 ночь")          # и вовсе пустая
+book.save(future)
+
+data_future = read_workbook(str(future), 2026)
+shifts_future = data_future["months"][0]["shifts"]
+check("строка с одной фамилией сменой не считается",
+      len(shifts_future) == 4, [s["date"] + " " + s["shift"] for s in shifts_future])
+check("последняя смена — последняя заполненная, а не последняя строка",
+      max(s["date"] for s in shifts_future) == "2026-09-02",
+      max(s["date"] for s in shifts_future))
+check("и в «проблемы» это не попадает — это не ошибка",
+      not any(p["row"] in (8, 9) for p in data_future["months"][0]["problems"]),
+      data_future["months"][0]["problems"])
+
+
 print("\n2. Вставленная посреди года колонка ничего не ломает")
 
 shifted = folder / "отчёт-со-штабом.xlsx"
 make_file(shifted, extra_column=True)
 data_shifted = read_workbook(str(shifted), 2026)
 month_shifted = data_shifted["months"][0]
-downtime_shifted = {item["section"]: item for item in month_shifted["downtime"]}
+shifted_rows = {(item["row"], item["section"]): item for item in month_shifted["downtime"]}
 
 check("простой формовки на месте и после вставки колонки",
-      downtime_shifted.get("forming", {}).get("minutes") == 350, downtime_shifted.get("forming"))
+      shifted_rows.get((3, "forming"), {}).get("minutes") == 350, shifted_rows.get((3, "forming")))
 check("простой упаковки не перепутан с другим участком",
-      downtime_shifted.get("packing", {}).get("minutes") == 100, downtime_shifted.get("packing"))
+      shifted_rows.get((4, "packing"), {}).get("minutes") == 100, shifted_rows.get((4, "packing")))
 
 
 print("\n3. Минуты из разной записи времени")
@@ -174,7 +210,7 @@ print("\n4. Хранение: файл главный, прошлая верси
 
 result = save_workbook(data, "отчёт.xlsx", "Проверка")
 check("сводка после загрузки", result.get("loaded") and result["run"]["shifts"] == 4, result.get("run"))
-check("простои сохранены", result["run"]["downtime"] == 3, result.get("run"))
+check("простои сохранены", result["run"]["downtime"] == 6, result.get("run"))
 check("журнал сохранён", result["run"]["notes"] == 1, result.get("run"))
 check("неразобранное сохранено", result["run"]["problems"] >= 1, result.get("run"))
 
@@ -307,5 +343,53 @@ check("есть разбивка по месяцам", bool(report.get("months")
 check("есть повторяющиеся причины", isinstance(report.get("top_reasons"), list), report.get("top_reasons"))
 check("неразобранное не растворилось в итогах",
       report["totals"]["unparsed"] >= 0 and "unparsed" in report["totals"], report.get("totals"))
+
+print("\n9. Плановое отдельно от аварийного")
+
+from backend.services.production_import_service import is_planned, parts_mentioned, planned_stops
+
+# Выше проверялась замена данных меньшим файлом — вернём полный, иначе
+# считать будет не на чем.
+save_workbook(data, "отчёт.xlsx", "Проверка")
+
+check("проточка — плановая", is_planned("Проточка СМК-102"))
+check("переход на другой кирпич — плановый", is_planned("Переход на 4.6НФ"))
+check("«перехон» (как пишут в отчёте) — тоже", is_planned("Перехон на 1.4НФ полнотел"))
+check("поломка плановой не считается", not is_planned("Сломался вал СМК-126"))
+check("замена ножей — не плановая", not is_planned("Замена ножей PL-601"))
+
+report = analytics(2026)
+totals = report["totals"]
+check("плановые и аварии посчитаны отдельно",
+      totals["planned_minutes"] > 0 and totals["incident_minutes"] > 0, totals)
+check("вместе они дают весь простой",
+      totals["planned_minutes"] + totals["incident_minutes"] <= totals["minutes"], totals)
+
+check("в «повторяющихся» только то, что было 2+ раза",
+      all(item["cases"] >= 2 for item in report["top_reasons"]), report["top_reasons"])
+worst = report.get("worst_incident") or {}
+check("самая дорогая повторяющаяся причина — авария, а не проточка",
+      worst.get("reason") == "Сломался вал СМК-126" and not worst.get("planned"), worst)
+check("разовые долгие вынесены отдельно",
+      all(item["minutes"] >= 0 for item in report.get("longest") or []), report.get("longest"))
+
+
+print("\n10. Связи с другими вкладками")
+
+mentioned = parts_mentioned(2026)
+check("детали из отчёта узнаются", any(item["part"] == "Скребки" for item in mentioned), mentioned)
+check("у детали есть счёт, участок и дата",
+      all({"part", "cases", "sections", "last_date"} <= set(item) for item in mentioned), mentioned[:1])
+
+# «цепной стол» — это оборудование, а не цепь; «вальцы» — не вал.
+from backend.services.production_import_service import _PART_RE
+check("«цепной стол» не считается цепью", not _PART_RE["Цепи"].search("цепной стол группировки"))
+check("«вальцы» не считаются валом", not _PART_RE["Валы"].search("проточка вальцов"))
+check("«замена цепи» считается", bool(_PART_RE["Цепи"].search("замена цепи транспортера")))
+
+stops = planned_stops(2026, 9)
+check("плановые остановки за месяц считаются", stops["count"] >= 0, stops)
+check("и это именно плановые",
+      all(is_planned(item["reason"]) for item in stops["items"]), stops["items"][:2])
 
 finish("Сменный отчёт из Экселя")

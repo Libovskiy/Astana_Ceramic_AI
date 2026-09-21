@@ -261,6 +261,37 @@ async function loadPlanSummary(monthlyPlans) {
             </table>
         `;
 
+        // Ноль в «произведено сегодня» ещё не значит, что завод стоял:
+        // обычно это значит, что в ручной учёт не вносили. Если в
+        // отчёте начальника производства смены есть — говорим об этом
+        // прямо, чтобы два блока страницы не спорили.
+        const produced = Object.values(todayData.by_type || {})
+            .reduce((sum, item) => sum + (item.produced || 0), 0);
+
+        if (!produced) {
+            try {
+                const report = await (await fetch("/api/production/report-analytics",
+                                                  { credentials: "include" })).json();
+                const last = report && report.last_day;
+
+                if (last && last.date) {
+                    const when = String(last.date).slice(8, 10) + "." + String(last.date).slice(5, 7);
+                    const parts = [];
+                    if (last.forming_fact != null) parts.push(`формовка ${last.forming_fact} из ${last.forming_plan ?? "—"}`);
+                    if (last.packing_fact != null) parts.push(`упаковка ${last.packing_fact} из ${last.packing_plan ?? "—"}`);
+
+                    container.insertAdjacentHTML("beforeend", `
+                        <div style="margin-top:10px;font-size:13px;color:var(--text-dim);line-height:1.5">
+                            Сегодня в ручной учёт не вносили. По отчёту начальника производства
+                            последняя смена — <b>${when}</b>: ${parts.join(" · ") || "показатели не заполнены"}.
+                            <br>Это вагонетки, как в отчёте, — с планом в штуках выше их не складывают.
+                        </div>`);
+                }
+            } catch (error) {
+                console.error("ACAI report fallback error:", error);
+            }
+        }
+
     } catch (error) {
 
         console.error("ACAI plan summary error:", error);
@@ -381,7 +412,7 @@ async function loadShiftHistory() {
         }
 
         if (!data.entries.length) {
-            container.innerHTML = `<div class="empty-state">Записей пока нет — введите первые данные выше.</div>`;
+            container.innerHTML = `<div class="empty-state">Записей пока нет. Ручной ввод — внизу страницы, в «Ручном вводе».</div>`;
             return;
         }
 

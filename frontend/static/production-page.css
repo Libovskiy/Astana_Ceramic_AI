@@ -213,3 +213,10 @@
     cursor: pointer;
 }
 .sr-pick:hover { border-color: var(--accent); }
+
+/* Таблицы сменного отчёта на телефоне: колонка «Участок» обрезалась по
+   краю экрана — из четырёх колонок на 390 px помещаются две с
+   половиной. Прокрутка внутри карточки, а не всей страницы: страницу
+   мотать вбок нельзя, это правило проекта. */
+.xls-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.xls-scroll table { min-width: 520px; }

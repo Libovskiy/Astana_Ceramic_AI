@@ -63,3 +63,29 @@ def unlog_maintenance(request: dict, user: dict = Depends(get_current_user)):
         (request["schedule_id"], request["month"], request["year"]))
     conn.commit(); conn.close()
     return {"success": True}
+
+
+@router.get("/api/maintenance/planned-from-report")
+def maintenance_planned_from_report(
+    year: int | None = None,
+    month: int | None = None,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Плановые остановки из сменного отчёта — рядом с графиком ТО.
+
+    Это НЕ отметка о выполнении и НЕ сопоставление с работой графика:
+    в отчёте написано «Проточка СМК-102», в графике — «проточка
+    валков, 8 ч», и связывать их автоматически нельзя. Нужно, чтобы
+    «ТО не отмечается» не читалось как «ТО не делают»: работы идут,
+    просто отмечают их в другом файле.
+    """
+    from datetime import datetime
+
+    from backend.services.production_import_service import planned_stops
+
+    now = datetime.now()
+    return {
+        "success": True,
+        **planned_stops(year or now.year, month or now.month),
+    }

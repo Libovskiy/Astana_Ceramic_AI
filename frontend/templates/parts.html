@@ -69,6 +69,18 @@
       </div>
 
       <div class="parts-grid" id="partsList"><div class="empty">Загрузка...</div></div>
+
+      <!-- ЧТО МЕНЯЛИ ПО ОТЧЁТУ.
+           Склад заводят заново, и неоткуда знать, что в нём держать.
+           А в сменном отчёте начальника производства за девять месяцев
+           записано, что меняли руками. Остатки это не трогает —
+           только показывает. -->
+      <div class="card" id="reportPartsCard" style="display:none;margin-top:16px">
+        <div class="card-head"><h2>Что меняли по отчёту</h2>
+          <span style="font-size:11px;color:var(--text-dim)">из сменного отчёта начальника производства</span>
+        </div>
+        <div class="card-body" style="padding:10px 14px" id="reportParts"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -94,10 +106,45 @@ async function load(){
     const w=await ACAI.get('/api/parts/writeoffs');
     writeoffs=w.writeoffs||[];
   }catch{writeoffs=[];}
-  renderWriteoffs();renderMetrics();renderParts();
+  renderWriteoffs();renderMetrics();renderParts();loadReportParts();
 }
 
 const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// Что меняли по сменному отчёту: сколько раз, где, когда последний
+// раз и заведено ли это на складе.
+async function loadReportParts(){
+  const card = document.getElementById('reportPartsCard');
+  const box = document.getElementById('reportParts');
+  if (!card || !box) return;
+
+  let items = [];
+  try { items = (await ACAI.get('/api/parts/from-report')).parts || []; } catch { return; }
+  if (!items.length) return;
+
+  card.style.display = '';
+
+  const when = v => v ? `${String(v).slice(8,10)}.${String(v).slice(5,7)}.${String(v).slice(2,4)}` : '—';
+
+  box.innerHTML = `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
+      По записям смен за год. Это не остатки склада, а то, что реально меняли руками —
+      подсказка, что стоит держать в запасе.
+    </div>
+    <table class="table"><thead><tr>
+      <th>Деталь</th><th>Раз</th><th>Участки</th><th>Последний раз</th><th>На складе</th>
+    </tr></thead><tbody>
+      ${items.map(item => `<tr>
+        <td title="${esc((item.examples||[]).join(' · '))}">${esc(item.part)}</td>
+        <td class="mono">${item.cases}</td>
+        <td style="color:var(--text-dim)">${esc(item.sections)}</td>
+        <td class="mono">${when(item.last_date)}</td>
+        <td>${item.in_stock
+              ? `<span class="badge ok">есть: ${esc(item.stock_name)}</span>`
+              : '<span style="color:var(--text-dim)">позиции нет</span>'}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
 
 function renderWriteoffs(){
   const card=document.getElementById('writeoffsCard');

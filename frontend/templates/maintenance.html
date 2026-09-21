@@ -131,6 +131,7 @@ async function loadSchedule(){
   schedule=sr.schedule||[];
   logs=sr.logs||[];
   allEquipment=er.equipment||er||[];
+  await loadReportPlanned();
   renderMetrics();
   renderTable();
 }
@@ -179,11 +180,24 @@ function renderMetrics(){
   const doneMonth = thisYear
     ? logs.filter(l=>l.month===curMonth && l.year===year).length : 0;
 
-  renderToVerdict({total, planned, done, overdue, year, dueMonth, doneMonth});
+  renderToVerdict({total, planned, done, overdue, year, dueMonth, doneMonth,
+                   report: reportPlanned});
 }
 
 // «0 выполнено» из графика на 52 работы означает не провал механиков, а
 // что отметок в системе нет ни одной. Так и пишем — иначе отчёт врёт.
+// Плановые остановки из сменного отчёта начальника производства.
+// Это НЕ отметки о выполнении работ графика и не сопоставление с ними:
+// в отчёте «Проточка СМК-102», в графике «проточка валков, 8 ч».
+// Показываем рядом, чтобы «ТО не отмечается» не читалось как «ТО не
+// делают» — работы идут, просто записывают их в другом файле.
+let reportPlanned = null;
+
+async function loadReportPlanned(){
+  try { reportPlanned = await ACAI.get('/api/maintenance/planned-from-report'); }
+  catch { reportPlanned = null; }
+}
+
 function renderToVerdict(m){
   const rows=[];
   if(!m.total){
@@ -193,11 +207,15 @@ function renderToVerdict(m){
   }
   // Ноль отметок — всегда отклонение, даже если просрочки по отсечке
   // ещё нет: «выполнено 0 из 564» нельзя называть «идём по графику».
+  const fromReport = m.report && m.report.count
+    ? ` По отчёту начальника производства плановых остановок в этом месяце — ${m.report.count} (${Math.round((m.report.minutes||0)/60)} ч).`
+    : '';
+
   if(!m.done) rows.push({level: m.overdue>0 ? 'critical' : 'warning',
     what:'Отметок о выполнении нет ни одной',
-    where: m.overdue>0
+    where: (m.overdue>0
       ? `по графику ${m.overdue} работ уже должны быть сделаны — либо их не делают, либо не отмечают`
-      : `в графике ${m.planned} работ на ${m.year} год, но в системе не отмечена ни одна`});
+      : `в графике ${m.planned} работ на ${m.year} год, но в системе не отмечена ни одна`) + fromReport});
   else if(m.overdue>0) rows.push({level:'warning',
     what:`Просрочено работ: ${m.overdue}`,
     where:`выполнено ${m.done} из ${m.planned} за ${m.year} год`});
@@ -208,9 +226,16 @@ function renderToVerdict(m){
     what:`В этом месяце осталось ${left} из ${m.dueMonth}`,
     where:`отмечено ${m.doneMonth} — остальные работы месяца ещё не закрыты`});
 
+  // Плановые остановки из отчёта — отдельной строкой в любом случае:
+  // они не отметка о выполнении, но показывают, что работы идут.
+  if(m.report && m.report.count) rows.push({
+    what:`По отчёту начальника производства: плановых остановок ${m.report.count} за месяц`,
+    where:`${Math.round((m.report.minutes||0)/60)} ч — проточки, переходы. Это записи сменного отчёта, а не отметки графика: связывать их автоматически нельзя`});
+
   if(rows.length){ ACAI.verdict('toVerdict', {title: m.done ? 'ТО отстаёт' : 'ТО не отмечается', rows}); return; }
   ACAI.verdict('toVerdict', {title:'ТО идёт по графику',
-    sub:`Работы этого месяца закрыты (${m.doneMonth} из ${m.dueMonth}) · за ${m.year} год отмечено ${m.done} из ${m.planned}`});
+    sub:`Работы этого месяца закрыты (${m.doneMonth} из ${m.dueMonth}) · за ${m.year} год отмечено ${m.done} из ${m.planned}`
+        + (m.report && m.report.count ? ` · по отчёту начальника производства плановых остановок ${m.report.count} за месяц` : '')});
 }
 
 // состояние свёрнутых групп

@@ -139,6 +139,28 @@ def parse_shift(label: str):
     return int(m.group(1)), ("day" if m.group(2).lower() == "день" else "night")
 
 
+# С какой колонки идут показатели смены. Первые три — метка смены,
+# бригада и фамилия начальника смены: по ним нельзя понять, была ли
+# смена вообще.
+FIRST_VALUE_COL = 4
+
+
+def row_has_values(ws, row: int) -> bool:
+    """
+    Есть ли в строке хоть один показатель.
+
+    Шаблон листа расписан на месяц вперёд, и фамилии начальников смен
+    вписывают заранее. Если считать такую строку сменой, сайт покажет
+    «последняя смена 30.09» двадцать первого числа и 60 смен в месяце
+    вместо сорока (нашли 21.09.2026). Пустая строка — это будущее, а
+    не работа.
+    """
+    return any(
+        _clean(ws.cell(row, col).value)
+        for col in range(FIRST_VALUE_COL, ws.max_column + 1)
+    )
+
+
 def read_month(ws, year: int, month: int) -> dict:
     headers = read_headers(ws)
 
@@ -167,6 +189,11 @@ def read_month(ws, year: int, month: int) -> dict:
         if not shift:
             continue
 
+        # Строка со сменой, но без единого показателя — заготовка на
+        # будущее. Не смена, не ошибка: молча пропускаем.
+        if not row_has_values(ws, row):
+            continue
+
         day, part = shift
         # Первая строка листа — ночь последнего дня прошлого месяца
         # («31 ночь» в начале сентября). Относим её к прошлому месяцу.
@@ -188,8 +215,7 @@ def read_month(ws, year: int, month: int) -> dict:
             # Шаблон листа рассчитан на 31 день: в феврале и в тридцатидневных
             # месяцах лишние строки пустые. Пустая — не ошибка. Ошибка — если
             # в строку несуществующего дня что-то вписали.
-            filled = any(_clean(ws.cell(row, c).value) for c in range(3, ws.max_column + 1))
-            if filled:
+            if row_has_values(ws, row):
                 problems.append({"sheet": ws.title, "row": row,
                                  "what": f"данные в строке «{label}», а такого дня в месяце нет"})
             continue
