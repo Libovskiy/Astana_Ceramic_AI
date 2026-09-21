@@ -554,6 +554,59 @@ def is_planned(reason: str) -> bool:
     return any(word in text for word in PLANNED_WORDS)
 
 
+
+# ОДНА БЕДА — ОДНА СТРОКА.
+#
+# В отчёте одно и то же пишут по-разному и на двух языках: «Нет глины»,
+# «Глина болган жок», «глина болмады». Пока они считались порознь, в
+# «повторяющихся причинах» стояло «Глина болган жок ×4» и «Нет глины
+# ×2» — и ни одна не выглядела серьёзной, хотя это одна и та же
+# остановка шесть раз.
+#
+# Список держим здесь, рядом с PLANNED_WORDS и PART_PATTERNS:
+# дополнять в одном месте.
+REASON_SYNONYMS = {
+    "Нет глины": (
+        r"нет\s+глины", r"глина\s*(болган\s*)?жок", r"глина\s*болмады",
+        r"глина\s*таусыл", r"глина\s*бітті",
+    ),
+    "Нет угля": (r"нет\s+угля", r"к[оө]мир\s*жок", r"көмір\s*жок"),
+    "Нет связи": (r"нет\s+связи", r"ошибка\s+интернет", r"интернет\s*жок"),
+    "Нет света": (r"свет\s*ошип", r"нет\s+света", r"скачок\s+электро", r"ток\s*жок"),
+    "Нет поддонов": (r"поддон\s*(болган\s*)?жок", r"нет\s+поддон"),
+    "Нет воды": (r"су\s*жок", r"нет\s+воды"),
+    "Нет вагонеток": (r"вагонетка\s*жок", r"нет\s+вагонет"),
+}
+
+_SYNONYM_RE = {
+    title: tuple(re.compile(pattern) for pattern in patterns)
+    for title, patterns in REASON_SYNONYMS.items()
+}
+
+# Длинная запись вроде «Замена мундштука. Проточка Оптима-800. Нет
+# глины (09:00-15:30)» — это про мундштук, а не про глину. Сводим к
+# общей причине только короткие записи, где кроме неё ничего нет.
+MAX_SYNONYM_LENGTH = 45
+
+
+def canonical_reason(text: str) -> str:
+    """
+    Причина, приведённая к одному виду: «глина болган жок» → «Нет глины».
+
+    Длинные составные записи не трогаем — там несколько работ сразу,
+    и сводить их к одной беде было бы неправдой.
+    """
+    clean = " ".join(str(text or "").split()).strip(" .;,")
+    low = clean.lower().replace("ё", "е")
+
+    if len(low) <= MAX_SYNONYM_LENGTH:
+        for title, patterns in _SYNONYM_RE.items():
+            if any(pattern.search(low) for pattern in patterns):
+                return title
+
+    return clean
+
+
 def analytics(year: int | None = None) -> dict:
     """
     Девять месяцев собственной работы начальника производства — сведённые.
@@ -624,9 +677,15 @@ def analytics(year: int | None = None) -> dict:
         # а показываем — как написано в файле. Плановое и аварийное
         # считаем раздельно: смешивать их нельзя, иначе самой дорогой
         # «поломкой» окажется проточка вальцов.
+        # Три вида, те же, что у директора в деньгах: плановое (работа
+        # по графику), организационное (нет глины, нет связи) и авария.
+        # Импорт здесь, а не наверху: downtime_cost_service сам зовёт
+        # is_planned отсюда, и на уровне модуля вышел бы круг.
+        from backend.services.downtime_cost_service import classify
+
         reasons = {}
-        planned_minutes = incident_minutes = 0
-        planned_cases = incident_cases = 0
+        planned_minutes = incident_minutes = organizational_minutes = 0
+        planned_cases = incident_cases = organizational_cases = 0
         singles = []
 
         for row in conn.execute(
@@ -636,12 +695,19 @@ def analytics(year: int | None = None) -> dict:
             WHERE year = ? AND COALESCE(TRIM(reason), '') != ''
             """, (year,)
         ):
-            text = " ".join(str(row["reason"]).split()).strip(" .;")
-            planned = is_planned(text)
+            written = " ".join(str(row["reason"]).split()).strip(" .;")
+            # Одна беда — одна строка: «Нет глины» и «Глина болган жок»
+            # это одно и то же, считать их порознь нельзя.
+            text = canonical_reason(written)
+            kind = classify(written)
+            planned = kind == "planned"
 
-            if planned:
+            if kind == "planned":
                 planned_minutes += row["minutes"] or 0
                 planned_cases += 1
+            elif kind == "organizational":
+                organizational_minutes += row["minutes"] or 0
+                organizational_cases += 1
             else:
                 incident_minutes += row["minutes"] or 0
                 incident_cases += 1
@@ -649,16 +715,21 @@ def analytics(year: int | None = None) -> dict:
             singles.append({
                 "reason": text, "section_title": row["section_title"],
                 "date": row["date"], "minutes": row["minutes"] or 0,
-                "planned": planned,
+                "planned": planned, "kind": kind,
             })
 
             key = text.lower()
             item = reasons.setdefault(key, {"reason": text, "cases": 0, "minutes": 0,
-                                            "sections": set(), "planned": planned})
+                                            "sections": set(), "planned": planned,
+                                            "kind": kind, "variants": set()})
             item["cases"] += 1
             item["minutes"] += row["minutes"] or 0
             if row["section_title"]:
                 item["sections"].add(row["section_title"])
+            if written.lower() != text.lower():
+                # Показываем, из чего сложили: человек должен узнать
+                # свои формулировки и проверить, что свели верно.
+                item["variants"].add(written)
 
         # «Повторяющиеся» — значит повторяющиеся: одиночное событие в
         # этом списке ничего не объясняет.
@@ -666,6 +737,7 @@ def analytics(year: int | None = None) -> dict:
         repeated.sort(key=lambda item: -item["minutes"])
         for item in repeated:
             item["sections"] = ", ".join(sorted(item["sections"]))
+            item["variants"] = sorted(item.get("variants") or [])[:4]
 
         # Разовые, но долгие — отдельным списком: их тоже полезно
         # видеть, просто это другой разговор.
@@ -674,7 +746,9 @@ def analytics(year: int | None = None) -> dict:
                    if reasons.get(item["reason"].lower(), {}).get("cases", 0) < 2][:5]
 
         top_reasons = repeated[:10]
-        worst_incident = next((item for item in repeated if not item["planned"]), None)
+        # «Самая дорогая поломка» — именно поломка: ни проточка, ни
+        # отсутствие глины сюда не идут, их лечат не ремонтом.
+        worst_incident = next((item for item in repeated if item.get("kind") == "incident"), None)
 
         by_shift = [dict(row) for row in conn.execute(
             """
@@ -713,6 +787,8 @@ def analytics(year: int | None = None) -> dict:
                 "planned_cases": planned_cases,
                 "incident_minutes": incident_minutes,
                 "incident_cases": incident_cases,
+                "organizational_minutes": organizational_minutes,
+                "organizational_cases": organizational_cases,
             },
         }
     finally:

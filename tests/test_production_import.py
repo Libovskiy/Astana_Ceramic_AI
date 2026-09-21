@@ -454,4 +454,54 @@ check("колонка с тысячами за смену считается ш�
 check("и человеку сказано, почему",
       "ведут поштучно" in (strange["note"] or ""), strange["note"])
 
+print("\n12. Одна беда — одна строка")
+
+from backend.services.production_import_service import canonical_reason, REASON_SYNONYMS
+
+# В отчёте пишут на двух языках и по-разному. Пока «Нет глины» и
+# «Глина болган жок» считались порознь, ни одна не выглядела
+# серьёзной — хотя это одна остановка одиннадцать раз.
+for written in ("Нет глины.", "Глина болган жок", "глина болмады", "ГЛИНА ЖОК"):
+    check(f"«{written}» → Нет глины", canonical_reason(written) == "Нет глины",
+          canonical_reason(written))
+
+check("«Поддон болган жок» → Нет поддонов",
+      canonical_reason("Поддон болган жок") == "Нет поддонов")
+check("«Ошибка интернет связи» → Нет связи",
+      canonical_reason("Ошибка интернет связи") == "Нет связи")
+
+# Длинная составная запись — это несколько работ сразу, сводить её к
+# одной беде было бы неправдой.
+long_text = "Замена мундштука. Проточка Оптима-800. Нет глины.(09:00-15:30)"
+check("составная запись не сводится к «Нет глины»",
+      canonical_reason(long_text) != "Нет глины", canonical_reason(long_text))
+
+check("список синонимов лежит в одном месте", "Нет глины" in REASON_SYNONYMS)
+
+# Сведение должно попадать в отчёт: заводим одну беду двумя записями.
+add = folder / "синонимы.xlsx"
+book = openpyxl.load_workbook(path)
+sheet = book.active
+massa_col = None
+for col in range(1, sheet.max_column + 1):
+    if str(sheet.cell(1, col).value or "").lower().startswith("простой оборудования массоподготовка") \
+       and str(sheet.cell(2, col).value or "").strip() == "мин":
+        massa_col = col
+        break
+
+sheet.cell(4, massa_col).value = "08:00-09:00"
+sheet.cell(4, massa_col + 1).value = "Нет глины"
+sheet.cell(5, massa_col).value = "09:00-10:00"
+sheet.cell(5, massa_col + 1).value = "Глина болган жок"
+book.save(add)
+
+save_workbook(read_workbook(str(add), 2026), "синонимы.xlsx", "Проверка")
+merged = analytics(2026)
+clay = next((item for item in merged["top_reasons"] if item["reason"] == "Нет глины"), None)
+
+check("две формулировки стали одной строкой", clay and clay["cases"] == 2, clay)
+check("и видно, из чего свели", clay and clay.get("variants"), clay)
+check("это не поломка, а организационная остановка",
+      clay and clay.get("kind") == "organizational", clay)
+
 finish("Сменный отчёт из Экселя")

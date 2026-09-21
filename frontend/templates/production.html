@@ -370,8 +370,10 @@ async function loadXlsAnalytics(){
   // вальцов и переход на другой формат — это работа, а не поломка.
   const lines = [];
   if (totals.incident_minutes != null) {
-    lines.push(`Из ${xlsHours(totals.minutes)} простоя <b>${xlsHours(totals.incident_minutes)}</b> — аварии, `
-      + `${xlsHours(totals.planned_minutes)} — плановые остановки (проточка, переходы).`);
+    const parts = [`<b>${xlsHours(totals.incident_minutes)}</b> — поломки`];
+    if (totals.organizational_minutes) parts.push(`${xlsHours(totals.organizational_minutes)} — нет сырья или связи`);
+    parts.push(`${xlsHours(totals.planned_minutes)} — плановые (проточка, переходы)`);
+    lines.push(`Из ${xlsHours(totals.minutes)} простоя: ` + parts.join(', ') + '.');
   }
   if (worstSection) lines.push(`Больше всего часов теряет <b>${xlsEsc(worstSection.section_title)}</b> — ${xlsHours(worstSection.minutes)} за год.`);
   if (worstMonth) lines.push(`Тяжелее всего дался <b>${xlsEsc(worstMonth.sheet)}</b>: ${xlsHours(worstMonth.downtime_minutes)} простоя.`);
@@ -421,7 +423,9 @@ async function loadXlsAnalytics(){
       <tbody>
         ${reasons.map(r => `<tr style="border-bottom:1px solid var(--border)">
           <td style="padding:8px">${xlsEsc(r.reason)}
-            ${r.planned ? '<span style="font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:1px 7px;margin-left:6px">плановая</span>' : ''}</td>
+            ${r.kind === 'planned' ? '<span style="font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:1px 7px;margin-left:6px">плановая</span>' : ''}
+            ${r.kind === 'organizational' ? '<span style="font-size:11px;color:var(--warn);border:1px solid var(--warn);border-radius:999px;padding:1px 7px;margin-left:6px">не ремонт</span>' : ''}
+            ${(r.variants||[]).length ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">в отчёте писали: ${(r.variants||[]).map(v=>`«${xlsEsc(v.slice(0,40))}»`).join(', ')}</div>` : ''}</td>
           <td style="padding:8px;color:var(--text-dim)">${xlsEsc(r.sections)}</td>
           <td style="padding:8px;font-family:var(--mono)">${r.cases}</td>
           <td style="padding:8px;font-family:var(--mono)">${xlsHours(r.minutes)}</td>
@@ -439,7 +443,8 @@ async function loadXlsAnalytics(){
           ${longest.map(r => `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:8px;color:var(--text-dim);white-space:nowrap">${xlsDate(r.date)}</td>
             <td style="padding:8px">${xlsEsc(r.reason)}
-              ${r.planned ? '<span style="font-size:11px;color:var(--text-dim)"> · плановая</span>' : ''}</td>
+              ${r.kind === 'planned' ? '<span style="font-size:11px;color:var(--text-dim)"> · плановая</span>' : ''}
+              ${r.kind === 'organizational' ? '<span style="font-size:11px;color:var(--warn)"> · не ремонт</span>' : ''}</td>
             <td style="padding:8px;color:var(--text-dim)">${xlsEsc(r.section_title)}</td>
             <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${xlsHours(r.minutes)}</td>
           </tr>`).join('')}
