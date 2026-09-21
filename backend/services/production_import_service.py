@@ -123,6 +123,58 @@ def init_production_import():
     conn.close()
 
 
+def compare_with_saved(data: dict) -> dict:
+    """
+    Что изменится, если загрузить этот файл поверх сохранённого.
+
+    Загрузка заменяет год целиком — это правильно, раз Эксель главный,
+    но это и риск: загрузят старую версию файла или файл другого года,
+    и свежие данные молча исчезнут. Поэтому считаем «было / станет» и
+    отдельно говорим, если новое МЕНЬШЕ старого.
+    """
+    year = int(data.get("year"))
+    months = data.get("months") or []
+
+    incoming = {
+        "months": len(months),
+        "shifts": sum(len(m.get("shifts") or []) for m in months),
+        "downtime": sum(len(m.get("downtime") or []) for m in months),
+        "notes": sum(len(m.get("notes") or []) for m in months),
+    }
+
+    init_production_import()
+    conn = get_connection()
+    try:
+        run = conn.execute(
+            "SELECT * FROM xls_imports WHERE year = ? ORDER BY id DESC LIMIT 1", (year,)
+        ).fetchone()
+
+        if not run:
+            return {"first_time": True, "incoming": incoming, "shrinks": False}
+
+        current = {
+            "months": run["sheets"] or 0,
+            "shifts": run["shifts"] or 0,
+            "downtime": run["downtime"] or 0,
+            "notes": run["notes"] or 0,
+        }
+    finally:
+        conn.close()
+
+    smaller = [key for key in ("months", "shifts", "downtime", "notes")
+               if incoming[key] < current[key]]
+
+    return {
+        "first_time": False,
+        "incoming": incoming,
+        "current": current,
+        "shrinks": bool(smaller),
+        "smaller": smaller,
+        "uploaded_at": run["uploaded_at"],
+        "filename": run["filename"],
+    }
+
+
 def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
     """
     Сохранить прочитанный файл, заменив данные за этот год.
@@ -134,7 +186,11 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
     year = int(data.get("year"))
     months = data.get("months") or []
 
-    shifts = [item for month in months for item in month.get("shifts") or []]
+    # У смен в разобранном файле нет названия листа (у простоев и
+    # записей журнала есть) — проставляем сами, иначе разбивка по
+    # месяцам молча склеится в одну строку «None».
+    shifts = [{**item, "sheet": item.get("sheet") or month.get("sheet")}
+              for month in months for item in month.get("shifts") or []]
     downtime = [item for month in months for item in month.get("downtime") or []]
     notes = [item for month in months for item in month.get("notes") or []]
     problems = data.get("problems") or []
@@ -210,6 +266,25 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
     return summary(year)
 
 
+# Через сколько дней после загрузки отчёт считается устаревшим.
+# Файл ведут помесячно, поэтому месяц — естественный срок: дольше
+# этого числа висят цифры, которые уже не про сегодняшний завод.
+STALE_DAYS = 31
+
+
+def _days_since(stamp) -> int | None:
+    """Сколько дней прошло. None — если даты нет или она непонятна."""
+    if not stamp:
+        return None
+    text = str(stamp).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return max(0, (datetime.now() - datetime.strptime(text[:len(fmt) + 2].strip(), fmt)).days)
+        except ValueError:
+            continue
+    return None
+
+
 def _sheet_name(month: int) -> str:
     from backend.services.production_report_import import MONTHS
     return MONTHS[month - 1] if 1 <= month <= 12 else ""
@@ -266,11 +341,23 @@ def summary(year: int | None = None) -> dict:
             "SELECT MAX(date) FROM xls_shifts WHERE year = ?", (year,)
         ).fetchone()[0]
 
+        run = dict(run)
+
+        # Свежесть: файл обновляют руками, и «данные с 18.09» через
+        # месяц выглядят так же убедительно, как вчерашние. Считаем
+        # дни, чтобы страница и колокольчик говорили прямо.
+        uploaded_days = _days_since(run.get("uploaded_at"))
+        shift_days = _days_since(last_shift)
+
         return {
             "loaded": True,
             "year": year,
-            "run": dict(run),
+            "run": run,
             "last_shift_date": last_shift,
+            "uploaded_days_ago": uploaded_days,
+            "last_shift_days_ago": shift_days,
+            "stale": uploaded_days is not None and uploaded_days >= STALE_DAYS,
+            "stale_after_days": STALE_DAYS,
             "by_section": by_section,
             "months": months,
             "problems": problems,
@@ -405,3 +492,128 @@ def repairs_for_machine(machine_name: str, location: str, question: str, limit: 
     if not section:
         return []
     return find_repairs(section, question, limit)
+
+
+def analytics(year: int | None = None) -> dict:
+    """
+    Девять месяцев собственной работы начальника производства — сведённые.
+
+    Он ведёт этот файл вручную помесячно и почти наверняка никогда не
+    видел всё вместе: где теряются часы, какие причины повторяются,
+    как отличается день от ночи. Ради этого Эксель и подключали: если
+    человек увидит в этом пользу, файл будет обновляться сам собой.
+
+    Считаем только из того, что прочиталось. Неразобранное показываем
+    отдельным числом, а не растворяем в итогах.
+    """
+    init_production_import()
+
+    conn = get_connection()
+    try:
+        if year is None:
+            row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
+            year = row[0] if row and row[0] else datetime.now().year
+
+        if not conn.execute("SELECT 1 FROM xls_imports WHERE year = ? LIMIT 1", (year,)).fetchone():
+            return {"loaded": False, "year": year}
+
+        from backend.services.production_report_import import MONTHS
+        order = {name: index for index, name in enumerate(MONTHS)}
+
+        months = [dict(row) for row in conn.execute(
+            """
+            SELECT s.sheet,
+                   COUNT(*) AS shifts,
+                   SUM(COALESCE(s.forming_plan, 0)) AS forming_plan,
+                   SUM(COALESCE(s.forming_fact, 0)) AS forming_fact,
+                   SUM(COALESCE(s.packing_plan, 0)) AS packing_plan,
+                   SUM(COALESCE(s.packing_fact, 0)) AS packing_fact
+            FROM xls_shifts s WHERE s.year = ?
+            GROUP BY s.sheet
+            """, (year,)
+        )]
+
+        downtime_by_month = {row["sheet"]: dict(row) for row in conn.execute(
+            """
+            SELECT sheet, COUNT(*) AS cases, SUM(COALESCE(minutes, 0)) AS minutes,
+                   SUM(CASE WHEN minutes IS NULL THEN 1 ELSE 0 END) AS unparsed
+            FROM xls_downtime WHERE year = ? GROUP BY sheet
+            """, (year,)
+        )}
+
+        for item in months:
+            extra = downtime_by_month.get(item["sheet"], {})
+            item["downtime_cases"] = extra.get("cases", 0)
+            item["downtime_minutes"] = extra.get("minutes", 0)
+            item["downtime_unparsed"] = extra.get("unparsed", 0)
+
+        months.sort(key=lambda item: order.get(item["sheet"], 99))
+
+        by_section = [dict(row) for row in conn.execute(
+            """
+            SELECT section, section_title, COUNT(*) AS cases,
+                   SUM(COALESCE(minutes, 0)) AS minutes,
+                   SUM(CASE WHEN minutes IS NULL THEN 1 ELSE 0 END) AS unparsed
+            FROM xls_downtime WHERE year = ?
+            GROUP BY section, section_title ORDER BY minutes DESC
+            """, (year,)
+        )]
+
+        # Причины пишут вручную и по-разному («Проточка СМК-102» и
+        # «Проточка СМК-102.»), поэтому группируем по очищенному тексту,
+        # а показываем — как написано в файле.
+        reasons = {}
+        for row in conn.execute(
+            """
+            SELECT reason, section_title, COALESCE(minutes, 0) AS minutes
+            FROM xls_downtime
+            WHERE year = ? AND COALESCE(TRIM(reason), '') != ''
+            """, (year,)
+        ):
+            key = " ".join(str(row["reason"]).split()).strip(" .;").lower()
+            item = reasons.setdefault(key, {"reason": " ".join(str(row["reason"]).split()).strip(" .;"),
+                                            "cases": 0, "minutes": 0, "sections": set()})
+            item["cases"] += 1
+            item["minutes"] += row["minutes"] or 0
+            if row["section_title"]:
+                item["sections"].add(row["section_title"])
+
+        top_reasons = sorted(reasons.values(), key=lambda item: -item["minutes"])[:10]
+        for item in top_reasons:
+            item["sections"] = ", ".join(sorted(item["sections"]))
+
+        by_shift = [dict(row) for row in conn.execute(
+            """
+            SELECT shift, COUNT(*) AS cases, SUM(COALESCE(minutes, 0)) AS minutes
+            FROM xls_downtime WHERE year = ? GROUP BY shift
+            """, (year,)
+        )]
+
+        totals = conn.execute(
+            """
+            SELECT COUNT(*) AS cases, SUM(COALESCE(minutes, 0)) AS minutes,
+                   SUM(CASE WHEN minutes IS NULL THEN 1 ELSE 0 END) AS unparsed
+            FROM xls_downtime WHERE year = ?
+            """, (year,)
+        ).fetchone()
+
+        notes_total = conn.execute(
+            "SELECT COUNT(*) FROM xls_notes WHERE year = ?", (year,)
+        ).fetchone()[0]
+
+        return {
+            "loaded": True,
+            "year": year,
+            "months": months,
+            "by_section": by_section,
+            "top_reasons": top_reasons,
+            "by_shift": by_shift,
+            "totals": {
+                "cases": totals["cases"] or 0,
+                "minutes": totals["minutes"] or 0,
+                "unparsed": totals["unparsed"] or 0,
+                "notes": notes_total,
+            },
+        }
+    finally:
+        conn.close()

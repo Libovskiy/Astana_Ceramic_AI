@@ -81,6 +81,45 @@ def _passes_role_filter(
 
 
 
+
+# Кому напоминать про сменный отчёт — те же, кто его и загружает
+# (REPORT_IMPORT_ROLES в production_routes).
+REPORT_IMPORT_ROLES = ("admin", "director", "chief_engineer", "shift_supervisor")
+
+
+def _report_import_notifications(user):
+    """
+    Напоминание, что сменный отчёт из Экселя давно не обновляли.
+
+    Отметка «данные из файла от 18.09» честная, но её никто не увидит,
+    если не зайти на «Производство». Через месяц цифры перестают быть
+    про сегодняшний завод, а выглядят так же уверенно — поэтому
+    напоминаем в колокольчике тому, кто загружает.
+    """
+    if user.get("role") not in REPORT_IMPORT_ROLES:
+        return []
+
+    from backend.services.production_import_service import summary
+
+    state = summary()
+
+    if not state.get("loaded") or not state.get("stale"):
+        return []
+
+    days = state.get("uploaded_days_ago")
+    run = state.get("run") or {}
+
+    return [{
+        "type": "report_import",
+        "severity": "warning",
+        "icon": "📄",
+        "title": f"Сменный отчёт не обновляли {days} дн.",
+        "subtitle": f"Файл «{run.get('filename') or '—'}» от {str(run.get('uploaded_at') or '')[:10]}. "
+                    "Цифры по сменам и простоям — оттуда.",
+        "url": "/production",
+    }]
+
+
 def _writeoff_notifications(user):
     """
     Ответственному за склад: ремонт сделан, запчасть, похоже, взяли.
@@ -272,6 +311,11 @@ def get_notifications(user):
         notifications.extend(_writeoff_notifications(user))
     except Exception as error:
         print(f"[notification_service] Списание пропущено: {error}")
+
+    try:
+        notifications.extend(_report_import_notifications(user))
+    except Exception as error:
+        print(f"[notification_service] Отчёт из Экселя пропущен: {error}")
 
     # Сортируем ещё раз после добавления задач, ТО и бэкапа — раньше
     # сортировка шла до них, и просроченная задача оказывалась ниже

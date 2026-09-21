@@ -119,6 +119,20 @@
         </div>
       </section>
 
+      <!-- ЧТО ВИДНО ИЗ ОТЧЁТА -->
+      <!-- Девять месяцев, которые начальник производства вёл вручную,
+           сведённые вместе. Он их почти наверняка не видел целиком:
+           где теряются часы, какие причины повторяются, чем ночь
+           отличается от дня. Если он увидит в этом пользу, файл будет
+           обновляться сам собой. -->
+      <section class="dashboard-card" id="xlsAnalyticsCard" style="display:none">
+        <div class="card-header">
+          <h2>Что видно из отчёта</h2>
+          <p>Ваши же смены за год, сведённые вместе</p>
+        </div>
+        <div id="xlsAnalytics"></div>
+      </section>
+
       <!-- MONTHLY PLAN -->
       <section class="dashboard-card" id="planSection" style="display: none;">
         <div class="card-header">
@@ -237,13 +251,102 @@ async function loadXls(role){
         </tbody>
       </table>` : ''}
 
-    <div style="font-size:12px;color:var(--text-dim);margin-top:10px">
-      Файл «${xlsEsc(run.filename||'—')}» загрузил ${xlsEsc(run.uploaded_by||'—')}, ${xlsEsc((run.uploaded_at||'').slice(0,16))}.
+    <div style="font-size:12px;margin-top:10px;${data.stale ? 'color:var(--warn)' : 'color:var(--text-dim)'}">
+      ${data.stale ? '⚠️ ' : ''}Данные из файла «${xlsEsc(run.filename||'—')}» от ${xlsEsc((run.uploaded_at||'').slice(0,10))}${
+        data.uploaded_days_ago === 0 ? ' — загружен сегодня'
+        : data.uploaded_days_ago != null ? `, прошло ${data.uploaded_days_ago} ${xlsPlural(data.uploaded_days_ago,'день','дня','дней')}` : ''}.
+      Загрузил ${xlsEsc(run.uploaded_by||'—')}.
       ${data.last_shift_date ? `Последняя смена в файле — ${xlsEsc(data.last_shift_date)}.` : ''}
+      ${data.stale ? '<br>Отчёт давно не обновляли: цифры ниже — с того дня, а не с сегодняшнего.' : ''}
     </div>`;
 
   const hint = document.getElementById('xlsHint');
   if (hint) hint.textContent = 'Загрузка заменяет данные за год целиком — файл главнее сайта.';
+
+  loadXlsAnalytics();
+}
+
+async function loadXlsAnalytics(){
+  const card = document.getElementById('xlsAnalyticsCard');
+  const box = document.getElementById('xlsAnalytics');
+  if (!card || !box) return;
+
+  let d = {};
+  try { d = await ACAI.get('/api/production/report-analytics'); } catch { return; }
+  if (!d.loaded || !(d.months||[]).length) return;
+
+  card.style.display = '';
+
+  const totals = d.totals || {};
+  const months = d.months || [];
+  const sections = d.by_section || [];
+  const reasons = d.top_reasons || [];
+  const shifts = d.by_shift || [];
+
+  const day = shifts.find(x => x.shift === 'day') || {minutes:0, cases:0};
+  const night = shifts.find(x => x.shift === 'night') || {minutes:0, cases:0};
+  const worstMonth = [...months].sort((a,b) => (b.downtime_minutes||0) - (a.downtime_minutes||0))[0];
+  const worstSection = sections[0];
+  const maxMonth = Math.max(1, ...months.map(m => m.downtime_minutes||0));
+
+  // Выводы словами — как на остальных вкладках: сначала что это значит,
+  // потом уже таблицы.
+  const lines = [];
+  if (worstSection) lines.push(`Больше всего часов теряет <b>${xlsEsc(worstSection.section_title)}</b> — ${xlsHours(worstSection.minutes)} за год.`);
+  if (worstMonth) lines.push(`Тяжелее всего дался <b>${xlsEsc(worstMonth.sheet)}</b>: ${xlsHours(worstMonth.downtime_minutes)} простоя.`);
+  if (day.minutes && night.minutes) {
+    const times = (day.minutes / Math.max(1, night.minutes)).toFixed(1);
+    lines.push(`В дневную смену простоев в ${times} раза больше, чем в ночную (${xlsHours(day.minutes)} против ${xlsHours(night.minutes)}).`);
+  }
+  if (reasons[0]) lines.push(`Самая дорогая повторяющаяся причина — «${xlsEsc(reasons[0].reason)}»: ${xlsHours(reasons[0].minutes)} за ${reasons[0].cases} ${xlsPlural(reasons[0].cases,'раз','раза','раз')}.`);
+
+  box.innerHTML = `
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:14px">
+      <div><b style="font-family:var(--mono);font-size:22px">${xlsHours(totals.minutes)}</b> простоя за год</div>
+      <div><b style="font-family:var(--mono);font-size:22px">${totals.cases||0}</b> ${xlsPlural(totals.cases||0,'случай','случая','случаев')}</div>
+      <div><b style="font-family:var(--mono);font-size:22px">${months.length}</b> ${xlsPlural(months.length,'месяц','месяца','месяцев')} в файле</div>
+    </div>
+
+    ${lines.length ? `<div style="border-left:3px solid var(--accent);padding:2px 0 2px 12px;margin-bottom:16px;font-size:14px;line-height:1.7">
+      ${lines.map(l => `<div>${l}</div>`).join('')}
+    </div>` : ''}
+
+    <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">По месяцам</div>
+    <div style="margin-bottom:18px">
+      ${months.map(m => {
+        const width = Math.round((m.downtime_minutes||0) / maxMonth * 100);
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:13px">
+          <div style="width:92px;flex-shrink:0">${xlsEsc(m.sheet)}</div>
+          <div style="flex:1;background:var(--surface-2);border-radius:4px;height:16px;overflow:hidden">
+            <div style="width:${width}%;height:100%;background:var(--accent);opacity:.75"></div>
+          </div>
+          <div style="width:110px;flex-shrink:0;text-align:right;font-family:var(--mono)">${xlsHours(m.downtime_minutes)}</div>
+          <div style="width:92px;flex-shrink:0;text-align:right;color:var(--text-dim);font-size:12px">${m.shifts} ${xlsPlural(m.shifts,'смена','смены','смен')}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">Повторяющиеся причины</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Причина (как записана в отчёте)</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Участок</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Раз</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Потеряно</th>
+      </tr></thead>
+      <tbody>
+        ${reasons.map(r => `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px">${xlsEsc(r.reason)}</td>
+          <td style="padding:8px;color:var(--text-dim)">${xlsEsc(r.sections)}</td>
+          <td style="padding:8px;font-family:var(--mono)">${r.cases}</td>
+          <td style="padding:8px;font-family:var(--mono)">${xlsHours(r.minutes)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+
+    ${totals.unparsed ? `<div style="font-size:12px;color:var(--warn);margin-top:10px">
+      В эти числа не вошли ${totals.unparsed} ${xlsPlural(totals.unparsed,'запись','записи','записей')}, которые не удалось разобрать — они перечислены выше.
+    </div>` : ''}`;
 }
 
 async function uploadXls(event){
@@ -272,6 +375,26 @@ async function uploadXls(event){
         alert(data.detail || 'Не получилось прочитать файл.');
         return;
       }
+
+      // В файле меньше данных, чем уже загружено: возможно, это старая
+      // версия. Молча затирать свежее нельзя — спрашиваем.
+      if (data.needs_confirm) {
+        hint.textContent = '';
+        if (!confirm(data.message + '\n\nВсё равно заменить?')) return;
+        const again = await fetch('/api/production/report-import', {
+          method: 'POST', credentials: 'include',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            filename: file.name,
+            data: String(reader.result).split(',')[1],
+            year: new Date().getFullYear(),
+            confirm: true,
+          }),
+        });
+        const forced = await again.json().catch(() => ({}));
+        if (!again.ok) { alert(forced.detail || 'Не получилось.'); return; }
+      }
+
       hint.textContent = '';
       await loadXls((await ACAI.get('/auth/me'))?.user?.role || (await ACAI.get('/auth/me'))?.role);
     } catch (error) {

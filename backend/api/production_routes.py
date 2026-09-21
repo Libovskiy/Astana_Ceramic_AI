@@ -497,6 +497,33 @@ def import_production_report(
                 detail=f"Не смог прочитать файл: {error}. Данные на сайте не менялись."
             )
 
+    # Загрузка заменяет год целиком — значит, старой версией файла
+    # можно молча затереть свежие данные. Если в файле МЕНЬШЕ, чем уже
+    # сохранено, показываем «было / станет» и ждём подтверждения.
+    # Больше — грузим молча, это обычное пополнение.
+    from backend.services.production_import_service import compare_with_saved
+
+    diff = compare_with_saved(data)
+
+    if diff.get("shrinks") and not request.get("confirm"):
+        names = {"months": "месяцев", "shifts": "смен",
+                 "downtime": "простоев", "notes": "записей журнала"}
+        lost = ", ".join(
+            f"{names[key]}: было {diff['current'][key]}, станет {diff['incoming'][key]}"
+            for key in diff.get("smaller") or []
+        )
+        return {
+            "success": False,
+            "needs_confirm": True,
+            "diff": diff,
+            "message": (
+                f"В этом файле меньше данных, чем уже загружено ({lost}). "
+                f"Сейчас на сайте файл «{diff.get('filename') or '—'}» "
+                f"от {str(diff.get('uploaded_at') or '')[:16]}. "
+                "Если это более старая версия — свежие данные пропадут."
+            ),
+        }
+
     result = save_workbook(data, filename, user.get("full_name") or user.get("username"))
 
     log_action(
@@ -518,3 +545,20 @@ def production_report_state(
     from backend.services.production_import_service import summary, history
 
     return {"success": True, **summary(year), "history": history(5)}
+
+
+@router.get("/api/production/report-analytics")
+def production_report_analytics(
+    year: int | None = None,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Сводка по сменному отчёту: месяцы, участки, причины, день/ночь.
+
+    Открыта всем, кто видит «Производство»: это работа цеха, и прятать
+    её от самого цеха незачем. Считается из того, что прочиталось;
+    неразобранное идёт отдельным числом, а не растворяется в итогах.
+    """
+    from backend.services.production_import_service import analytics
+
+    return {"success": True, **analytics(year)}

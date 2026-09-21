@@ -206,4 +206,106 @@ level, source = _confidence([], [], "любой совет", journal_hints=["202
 check("совет по журналу помечается «Низкая»", level == "Низкая", level)
 check("и прямо называет источник", "журнал" in source, source)
 
+print("\n6. Старой версией файла нельзя молча затереть свежую")
+
+from backend.services.production_import_service import compare_with_saved, analytics
+
+# Сейчас сохранён файл с 4 сменами. Готовим «старую версию» — где
+# данных меньше: так выглядит загрузка прошлогоднего файла или файла
+# другого года.
+short = {"year": 2026, "months": [{
+    "sheet": "Сентябрь",
+    "shifts": (data["months"][0]["shifts"] or [])[:1],
+    "downtime": (data["months"][0]["downtime"] or [])[:1],
+    "notes": [],
+    "problems": [],
+}], "problems": []}
+
+diff = compare_with_saved(short)
+check("замена меньшим объёмом замечена", diff.get("shrinks") is True, diff)
+check("видно «было / станет»",
+      diff["current"]["shifts"] == 4 and diff["incoming"]["shifts"] == 1, diff)
+
+bigger = compare_with_saved(data)
+check("такой же или больший объём вопросов не вызывает", bigger.get("shrinks") is False, bigger)
+
+# Сервер обязан отказать без подтверждения — иначе свежие данные
+# исчезнут молча.
+director = sb.user("director")
+import base64
+payload = base64.b64encode(path.read_bytes()).decode()
+
+response = director.post("/api/production/report-import",
+                         json={"filename": "отчёт.xlsx", "data": payload, "year": 2026})
+check("повторная загрузка того же файла проходит без вопросов",
+      response.status_code == 200 and response.json().get("success") is not False,
+      response.text[:200])
+
+# А теперь то же самое, но с меньшим файлом: собираем файл с одной сменой.
+lonely = folder / "одна-смена.xlsx"
+book = openpyxl.load_workbook(path)
+sheet = book.active
+for row in (4, 5, 6):
+    for col in range(1, sheet.max_column + 1):
+        # Именно присваивание: openpyxl трактует cell(row, col, None)
+        # как «значение не передано» и ничего не стирает.
+        sheet.cell(row, col).value = None
+book.save(lonely)
+
+response = director.post("/api/production/report-import",
+                         json={"filename": "старый.xlsx",
+                               "data": base64.b64encode(lonely.read_bytes()).decode(),
+                               "year": 2026})
+body = response.json()
+check("меньший файл без подтверждения не заменяет данные",
+      body.get("needs_confirm") is True, body)
+check("и объясняет человеку, что именно пропадёт",
+      "меньше данных" in (body.get("message") or ""), body.get("message"))
+
+rows = sb.db().execute("SELECT COUNT(*) FROM xls_shifts WHERE year = 2026").fetchone()[0]
+check("данные при этом не тронуты", rows == 4, rows)
+
+response = director.post("/api/production/report-import",
+                         json={"filename": "старый.xlsx",
+                               "data": base64.b64encode(lonely.read_bytes()).decode(),
+                               "year": 2026, "confirm": True})
+rows = sb.db().execute("SELECT COUNT(*) FROM xls_shifts WHERE year = 2026").fetchone()[0]
+check("с подтверждением — заменяет", response.status_code == 200 and rows == 1, rows)
+
+
+print("\n7. Свежесть отчёта видно, и о ней напоминают")
+
+state = summary(2026)
+check("сколько дней прошло с загрузки — посчитано",
+      state.get("uploaded_days_ago") == 0, state.get("uploaded_days_ago"))
+check("свежий отчёт устаревшим не считается", state.get("stale") is False, state.get("stale"))
+
+conn = sb.db()
+conn.execute("UPDATE xls_imports SET uploaded_at = date('now', '-40 days') || ' 10:00:00' WHERE year = 2026")
+conn.commit()
+
+state = summary(2026)
+check("через 40 дней отчёт помечается устаревшим", state.get("stale") is True, state)
+
+from backend.services.notification_service import _report_import_notifications
+
+bell = _report_import_notifications({"role": "director", "id": 1})
+check("в колокольчике появляется напоминание", len(bell) == 1, bell)
+check("напоминание называет число дней",
+      bell and "не обновляли" in bell[0]["title"], bell)
+check("и ведёт туда, где загружают", bell and bell[0]["url"] == "/production", bell)
+
+check("механику это напоминание не приходит — загружает не он",
+      not _report_import_notifications({"role": "mechanic", "id": 1}))
+
+
+print("\n8. Своя работа, сведённая вместе")
+
+report = analytics(2026)
+check("сводка считается", report.get("loaded") is True, report)
+check("есть разбивка по месяцам", bool(report.get("months")), report.get("months"))
+check("есть повторяющиеся причины", isinstance(report.get("top_reasons"), list), report.get("top_reasons"))
+check("неразобранное не растворилось в итогах",
+      report["totals"]["unparsed"] >= 0 and "unparsed" in report["totals"], report.get("totals"))
+
 finish("Сменный отчёт из Экселя")
