@@ -1309,12 +1309,11 @@ PALLET_BY_GROUP = {
 GROUP_TITLES = {
     "hollow": "1,4 НФ пустотелый",
     "solid": "1,4 НФ полнотелый",
-    "nf14": "1,4 НФ — в файле без пометки",
     "block": "Блок 10,7 НФ",
 }
 
 # Порядок на странице: сначала то, чем завод живёт.
-GROUP_ORDER = ("hollow", "solid", "nf14", "block")
+GROUP_ORDER = ("hollow", "solid", "block")
 
 
 def _format_key(title: str) -> str:
@@ -1336,9 +1335,10 @@ def product_group(title: str) -> str:
     if digits.startswith("14"):
         if "пустотел" in low:
             return "hollow"
-        if "полнотел" in low or "полнател" in low:
-            return "solid"
-        return "nf14"
+        # С июля колонку подписывают просто «1.4НФ», без пометки.
+        # Владелец, 21.09.2026: это полнотелый. Своей догадки здесь
+        # нет — спросили и записали ответ.
+        return "solid"
     return "other"
 
 
@@ -1500,9 +1500,9 @@ def production_totals(year: int | None = None, period: str = "all",
                 pieces = f"{item['pieces']:,}".replace(",", " ")
                 item["note"] = (f"{item['cubic']:.1f} м³ ÷ {BLOCK_M3} м³/шт = {pieces} шт"
                                 .replace(".", ","))
-        if key == "nf14":
-            item["note"] = ("в файле колонка подписана просто «1.4НФ» — "
-                            "пустотелый это или полнотелый, в отчёте не сказано")
+        if key == "solid" and len(item["variants"]) > 1:
+            item["note"] = ("с июля колонка в файле подписана просто «1.4НФ», "
+                            "без пометки — владелец подтвердил: это полнотелый")
         items.append(item)
 
     made = sum(item["pieces"] for item in items)
