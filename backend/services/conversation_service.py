@@ -201,6 +201,22 @@ DISCIPLINE_TITLE = {
 }
 
 
+
+def _last_system_message(case_id):
+    """Последняя служебная строка в переписке — чтобы не повторяться."""
+    try:
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT message FROM chat_history WHERE case_id = ? AND role = 'system' ORDER BY id DESC LIMIT 1",
+            (case_id,)
+        ).fetchone()
+        conn.close()
+        return row["message"] if row else None
+    except Exception as error:
+        print(f"[conversation_service] не прочитал последнюю отметку: {error}")
+        return None
+
+
 def _escalate(case_id, case, messages, reason, lead):
     """
     Передача специалисту — с указанием, КАКОМУ.
@@ -214,6 +230,20 @@ def _escalate(case_id, case, messages, reason, lead):
     Если определить не удалось, оставляем как было: пусть видят
     оба. Позвать не того хуже, чем позвать обоих.
     """
+
+    # Два быстрых нажатия «Не помогло» подряд успевают уйти на сервер
+    # раньше, чем сменился статус: оба запроса видят «Открыто» и оба
+    # пишут «передаю обращение». В переписке владельца это случилось
+    # дважды подряд с разницей в 8 секунд (обращение №67, 21.09.2026).
+    # Один и тот же вывод два раза — человек решает, что система
+    # сломалась.
+    fresh = get_case(case_id) or {}
+
+    if fresh.get("status") in (STATUS_ESCALATED, STATUS_IN_PROGRESS, STATUS_DRAFT_CLOSED, STATUS_CLOSED):
+        last = _last_system_message(case_id)
+        if last and last.startswith(lead[:40]):
+            return {"type": "escalated", "message": last,
+                    "discipline": fresh.get("required_discipline")}
 
     escalate_case(case_id)
 
