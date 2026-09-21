@@ -278,3 +278,52 @@ def assign_user_equipment_route(
     return {
         "success": True
     }
+
+
+# =========================================
+# СТОИМОСТЬ ЧАСА ПРОСТОЯ
+# =========================================
+# Сколько стоит час простоя, знает только директор. Пока не задал —
+# система нигде не показывает денег: придуманная цифра хуже
+# отсутствующей.
+
+RATE_ROLES = ("director", "admin")
+
+
+@router.get("/api/settings/downtime-rates")
+def get_downtime_rates(user: dict = Depends(require_roles(*RATE_ROLES))):
+    from backend.services.downtime_cost_service import SECTIONS, get_rates, rates_history
+
+    return {
+        "success": True,
+        "sections": [{"section": key, "title": title} for key, title in SECTIONS.items()],
+        "rates": get_rates(),
+        "history": rates_history(20),
+    }
+
+
+@router.put("/api/settings/downtime-rates")
+def set_downtime_rate(request: dict, user: dict = Depends(require_roles(*RATE_ROLES))):
+    from fastapi import HTTPException
+
+    from backend.services.downtime_cost_service import set_rate
+
+    who = user.get("full_name") or user.get("username")
+
+    try:
+        saved = set_rate(
+            section=(request.get("section") or "").strip(),
+            rate_per_hour=request.get("rate_per_hour"),
+            who=who,
+            note=(request.get("note") or "").strip(),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="downtime_rate_set", target=f"section:{request.get('section')}",
+        details=f"{saved.get('rate_per_hour')} ₸/ч",
+    )
+
+    return {"success": True, "rate": saved}

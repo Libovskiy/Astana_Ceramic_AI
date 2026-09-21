@@ -53,6 +53,10 @@ class ChatRequest(BaseModel):
 
     completed_actions: list[str] = []
 
+    # Период для управленческого помощника: кнопки «сегодня / неделя /
+    # месяц» присылают его явно, иначе угадываем по тексту вопроса.
+    period: str | None = None
+
 
 class DiagnosticRequest(BaseModel):
 
@@ -291,7 +295,26 @@ def management_ai(
         }
 
     dashboard_data = get_dashboard_data()
-    answer = ask_management_ai(question, dashboard_data)
+
+    # Простои и деньги считает сервер и передаёт готовыми строками:
+    # модель их только пересказывает. Период берём из вопроса — у
+    # помощника есть кнопки «за сегодня / неделю / месяц».
+    from backend.services.downtime_cost_service import losses_text
+
+    period = (request.period or "").strip().lower()
+    if period not in ("today", "week", "month"):
+        low = question.lower()
+        period = ("today" if "сегодня" in low
+                  else "month" if ("месяц" in low or "30 дн" in low)
+                  else "week")
+
+    try:
+        losses = losses_text(period)
+    except Exception as error:
+        print(f"[management-ai] простои не посчитаны: {error}")
+        losses = None
+
+    answer = ask_management_ai(question, dashboard_data, losses=losses)
 
     if answer is None:
         return {

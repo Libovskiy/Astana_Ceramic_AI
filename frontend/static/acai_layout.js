@@ -283,7 +283,7 @@ const NAV_ITEMS = [
   { icon: '👥', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer'] },
   { icon: '👀', label: 'Наблюдение',    href: '/observe',      roles: ['admin','director','chief_engineer'] },
   { icon: '📜', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician'] },
-  { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin'] },
+  { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin','director'] },
 ];
 
 function renderSidebar(user, openCases = 0, unreadMessages = 0) {

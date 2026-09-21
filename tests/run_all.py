@@ -30,6 +30,7 @@ ORDER = [
     "test_ai_answers_everyone.py",
     "test_knowledge_shows_content.py",
     "test_production_import.py",
+    "test_downtime_cost.py",
 ]
 
 failed = []

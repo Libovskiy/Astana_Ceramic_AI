@@ -32,7 +32,7 @@
     </header>
     <div class="page">
 
-      <div class="card" style="margin-bottom:14px">
+      <div class="card" style="margin-bottom:14px" id="usersCard">
         <div class="card-head">
           <h2>Пользователи</h2>
           <span id="userCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">—</span>
@@ -58,7 +58,25 @@
         </div>
       </div>
 
-      <div class="card">
+      <!-- СТОИМОСТЬ ЧАСА ПРОСТОЯ.
+           Сколько стоит час, знает только директор. Пока не задал —
+           система нигде не показывает денег: придуманная цифра хуже
+           отсутствующей. Видно и меняется только директору и админу. -->
+      <div class="card" id="ratesCard" style="display:none;margin-bottom:14px">
+        <div class="card-head"><h2>Стоимость часа простоя</h2>
+          <span style="font-size:11px;color:var(--text-dim)">тенге за час, по участкам</span>
+        </div>
+        <div class="card-body" style="padding:10px 14px">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
+            По этой ставке считаются потери от аварий и организационных остановок.
+            Плановые работы (проточка, переходы) в потери не входят.
+            Пока ставка не задана — в деньгах не считаем и сумм не показываем.
+          </div>
+          <div id="ratesList"><div class="empty">Загрузка…</div></div>
+        </div>
+      </div>
+
+      <div class="card" id="systemCard">
         <div class="card-head"><h2>Система</h2></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
@@ -86,7 +104,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=25"></script>
+<script src="/static/acai_layout.js?v=26"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
 <script>
 const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
@@ -98,7 +116,69 @@ let allUsers=[];let validRoles=[];
 function avatarColor(n){const c=['#2563eb','#7c3aed','#be185d','#b45309','#047857','#b91c1c'];let h=0;for(const ch of n||'')h=(h*31+ch.charCodeAt(0))&0xffffffff;return c[Math.abs(h)%c.length];}
 function initials(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();}
 
+// Ставка часа простоя: смотрит и меняет директор (и админ).
+async function loadRates(){
+  const card = document.getElementById('ratesCard');
+  const box = document.getElementById('ratesList');
+  let d;
+  try { d = await ACAI.get('/api/settings/downtime-rates'); }
+  catch { return; }          // роль не та — карточки просто нет
+
+  card.style.display = '';
+  const money = v => Number(v).toLocaleString('ru-RU');
+
+  box.innerHTML = d.sections.map(s => {
+    const rate = (d.rates || {})[s.section];
+    return `<div class="user-row">
+      <div style="flex:1;min-width:0">
+        <div class="u-name">${s.title}</div>
+        <div class="u-login" style="font-family:inherit">${rate
+          ? `${money(rate.rate_per_hour)} ₸/ч · задал ${rate.set_by || '—'}, ${String(rate.set_at||'').slice(0,10)}`
+          : 'ставка не задана — деньги по этому участку не считаются'}</div>
+      </div>
+      <input class="input" type="number" min="0" step="1000" style="width:150px"
+             id="rate-${s.section}" placeholder="₸ за час"
+             value="${rate ? Math.round(rate.rate_per_hour) : ''}">
+      <button class="btn primary sm" onclick="saveRate('${s.section}','${s.title}')">Сохранить</button>
+    </div>`;
+  }).join('');
+}
+
+async function saveRate(section, title){
+  const input = document.getElementById('rate-' + section);
+  const value = (input?.value || '').trim();
+  if (value === '') { ACAI.toast('Введите ставку', 'warn'); return; }
+
+  try{
+    const r = await fetch('/api/settings/downtime-rates', {
+      method:'PUT', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ section, rate_per_hour: Number(value) }),
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail || 'Не получилось');
+    ACAI.toast(`${title}: ставка сохранена`);
+    await loadRates();
+  }catch(e){ ACAI.toast(e.message, 'danger'); }
+}
+
 async function load(){
+  // Директор заходит сюда ради стоимости часа простоя. Учётные записи
+  // и статус коллектора ему сервер не отдаст — значит, и показывать их
+  // нельзя: кнопка есть — значит, она работает.
+  let me = null;
+  try { me = (await ACAI.get('/auth/me'))?.user || await ACAI.get('/auth/me'); } catch {}
+  const isAdmin = (me?.role || '') === 'admin';
+
+  loadRates();
+
+  if (!isAdmin) {
+    document.getElementById('usersCard')?.remove();
+    document.getElementById('systemCard')?.remove();
+    document.querySelector('.topbar-right .btn.primary')?.remove();   // «+ Пользователь»
+    return;
+  }
+
   const r=await ACAI.get('/api/settings/users');
   validRoles=r.valid_roles||[];
   allUsers=r.users||[];
