@@ -220,3 +220,40 @@
    мотать вбок нельзя, это правило проекта. */
 .xls-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .xls-scroll table { min-width: 520px; }
+
+/* ── Кнопки периода в карточках выпуска и бригад ──
+   Одна и та же цифра за смену, за неделю и за год отвечает на разные
+   вопросы, а места под три таблицы нет. Переключатель вместо них.
+   Активную кнопку красим фоном акцента: на обеих темах контраст с
+   белым текстом проверен расчётом. */
+.xls-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.xls-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.xls-tab:hover { color: var(--text); border-color: var(--accent); }
+.xls-tab.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Бригады на телефоне: подпись под столбиком отступала на 160 px от
+   края — на 390 px это половина экрана, и текст сжимался в колонку
+   по два слова. */
+@media (max-width: 560px) {
+  #xlsBrigades > div > div:first-child > div:first-child { width: 110px; }
+  #xlsBrigades > div > div:last-child { margin-left: 0 !important; }
+}

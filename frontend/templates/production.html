@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/static/fonts.css?v=1">
 <link rel="stylesheet" href="/static/acai.css?v=20">
 <link rel="stylesheet" href="/static/equipment-page.css?v=3">
-<link rel="stylesheet" href="/static/production-page.css?v=3">
+<link rel="stylesheet" href="/static/production-page.css?v=4">
 </head>
 <body>
 <div class="app">
@@ -32,6 +32,32 @@
       <div class="verdict calm" id="prodVerdict">
         <div class="v-title" style="color:var(--text-dim)">Считаю выпуск…</div>
       </div>
+
+      <!-- ВЫПУСК -->
+      <!-- Первый вопрос к этой странице — «сколько сделали и сколько из
+           этого годного». Виды сведены по формату: в файле одну и ту же
+           колонку подписывают то «1,4 НФ полнател», то просто «1.4НФ»,
+           и один кирпич выглядел четырьмя видами с разными цифрами. -->
+      <section class="dashboard-card" id="xlsOutputCard" style="display:none">
+        <div class="card-header">
+          <h2>Выпуск</h2>
+          <p>Пустотелый, полнотелый и блок. Блок пересчитан в штуки по 0,0208 м³</p>
+        </div>
+        <div class="xls-tabs" id="outputTabs"></div>
+        <div id="xlsOutput"></div>
+      </section>
+
+      <!-- КАКАЯ СМЕНА СКОЛЬКО СДЕЛАЛА -->
+      <!-- Сравнение бригад по общей сумме было бы нечестным: у одной
+           смен больше. Главная цифра — штук за смену. -->
+      <section class="dashboard-card" id="xlsBrigadesCard" style="display:none">
+        <div class="card-header">
+          <h2>Какая смена сколько сделала</h2>
+          <p>За все свои смены — по фамилии начальника смены из отчёта</p>
+        </div>
+        <div class="xls-tabs" id="brigadeTabs"></div>
+        <div id="xlsBrigades"></div>
+      </section>
 
       <!-- ЧТО ВИДНО ИЗ ОТЧЁТА -->
       <!-- Девять месяцев, которые начальник производства вёл вручную,
@@ -65,32 +91,16 @@
           <span id="xlsHint" style="font-size:12px;color:var(--text-dim)"></span>
         </div>
       </section>
-      <!-- MONTHLY PLAN -->
-      <section class="dashboard-card" id="planSection" style="display: none;">
-        <div class="card-header">
-          <h2>Месячный план</h2>
-          <p>В штуках, по каждому виду продукции</p>
-        </div>
-        <div id="planInputs" style="display: flex; gap: 16px; flex-wrap: wrap;"></div>
-        <div id="planSummary" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
-      </section>
-      <!-- SHIFT HISTORY -->
-      <section class="dashboard-card" id="historyCard" style="display:none">
-        <div class="card-header">
-          <h2>История по сменам</h2>
-          <p id="averagePercentLabel">Среднее выполнение: —</p>
-        </div>
-        <div id="shiftHistory">
-          <div class="loading-state">Загрузка...</div>
-        </div>
-      </section>
       <!-- РУЧНЫЕ ФОРМЫ — внизу и свёрнуты.
            Наверху страницы должен быть ответ «как идёт производство»,
-           а не пустые поля ввода. Формы не удаляем: сначала надо
-           спросить владельца, пользуется ли ими кто-то. -->
+           а не пустые поля ввода. Сюда же убраны «Месячный план» и
+           ручная «История по сменам»: выпуск и сравнение бригад теперь
+           считаются из отчёта начальника производства, а суточный
+           процент плана владельцу не нужен. Формы не удаляем —
+           данные в них уже введены, и кто-то может ими пользоваться. -->
       <details id="manualForms" style="margin-top:6px">
         <summary style="cursor:pointer;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;list-style:none">
-          ✍️ Ручной ввод: сменный отчёт упаковки и учёт выпуска
+          ✍️ Ручной ввод: отчёт упаковки, учёт выпуска, месячный план
           <span style="font-weight:400;color:var(--text-dim);font-size:13px">— открыть</span>
         </summary>
         <div style="margin-top:10px">
@@ -158,6 +168,25 @@
 
         <div id="logResult" style="margin-top: 12px; font-size: 13px;"></div>
       </section>
+      <!-- MONTHLY PLAN -->
+      <section class="dashboard-card" id="planSection" style="display: none;">
+        <div class="card-header">
+          <h2>Месячный план</h2>
+          <p>В штуках, по каждому виду продукции</p>
+        </div>
+        <div id="planInputs" style="display: flex; gap: 16px; flex-wrap: wrap;"></div>
+        <div id="planSummary" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
+      </section>
+      <!-- SHIFT HISTORY (ручной учёт выпуска, не из Экселя) -->
+      <section class="dashboard-card" id="historyCard" style="display:none">
+        <div class="card-header">
+          <h2>История по сменам — ручной учёт</h2>
+          <p id="averagePercentLabel">Среднее выполнение: —</p>
+        </div>
+        <div id="shiftHistory">
+          <div class="loading-state">Загрузка...</div>
+        </div>
+      </section>
         </div>
       </details>
 
@@ -172,7 +201,7 @@
 
 <script src="/static/acai_layout.js?v=26"></script>
 <script src="/static/mobile_nav_v2.js?v=3"></script>
-<script src="/static/production.js?v=41"></script>
+<script src="/static/production.js?v=42"></script>
 <script src="/static/shift-report.js?v=4"></script>
 <script>
 // Сначала меню (от него зависят ссылки в выводе), потом сам вывод.
@@ -288,56 +317,145 @@ async function loadXls(role){
   const hint = document.getElementById('xlsHint');
   if (hint) hint.textContent = 'Загрузка заменяет данные за год целиком — файл главнее сайта.';
 
-  // Сначала аналитика: она перерисовывает весь контейнер, и если
-  // выпуск нарисовать раньше, его тут же затрёт.
   await loadXlsAnalytics();
   await loadXlsOutput();
+  await loadXlsBrigades();
 }
 
-// Сколько сделали кирпичей и сколько ушло в брак.
-// Единицы — как в файле: где формат записан в кубометрах и известен
-// коэффициент (блок 10,7НФ — 0,028 м³), переводим в штуки и пишем
-// формулу; где коэффициента нет — оставляем кубометры и говорим об
-// этом прямо.
-async function loadXlsOutput(){
-  const box = document.getElementById('xlsOutput');
+// Штуки — целыми: «52 800», а не «52 800,5». Дробные штуки бывают
+// только от пересчёта кубометров, и запятая в них — признак, что
+// пересчитали не тем коэффициентом, а не подробность.
+const xlsInt = v => Math.round(Number(v || 0)).toLocaleString('ru-RU');
+// Кубометры — с десятыми: здесь запятая на своём месте.
+const xlsM3 = v => Number(v || 0).toLocaleString('ru-RU', {maximumFractionDigits: 1});
+
+// Кнопки периода. Отсчёт идёт от последней смены в файле, а не от
+// сегодня: отчёт заполняют с задержкой, и «сегодня» по календарю
+// почти всегда было бы пустым.
+const OUTPUT_PERIODS = [['Последняя смена','day'], ['7 дней','week'],
+                        ['Месяц','month'], ['Всё время','all']];
+let _outputPeriod = 'month';
+
+function xlsTabs(id, items, current, handler){
+  const box = document.getElementById(id);
   if (!box) return;
+  box.innerHTML = items.map(([label, value]) =>
+    `<button type="button" class="xls-tab${value === current ? ' on' : ''}"
+             onclick="${handler}('${value}')">${label}</button>`).join('');
+}
+
+// Сколько сделали кирпичей, сколько брака и сколько годных.
+// Виды сведены по формату: «1,4 НФ полнател», «1.4НФ» и «1,4 НФ
+// пустотел» — это три колонки в файле, но не три завода. Блок
+// пересчитан из кубометров по цифре владельца: 0,0208 м³ на штуку.
+async function loadXlsOutput(period){
+  const box = document.getElementById('xlsOutput');
+  const card = document.getElementById('xlsOutputCard');
+  if (!box || !card) return;
+
+  if (period) _outputPeriod = period;
+  xlsTabs('outputTabs', OUTPUT_PERIODS, _outputPeriod, 'loadXlsOutput');
 
   let d = {};
-  try { d = await ACAI.get('/api/production/report-output'); } catch { return; }
-  if (!d.products || !d.products.length) return;
+  try { d = await ACAI.get('/api/production/report-output?period=' + _outputPeriod); } catch { return; }
+  if (!d.products || !d.products.length) {
+    card.style.display = '';
+    box.innerHTML = `<div class="empty-state">За этот период в отчёте выпуска нет. Последняя смена в файле — ${d.last_shift_date ? xlsDate(d.last_shift_date) : '—'}.</div>`;
+    return;
+  }
 
-  const num = v => Number(v || 0).toLocaleString('ru-RU', {maximumFractionDigits: 1});
+  card.style.display = '';
+
   const defectShare = d.pieces_total
-    ? (d.defect_pieces / d.pieces_total * 100).toFixed(2) : null;
+    ? (d.defect_pieces / d.pieces_total * 100).toFixed(2).replace('.', ',') : null;
 
   box.innerHTML = `
-    <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">Выпуск и брак за год</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${xlsEsc(d.period_title)}</div>
 
-    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:10px">
-      <div><b style="font-family:var(--mono);font-size:20px">${num(d.pieces_total)}</b> шт сделано</div>
-      <div><b style="font-family:var(--mono);font-size:20px">${num(d.defect_pieces)}</b> шт брак и отстрел${
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:12px">
+      <div><b style="font-family:var(--mono);font-size:22px">${xlsInt(d.good_pieces)}</b> шт годных</div>
+      <div><b style="font-family:var(--mono);font-size:20px">${xlsInt(d.pieces_total)}</b> шт сделано</div>
+      <div><b style="font-family:var(--mono);font-size:20px;color:var(--warn)">${xlsInt(d.defect_pieces)}</b> шт брак и отстрел${
         defectShare ? ` · ${defectShare}%` : ''}</div>
     </div>
 
-    <div class="xls-scroll" style="margin-bottom:16px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <div class="xls-scroll" style="margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
-        <th style="padding:8px;color:var(--text-dim);font-size:12px">Вид (как в отчёте)</th>
-        <th style="padding:8px;color:var(--text-dim);font-size:12px">Сделано</th>
-        <th style="padding:8px;color:var(--text-dim);font-size:12px">В штуках</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Вид</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Штук</th>
+        <th style="padding:8px;color:var(--text-dim);font-size:12px">Поддонов</th>
         <th style="padding:8px;color:var(--text-dim);font-size:12px">Смен</th>
       </tr></thead>
       <tbody>
         ${d.products.map(p => `<tr style="border-bottom:1px solid var(--border)">
           <td style="padding:8px">${xlsEsc(p.title)}
-            ${p.note ? `<div style="font-size:11px;color:${p.pieces==null?'var(--warn)':'var(--text-dim)'};margin-top:2px">${xlsEsc(p.note)}</div>` : ''}</td>
-          <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${num(p.total)} ${xlsEsc(p.unit)}</td>
+            ${p.note ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${xlsEsc(p.note)}</div>` : ''}</td>
+          <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${xlsInt(p.pieces)}</td>
           <td style="padding:8px;font-family:var(--mono);white-space:nowrap">${
-            p.pieces == null ? '<span style="color:var(--text-dim)">—</span>' : num(p.pieces)}</td>
+            p.pallets != null ? xlsInt(p.pallets) : '<span style="color:var(--text-dim)">—</span>'}</td>
           <td style="padding:8px;font-family:var(--mono)">${p.shifts}</td>
         </tr>`).join('')}
       </tbody>
-    </table></div>`;
+    </table></div>
+
+    ${d.defect_cubic ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">
+      В браке ${xlsM3(d.defect_cubic)} м³ были записаны кубометрами — это блок, пересчитал по ${String(d.block_m3).replace('.', ',')} м³/шт.
+    </div>` : ''}
+
+    ${(d.other || []).length ? `
+      <details style="font-size:12px;color:var(--text-dim)">
+        <summary style="cursor:pointer;list-style:none">Ещё ${xlsM3(d.other_cubic)} м³ других форматов — в счёт штук не вошли <span style="color:var(--accent)">— показать</span></summary>
+        <div style="margin-top:6px;line-height:1.6">
+          ${d.other.map(p => `<div>• ${xlsEsc(p.title)} — ${xlsM3(p.cubic)} м³, ${p.shifts} ${xlsPlural(p.shifts,'смена','смены','смен')}</div>`).join('')}
+          <div style="margin-top:4px">Сколько кубометров в штуке этих форматов, в отчёте не сказано. Скажете коэффициент — посчитаю и их.</div>
+        </div>
+      </details>` : ''}`;
+}
+
+// Какая смена сколько сделала. Сравниваем по штукам за смену: у одной
+// бригады смен больше, и сумма сама по себе ничего не говорит.
+const BRIGADE_SPANS = [['Месяц','month'], ['Полгода','half'], ['Год','year']];
+let _brigadeSpan = 'month';
+
+async function loadXlsBrigades(span){
+  const box = document.getElementById('xlsBrigades');
+  const card = document.getElementById('xlsBrigadesCard');
+  if (!box || !card) return;
+
+  if (span) _brigadeSpan = span;
+  xlsTabs('brigadeTabs', BRIGADE_SPANS, _brigadeSpan, 'loadXlsBrigades');
+
+  let d = {};
+  try { d = await ACAI.get('/api/production/report-brigades?span=' + _brigadeSpan); } catch { return; }
+  const rows = d.brigades || [];
+  if (!rows.length) return;
+
+  card.style.display = '';
+
+  const max = Math.max(1, ...rows.map(r => r.per_shift || 0));
+
+  box.innerHTML = `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
+      ${xlsEsc(d.span_title)} — по ${d.last_shift_date ? xlsDate(d.last_shift_date) : '—'}. Столбик — штук за смену.
+    </div>
+
+    ${rows.map(r => `
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:3px">
+          <div style="width:150px;flex-shrink:0">${xlsEsc(r.master)}</div>
+          <div style="flex:1;background:var(--surface-2);border-radius:4px;height:18px;overflow:hidden;min-width:60px">
+            <div style="width:${Math.round((r.per_shift||0)/max*100)}%;height:100%;background:var(--accent);opacity:.75"></div>
+          </div>
+          <div style="width:118px;flex-shrink:0;text-align:right;font-family:var(--mono);white-space:nowrap">${xlsInt(r.per_shift)} шт/смену</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-left:160px">
+          ${r.shifts} ${xlsPlural(r.shifts,'смена','смены','смен')}
+          (${r.day_shifts} ${xlsPlural(r.day_shifts,'дневная','дневных','дневных')} · ${r.night_shifts} ${xlsPlural(r.night_shifts,'ночная','ночных','ночных')}),
+          всего ${xlsInt(r.pieces)} шт${r.defect_share != null ? `, брак ${String(r.defect_share).replace('.', ',')}%` : ''}${
+            r.no_output ? `. В ${r.no_output} ${xlsPlural(r.no_output,'смене','сменах','сменах')} выпуск в отчёте не заполнен — в «штук за смену» они не считаются` : ''}
+          ${(r.spellings||[]).length ? `<br>в отчёте фамилию писали по-разному: ${r.spellings.map(s => `«${xlsEsc(s)}»`).join(', ')} — свёл в одну бригаду` : ''}
+        </div>
+      </div>`).join('')}`;
 }
 
 async function loadXlsAnalytics(){
@@ -393,8 +511,6 @@ async function loadXlsAnalytics(){
     ${lines.length ? `<div style="border-left:3px solid var(--accent);padding:2px 0 2px 12px;margin-bottom:16px;font-size:14px;line-height:1.7">
       ${lines.map(l => `<div>${l}</div>`).join('')}
     </div>` : ''}
-
-    <div id="xlsOutput"></div>
 
     <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 8px">По месяцам</div>
     <div style="margin-bottom:18px">
@@ -515,79 +631,41 @@ async function uploadXls(event){
   reader.readAsDataURL(file);
 }
 
-// Выпуск за сутки против плана. Если за сегодня не вносили ни строчки —
-// пишем это прямо, а не «0% выполнения плана».
-// Роли, которым открыта сводка по заводу (DASHBOARD_ALLOWED_ROLES на
-// сервере). Остальным эти два запроса вернули бы 403 — не спрашиваем.
-const PROD_SUMMARY_ROLES = ['admin','director','chief_engineer','engineer',
-                            'shift_supervisor','analyst','chief_mechanic','chief_electrician'];
-
+// Ответ на вопрос «как идёт производство» — из отчёта начальника
+// производства, а не из суточного плана. Процент плана владельцу не
+// нужен: план в штуках вводили руками и почти никогда не обновляли,
+// поэтому «0% плана» говорило о пустом поле, а не о заводе.
 async function renderProdVerdict(role){
-  // Рабочему и мастеру сводка по заводу закрыта (те же роли, что у
-  // /dashboard). Для них вывод — про их собственную работу, а не «план
-  // не задан»: иначе страница врала бы им на пустом месте.
-  let today = null, plan = null, closed = !PROD_SUMMARY_ROLES.includes(role);
-  if (!closed) {
-    try {
-      const r = await fetch('/api/production/today', {credentials:'include'});
-      if (r.status === 403) closed = true; else today = await r.json();
-    } catch {}
-    try {
-      const r = await fetch('/api/production/plan', {credentials:'include'});
-      if (r.status === 403) closed = true; else plan = await r.json();
-    } catch {}
-  }
+  let month = null, day = null;
+  try { month = await ACAI.get('/api/production/report-output?period=month'); } catch {}
+  try { day = await ACAI.get('/api/production/report-output?period=day'); } catch {}
 
-  if (closed) {
-    ACAI.verdict('prodVerdict', {title:'Смена: внесите выпуск и сдайте отчёт',
-      sub:'Сводка по заводу открыта руководству. Ваш ход — сменный отчёт упаковки ниже: вагонетки, слои, брак.'});
+  if (!month || !month.pieces_total) {
+    ACAI.verdict('prodVerdict', {title:'Отчёт начальника производства не загружен',
+      sub:'Пока файла нет, выпуск и брак считать не из чего. Загрузить — в карточке «Сменный отчёт из Экселя» ниже.'});
     return;
   }
 
-  const types = today && today.success ? Object.values(today.by_type || {}) : [];
-  const produced = types.reduce((a, t) => a + (t.produced || 0), 0);
-  const target   = types.reduce((a, t) => a + (t.target   || 0), 0);
-  const planSet  = plan && plan.success && Object.values(plan.plan || plan.plans || {}).some(v => +v > 0);
+  const share = month.pieces_total
+    ? (month.defect_pieces / month.pieces_total * 100).toFixed(2).replace('.', ',') : null;
+  const last = month.last_shift_date;
+  const behind = last ? Math.round((Date.now() - Date.parse(last)) / 86400000) : null;
 
-  if (!planSet) {
-    ACAI.verdict('prodVerdict', {title:'План месяца не задан',
-      sub:'Без плана процент выполнения считать не по чему — внесите план в карточке «Месячный план» ниже.'});
+  const parts = [`${month.period_title}: годных ${xlsInt(month.good_pieces)} шт из ${xlsInt(month.pieces_total)} сделанных`];
+  if (share) parts.push(`брак и отстрел ${share}%`);
+  if (day && day.pieces_total) parts.push(`за последнюю смену ${xlsInt(day.pieces_total)} шт`);
+
+  // Отчёт заполняют руками и с задержкой. Если последняя смена в файле
+  // старше трёх дней, это не «завод стоит», а «файл не обновляли» —
+  // и путать эти две вещи нельзя.
+  if (behind != null && behind > 3) {
+    ACAI.verdict('prodVerdict', {title:`Отчёт заполнен по ${xlsDate(last)}`,
+      rows:[{level:'warning', what:`файл не обновляли ${behind} ${xlsPlural(behind,'день','дня','дней')}`,
+             where:'цифры ниже — с того дня, а не с сегодняшнего'}]});
     return;
   }
-  if (!produced) {
-    // «Данных нет» пишем, только если их нет НИГДЕ: ни в ручном учёте,
-    // ни в отчёте начальника производства. Иначе два блока страницы
-    // отвечали бы на один вопрос по-разному.
-    const last = await lastDayFromReport();
 
-    if (last && last.date) {
-      const forming = last.forming_fact != null
-        ? `формовка ${last.forming_fact} из ${last.forming_plan ?? '—'}` : '';
-      const packing = last.packing_fact != null
-        ? `упаковка ${last.packing_fact} из ${last.packing_plan ?? '—'}` : '';
-      ACAI.verdict('prodVerdict', {
-        title: `Последняя смена в отчёте — ${xlsDate(last.date)}`,
-        sub: [forming, packing].filter(Boolean).join(' · ')
-             + ' (вагонетки, как в отчёте начальника производства). '
-             + 'В ручной учёт выпуска за сегодня не вносили.',
-      });
-      return;
-    }
-
-    ACAI.verdict('prodVerdict', {title:'Выпуск за сегодня не вносили', rows:[{level:'warning',
-      what:'Данных за сутки нет',
-      where:'ни в ручном учёте, ни в отчёте начальника производства'}]});
-    return;
-  }
-  const pct = target ? Math.round(produced / target * 100) : null;
-  const n = v => v.toLocaleString('ru-RU');
-  if (pct != null && pct < 90) {
-    ACAI.verdict('prodVerdict', {title:'Отстаём от суточного плана', rows:[{level:'warning',
-      what:`${pct}% суточного плана`, where:`сделано ${n(produced)} из ${n(target)} шт`}]});
-    return;
-  }
-  ACAI.verdict('prodVerdict', {title: pct != null ? `Суточный план — ${pct}%` : 'Выпуск идёт',
-    sub:`Сегодня ${n(produced)} шт${target ? ` из ${n(target)} по плану` : ''}`});
+  ACAI.verdict('prodVerdict', {title:`Отчёт заполнен по ${xlsDate(last)}`, sub: parts.join(' · ') + '.'});
 }
 </script>
 

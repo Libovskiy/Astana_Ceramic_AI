@@ -440,6 +440,14 @@ REPORT_IMPORT_ROLES = ("admin", "director", "chief_engineer", "shift_supervisor"
 MAX_REPORT_BYTES = 25 * 1024 * 1024
 
 
+def _report_date(value) -> str:
+    """«2026-09-17» → «17.09.2026». Для сообщений о загрузке файла."""
+    text = str(value or "")
+    if len(text) < 10:
+        return "—"
+    return f"{text[8:10]}.{text[5:7]}.{text[0:4]}"
+
+
 @router.post("/api/production/report-import")
 def import_production_report(
     request: dict,
@@ -512,15 +520,26 @@ def import_production_report(
             f"{names[key]}: было {diff['current'][key]}, станет {diff['incoming'][key]}"
             for key in diff.get("smaller") or []
         )
+
+        # Главное — даты, а не количество строк. Если в файле нет дней,
+        # которые на сайте уже есть, говорим об этом первой строкой.
+        head = (
+            f"В этом файле последняя смена — {_report_date(diff['incoming'].get('last_shift_date'))}, "
+            f"а на сайте уже есть смены до {_report_date(diff['current'].get('last_shift_date'))}. "
+            "Похоже, это более старая версия отчёта: свежие дни пропадут."
+            if diff.get("older") else
+            f"В этом файле меньше данных, чем уже загружено ({lost})."
+        )
+
         return {
             "success": False,
             "needs_confirm": True,
             "diff": diff,
             "message": (
-                f"В этом файле меньше данных, чем уже загружено ({lost}). "
+                f"{head} "
                 f"Сейчас на сайте файл «{diff.get('filename') or '—'}» "
-                f"от {str(diff.get('uploaded_at') or '')[:16]}. "
-                "Если это более старая версия — свежие данные пропадут."
+                f"от {str(diff.get('uploaded_at') or '')[:16]}."
+                + (f" В нём тоже меньше: {lost}." if lost and diff.get("older") else "")
             ),
         }
 
@@ -567,17 +586,39 @@ def production_report_analytics(
 @router.get("/api/production/report-output")
 def production_report_output(
     year: int | None = None,
+    period: str = "all",
     sheet: str | None = None,
     user: dict = Depends(get_current_user)
 ):
     """
-    Сколько сделали кирпичей и сколько ушло в брак — по сменному отчёту.
+    Сколько сделали кирпичей, сколько брака и сколько годных.
 
-    Единицы — как в файле. В штуки переводим только то, для чего
-    владелец назвал коэффициент (блок 10,7НФ — 0,028 м³). Остальное
-    остаётся в кубометрах с честной пометкой: выдуманный коэффициент
-    исказил бы весь выпуск завода.
+    Период считается от последней смены в файле, а не от сегодня:
+    отчёт заполняют с задержкой, и «за сегодня» по календарю почти
+    всегда вернуло бы ноль там, где завод работал.
+
+    В штуки переводим только то, для чего владелец назвал коэффициент
+    (блок 10,7НФ — 0,0208 м³). Опытные форматы в кубометрах идут
+    отдельной строкой: выдуманный коэффициент исказил бы весь выпуск.
     """
     from backend.services.production_import_service import production_totals
 
-    return {"success": True, **production_totals(year, sheet)}
+    return {"success": True, **production_totals(year, period, sheet)}
+
+
+@router.get("/api/production/report-brigades")
+def production_report_brigades(
+    year: int | None = None,
+    span: str = "month",
+    user: dict = Depends(get_current_user)
+):
+    """
+    Сколько сделала каждая бригада за свои смены: месяц, полгода, год.
+
+    Сравнение по общей сумме было бы нечестным — у одной бригады смен
+    больше. Главная цифра здесь «штук за смену», и рядом видно, из
+    скольких смен она сложилась.
+    """
+    from backend.services.production_import_service import brigade_output
+
+    return {"success": True, **brigade_output(year, span)}

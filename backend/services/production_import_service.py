@@ -153,15 +153,24 @@ def compare_with_saved(data: dict) -> dict:
     но это и риск: загрузят старую версию файла или файл другого года,
     и свежие данные молча исчезнут. Поэтому считаем «было / станет» и
     отдельно говорим, если новое МЕНЬШЕ старого.
+
+    Главная проверка — не количество строк, а ДАТА последней смены.
+    21.09.2026 свежий файл (524 смены) затёрло старым (518): строк
+    стало меньше на шесть, но решало не это — в старом файле не было
+    последних дней. Считаем и то, и другое.
     """
     year = int(data.get("year"))
     months = data.get("months") or []
+
+    dates = [item.get("date") for month in months
+             for item in month.get("shifts") or [] if item.get("date")]
 
     incoming = {
         "months": len(months),
         "shifts": sum(len(m.get("shifts") or []) for m in months),
         "downtime": sum(len(m.get("downtime") or []) for m in months),
         "notes": sum(len(m.get("notes") or []) for m in months),
+        "last_shift_date": max(dates) if dates else None,
     }
 
     init_production_import()
@@ -174,11 +183,16 @@ def compare_with_saved(data: dict) -> dict:
         if not run:
             return {"first_time": True, "incoming": incoming, "shrinks": False}
 
+        saved_last = conn.execute(
+            "SELECT MAX(date) FROM xls_shifts WHERE year = ?", (year,)
+        ).fetchone()[0]
+
         current = {
             "months": run["sheets"] or 0,
             "shifts": run["shifts"] or 0,
             "downtime": run["downtime"] or 0,
             "notes": run["notes"] or 0,
+            "last_shift_date": saved_last,
         }
     finally:
         conn.close()
@@ -186,12 +200,18 @@ def compare_with_saved(data: dict) -> dict:
     smaller = [key for key in ("months", "shifts", "downtime", "notes")
                if incoming[key] < current[key]]
 
+    # Файл старее по содержанию: в нём нет дней, которые на сайте уже
+    # есть. Это та самая ошибка, из-за которой пропали свежие смены.
+    older = bool(incoming["last_shift_date"] and saved_last
+                 and incoming["last_shift_date"] < saved_last)
+
     return {
         "first_time": False,
         "incoming": incoming,
         "current": current,
-        "shrinks": bool(smaller),
+        "shrinks": bool(smaller) or older,
         "smaller": smaller,
+        "older": older,
         "uploaded_at": run["uploaded_at"],
         "filename": run["filename"],
     }
@@ -994,36 +1014,142 @@ def planned_stops(year: int | None = None, month: int | None = None) -> dict:
     }
 
 
-# Сколько кубометров в одной штуке — чтобы перевести м³ в кирпичи.
-# Владелец, 21.09.2026: «блок 10,7НФ — 0,0208 м³», остальное «ведут
-# поштучно». Выдумывать коэффициенты нельзя: ошибка здесь искажает
-# весь выпуск завода, поэтому чего не сказали — оставляем как есть.
-#
-# Ключ — только цифры формата: «10 7НФ», «10,7НФ», «10.7 нф» → «107».
-VOLUME_PER_PIECE = {
-    "107": 0.0208,     # блок 10,7НФ
+# ── ВЫПУСК: сколько сделали и сколько из этого годного ───────
+
+# Кубометров в одном блоке 10,7НФ. Цифра владельца (21.09.2026) и она
+# сходится с самим файлом: в июле блок записан в м³ — 1260,48 м³, а
+# 1260,48 ÷ 0,0208 = 60 600 ровно, без остатка. Так же сходится брак:
+# 2,496 ÷ 0,0208 = 120. Дробное число в отчёте — это блок в
+# кубометрах, и только он: остальные виды ведут поштучно.
+BLOCK_M3 = 0.0208
+
+# Штук в поддоне. Берём из того же места, что и ручной учёт выпуска
+# (`BRICK_TYPES`), а не заводим второй список: два списка рано или
+# поздно разойдутся, и одна и та же смена даст на сайте два ответа.
+# Блок — 60 штук, и это сходится с цифрой владельца от 21.09.2026.
+from backend.services.production_log_service import BRICK_TYPES
+
+BLOCK_PER_PALLET = BRICK_TYPES["блок"]
+
+# Какой вид как пакуют. «1,4 НФ без пометки» сюда не входит намеренно:
+# пока не сказано, пустотелый это или полнотелый, поддоны считать не
+# из чего — 396 и 440 дают разный ответ.
+PALLET_BY_GROUP = {
+    "hollow": BRICK_TYPES["пустотелый"],
+    "solid": BRICK_TYPES["полнотелый"],
+    "block": BRICK_TYPES["блок"],
 }
 
-# Больше этого числа за смену в кубометрах не бывает: 29 000 в колонке,
-# подписанной «м3», — это штуки. Владелец подтвердил: пустотелый и
-# полнотелый ведут поштучно, подпись в шапке осталась от старой версии
-# файла. Такие колонки считаем штуками и пишем об этом в пояснении.
-MAX_CUBIC_PER_SHIFT = 1000
+# Как называются виды в файле и как мы их зовём на странице. Колонки
+# в Экселе переписывают от месяца к месяцу («1,4 НФ полнател» в январе,
+# просто «1.4НФ» с июля), из-за этого один и тот же кирпич выглядел
+# четырьмя разными видами с разными цифрами. Сводим по формату.
+GROUP_TITLES = {
+    "hollow": "1,4 НФ пустотелый",
+    "solid": "1,4 НФ полнотелый",
+    "nf14": "1,4 НФ — в файле без пометки",
+    "block": "Блок 10,7 НФ",
+}
+
+# Порядок на странице: сначала то, чем завод живёт.
+GROUP_ORDER = ("hollow", "solid", "nf14", "block")
 
 
 def _format_key(title: str) -> str:
     return "".join(ch for ch in str(title or "") if ch.isdigit())
 
 
-def production_totals(year: int | None = None, month_sheet: str = None) -> dict:
+def product_group(title: str) -> str:
     """
-    Сколько сделали кирпичей и сколько ушло в брак.
+    «1,4 НФ пустотел / м3» → hollow, «10,7НФ» → block, «4,6 НФ» → other.
 
-    Единицы берём как в файле. В штуки переводим только то, для чего
-    известен коэффициент (`VOLUME_PER_PIECE`); остальное показываем в
-    кубометрах и честно пишем, что пересчитать не можем.
+    Сначала цифры формата, потом пометка: у «6,9 НФ пустотел» слово
+    «пустотел» есть, но это другой кирпич, и в счёт 1,4НФ он не идёт.
+    """
+    digits = _format_key(title)
+    low = str(title or "").lower()
+
+    if digits.startswith("107"):
+        return "block"
+    if digits.startswith("14"):
+        if "пустотел" in low:
+            return "hollow"
+        if "полнотел" in low or "полнател" in low:
+            return "solid"
+        return "nf14"
+    return "other"
+
+
+def _is_cubic(value: float) -> bool:
+    """
+    Дробное число в отчёте — кубометры, целое — штуки.
+
+    Подпись в шапке врёт: с июля над колонкой 1,4НФ стоит «м3», а в
+    ней 47 520 — это штуки. Само число надёжнее подписи: штуки дробными
+    не бывают, кубометры целыми почти не бывают.
+    """
+    return abs(value - round(value)) > 1e-6
+
+
+def pieces_from(value: float, group: str) -> tuple[int | None, float]:
+    """
+    Значение из отчёта → (штуки, кубометры внутри этого числа).
+
+    Штуки считаем только там, где знаем коэффициент: блок. Для
+    остального кубометры оставляем кубометрами — выдуманный
+    коэффициент исказил бы весь выпуск завода.
+    """
+    if not _is_cubic(value):
+        return int(round(value)), 0.0
+    if group == "block":
+        return int(round(value / BLOCK_M3)), value
+    return None, value
+
+
+def _period_bounds(last_date: str, period: str) -> tuple[str | None, str | None, str]:
+    """
+    Границы периода и как его назвать — от последней смены в отчёте.
+
+    Отсчитываем не от сегодня, а от последнего дня в файле: отчёт
+    заполняют с задержкой, и «за сегодня» по календарю почти всегда
+    было бы пусто. Честнее сказать «за 17.09», чем показать ноль.
+    """
+    from datetime import date, timedelta
+
+    if not last_date:
+        return None, None, "за всё время"
+
+    end = date.fromisoformat(last_date)
+    human = f"{end.day:02d}.{end.month:02d}"
+
+    if period == "day":
+        return last_date, last_date, f"за смены {human}"
+    if period == "week":
+        start = end - timedelta(days=6)
+        return start.isoformat(), last_date, f"за 7 дней по {human}"
+    if period == "month":
+        start = end.replace(day=1)
+        return start.isoformat(), last_date, f"с {start.day:02d}.{start.month:02d} по {human}"
+    return None, None, f"за всё время по {human}"
+
+
+PERIODS = ("day", "week", "month", "all")
+
+
+def production_totals(year: int | None = None, period: str = "all",
+                      month_sheet: str = None) -> dict:
+    """
+    Сколько сделали кирпичей, сколько ушло в брак и сколько годных.
+
+    Показываем только то, чем завод живёт: 1,4НФ пустотелый,
+    полнотелый и блок. Опытные форматы (4,6НФ, 6,9НФ) считаются
+    отдельной строкой — они в кубометрах, коэффициента владелец не
+    называл, и подмешивать их в общий счёт нельзя.
     """
     init_production_import()
+
+    if period not in PERIODS:
+        period = "all"
 
     conn = get_connection()
     try:
@@ -1031,77 +1157,256 @@ def production_totals(year: int | None = None, month_sheet: str = None) -> dict:
             row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
             year = row[0] if row and row[0] else datetime.now().year
 
+        last_date = conn.execute(
+            "SELECT MAX(date) FROM xls_shifts WHERE year = ?", (year,)
+        ).fetchone()[0]
+
+        start, end, period_title = _period_bounds(last_date, period)
+
         where = "WHERE year = ?"
         params = [year]
         if month_sheet:
             where += " AND sheet = ?"
             params.append(month_sheet)
+        if start:
+            where += " AND date >= ? AND date <= ?"
+            params += [start, end]
 
-        rows = [dict(row) for row in conn.execute(
-            f"""
-            SELECT title, unit, COUNT(*) AS shifts, SUM(value) AS total, MAX(value) AS biggest
-            FROM xls_products {where}
-            GROUP BY title, unit ORDER BY total DESC
-            """, params
+        products = [dict(row) for row in conn.execute(
+            f"SELECT date, shift, title, unit, value FROM xls_products {where}", params
         )]
 
-        defect = conn.execute(
-            f"SELECT SUM(COALESCE(defect_pieces, 0)), COUNT(defect_pieces) FROM xls_shifts {where}",
-            params
-        ).fetchone()
+        shifts = [dict(row) for row in conn.execute(
+            f"SELECT date, shift, defect_pieces FROM xls_shifts {where}", params
+        )]
     finally:
         conn.close()
 
-    products, pieces_total, cubic_unknown, suspicious = [], 0, [], []
+    groups, other = {}, {}
 
-    for row in rows:
-        item = {
-            "title": row["title"],
-            "unit": row["unit"],
-            "total": row["total"] or 0,
-            "shifts": row["shifts"],
-            "pieces": None,
-            "note": None,
-        }
+    for row in products:
+        value = float(row["value"] or 0)
+        if not value:
+            continue
 
-        if row["unit"] == "шт":
-            item["pieces"] = row["total"] or 0
-            pieces_total += item["pieces"]
+        group = product_group(row["title"])
+        pieces, cubic = pieces_from(value, group)
+
+        bucket = other if group == "other" else groups
+        key = row["title"] if group == "other" else group
+        item = bucket.setdefault(key, {
+            "group": group,
+            "title": row["title"] if group == "other" else GROUP_TITLES[group],
+            "pieces": 0, "cubic": 0.0, "unknown_cubic": 0.0,
+            "shifts": 0, "titles": set(),
+        })
+
+        item["titles"].add(row["title"])
+        item["shifts"] += 1
+        item["cubic"] += cubic
+        if pieces is None:
+            item["unknown_cubic"] += cubic
         else:
-            key = _format_key(row["title"])
-            coefficient = VOLUME_PER_PIECE.get(key)
+            item["pieces"] += pieces
 
-            if coefficient:
-                pass          # известен коэффициент — считаем ниже
-            elif (row["biggest"] or 0) > MAX_CUBIC_PER_SHIFT:
-                # За смену столько кубометров не делают. Владелец
-                # подтвердил: это штуки, подпись в шапке старая.
-                item["pieces"] = row["total"] or 0
-                item["unit_note"] = "шт"
-                item["note"] = "в шапке файла «м³», но ведут поштучно — считаю штуками"
-                pieces_total += item["pieces"]
-                suspicious.append(item["title"])
-                products.append(item)
-                continue
+    # Брак и отстрел — одной цифрой на смену. Дробное значение здесь
+    # тоже кубометры блока: 7,488 ÷ 0,0208 = 360 штук ровно.
+    defect_pieces, defect_shifts, defect_cubic = 0, 0, 0.0
+    for row in shifts:
+        if row["defect_pieces"] is None:
+            continue
+        defect_shifts += 1
+        value = float(row["defect_pieces"])
+        pieces, cubic = pieces_from(value, "block")
+        defect_cubic += cubic
+        if pieces is not None:
+            defect_pieces += pieces
 
-            if coefficient:
-                item["pieces"] = round((row["total"] or 0) / coefficient)
-                item["coefficient"] = coefficient
-                item["note"] = f"пересчитано: {row['total']:.1f} м³ ÷ {coefficient} м³/шт"
-                pieces_total += item["pieces"]
-            else:
-                item["note"] = "коэффициент м³ → штуки не задан, оставляю кубометры"
-                cubic_unknown.append(item["title"])
+    items = []
+    for key in GROUP_ORDER:
+        item = groups.get(key)
+        if not item:
+            continue
+        item["variants"] = sorted(item.pop("titles"))
+        if key in PALLET_BY_GROUP:
+            item["per_pallet"] = PALLET_BY_GROUP[key]
+            item["pallets"] = item["pieces"] // PALLET_BY_GROUP[key]
+        if key == "block":
+            if item["cubic"]:
+                # Запятая как десятичный знак: файл ведут по-русски, и
+                # «0.0208» в строке выглядит как чужая цифра.
+                pieces = f"{item['pieces']:,}".replace(",", " ")
+                item["note"] = (f"{item['cubic']:.1f} м³ ÷ {BLOCK_M3} м³/шт = {pieces} шт"
+                                .replace(".", ","))
+        if key == "nf14":
+            item["note"] = ("в файле колонка подписана просто «1.4НФ» — "
+                            "пустотелый это или полнотелый, в отчёте не сказано")
+        items.append(item)
 
-        products.append(item)
+    made = sum(item["pieces"] for item in items)
+
+    other_items = []
+    for item in sorted(other.values(), key=lambda x: -x["cubic"]):
+        item["variants"] = sorted(item.pop("titles"))
+        other_items.append(item)
 
     return {
         "year": year,
+        "period": period,
+        "period_title": period_title,
+        "period_from": start,
+        "period_to": end or last_date,
+        "last_shift_date": last_date,
         "sheet": month_sheet,
-        "products": products,
-        "pieces_total": pieces_total,
-        "defect_pieces": (defect[0] or 0) if defect else 0,
-        "defect_shifts": (defect[1] or 0) if defect else 0,
-        "cubic_unknown": cubic_unknown,
-        "suspicious": suspicious,
+        "products": items,
+        "other": other_items,
+        "other_cubic": round(sum(item["cubic"] for item in other_items), 1),
+        "pieces_total": made,
+        "defect_pieces": defect_pieces,
+        "defect_shifts": defect_shifts,
+        "defect_cubic": round(defect_cubic, 3),
+        "good_pieces": made - defect_pieces,
+        "block_m3": BLOCK_M3,
+        "block_per_pallet": BLOCK_PER_PALLET,
+    }
+
+
+# ── КАКАЯ СМЕНА СКОЛЬКО СДЕЛАЛА ──────────────────────────────
+
+# Одну и ту же фамилию в отчёте пишут по-разному: «Досмагамбетов А.»,
+# «досмагамбетов А.», «Досмагамбетов А». Если не свести, одна бригада
+# распадается на три и сравнивать их бессмысленно.
+def master_key(name: str) -> str:
+    text = str(name or "").strip().lower().replace("ё", "е")
+    text = re.sub(r"[^а-яa-z]+", " ", text).strip()
+    return text.split(" ")[0] if text else ""
+
+
+SPANS = {"month": 1, "half": 6, "year": 12}
+
+
+def _span_bounds(last_date: str, span: str) -> tuple[str | None, str]:
+    """Начало периода и его название — тоже от последней смены в файле."""
+    from datetime import date
+
+    months = SPANS.get(span, 1)
+    if not last_date:
+        return None, "за всё время"
+
+    end = date.fromisoformat(last_date)
+    month = end.month - months + 1
+    year = end.year
+    while month < 1:
+        month += 12
+        year -= 1
+    start = date(year, month, 1)
+
+    titles = {"month": "за месяц", "half": "за полгода", "year": "за год"}
+    return start.isoformat(), titles.get(span, "за месяц")
+
+
+def brigade_output(year: int | None = None, span: str = "month") -> dict:
+    """
+    Сколько сделала каждая бригада за свои смены.
+
+    Сравнивать бригады по общей сумме нечестно: у одной смен больше,
+    у другой меньше. Поэтому главная цифра — штук за смену, а сумма и
+    число смен идут рядом, чтобы было видно, из чего она вышла.
+    """
+    init_production_import()
+
+    if span not in SPANS:
+        span = "month"
+
+    conn = get_connection()
+    try:
+        if year is None:
+            row = conn.execute("SELECT MAX(year) FROM xls_imports").fetchone()
+            year = row[0] if row and row[0] else datetime.now().year
+
+        last_date = conn.execute(
+            "SELECT MAX(date) FROM xls_shifts WHERE year = ?", (year,)
+        ).fetchone()[0]
+
+        start, span_title = _span_bounds(last_date, span)
+
+        where = "WHERE year = ?"
+        params = [year]
+        if start:
+            where += " AND date >= ?"
+            params.append(start)
+
+        shifts = [dict(row) for row in conn.execute(
+            f"SELECT date, shift, master, defect_pieces FROM xls_shifts {where}", params
+        )]
+        products = [dict(row) for row in conn.execute(
+            f"SELECT date, shift, title, value FROM xls_products {where}", params
+        )]
+    finally:
+        conn.close()
+
+    # Выпуск лежит отдельной таблицей — привязываем к смене по дате и
+    # смене, иначе штуки не с кем сопоставить.
+    made = {}
+    for row in products:
+        value = float(row["value"] or 0)
+        if not value:
+            continue
+        pieces, _ = pieces_from(value, product_group(row["title"]))
+        if pieces:
+            made[(row["date"], row["shift"])] = made.get((row["date"], row["shift"]), 0) + pieces
+
+    people = {}
+    for row in shifts:
+        key = master_key(row["master"])
+        if not key:
+            continue
+
+        item = people.setdefault(key, {
+            "names": {}, "shifts": 0, "pieces": 0, "defect": 0,
+            "day_shifts": 0, "night_shifts": 0, "no_output": 0,
+        })
+
+        name = str(row["master"] or "").strip()
+        item["names"][name] = item["names"].get(name, 0) + 1
+        item["shifts"] += 1
+        item["day_shifts"] += 1 if row["shift"] == "day" else 0
+        item["night_shifts"] += 1 if row["shift"] == "night" else 0
+
+        pieces = made.get((row["date"], row["shift"]), 0)
+        item["pieces"] += pieces
+        if not pieces:
+            item["no_output"] += 1
+
+        if row["defect_pieces"] is not None:
+            defect, _ = pieces_from(float(row["defect_pieces"]), "block")
+            item["defect"] += defect or 0
+
+    rows = []
+    for item in people.values():
+        # Показываем то написание фамилии, которым пользуются чаще.
+        name = max(item["names"].items(), key=lambda pair: pair[1])[0]
+        counted = item["shifts"] - item["no_output"]
+        rows.append({
+            "master": name,
+            "spellings": sorted(item["names"]) if len(item["names"]) > 1 else [],
+            "shifts": item["shifts"],
+            "day_shifts": item["day_shifts"],
+            "night_shifts": item["night_shifts"],
+            "pieces": item["pieces"],
+            "defect": item["defect"],
+            "no_output": item["no_output"],
+            "per_shift": round(item["pieces"] / counted) if counted else None,
+            "defect_share": round(item["defect"] / item["pieces"] * 100, 2) if item["pieces"] else None,
+        })
+
+    rows.sort(key=lambda row: -(row["per_shift"] or 0))
+
+    return {
+        "year": year,
+        "span": span,
+        "span_title": span_title,
+        "span_from": start,
+        "last_shift_date": last_date,
+        "brigades": rows,
     }

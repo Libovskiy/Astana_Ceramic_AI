@@ -296,7 +296,10 @@ body = response.json()
 check("меньший файл без подтверждения не заменяет данные",
       body.get("needs_confirm") is True, body)
 check("и объясняет человеку, что именно пропадёт",
-      "меньше данных" in (body.get("message") or ""), body.get("message"))
+      "свежие дни пропадут" in (body.get("message") or ""), body.get("message"))
+check("и называет обе даты — в файле и на сайте",
+      "последняя смена" in (body.get("message") or "")
+      and "уже есть смены до" in (body.get("message") or ""), body.get("message"))
 
 rows = sb.db().execute("SELECT COUNT(*) FROM xls_shifts WHERE year = 2026").fetchone()[0]
 check("данные при этом не тронуты", rows == 4, rows)
@@ -392,67 +395,142 @@ check("плановые остановки за месяц считаются", 
 check("и это именно плановые",
       all(is_planned(item["reason"]) for item in stops["items"]), stops["items"][:2])
 
-print("\n11. Выпуск и брак: единицы как в файле")
+print("\n11. Выпуск: виды сведены, блок пересчитан, годные отдельно")
 
-from backend.services.production_import_service import production_totals, VOLUME_PER_PIECE
+from backend.services.production_import_service import (
+    BLOCK_M3, BLOCK_PER_PALLET, brigade_output, master_key,
+    product_group, production_totals,
+)
 
-# Лист с выпуском: штуки, кубометры блока и «кубометры», которые на
-# самом деле штуки — всё как в живом файле.
+# Лист с выпуском — как в живом файле: колонку 1,4НФ подписывают то
+# «полнател», то просто «1.4НФ»; блок пишут кубометрами; брак иногда
+# тоже кубометрами.
 output = folder / "с-выпуском.xlsx"
 book = openpyxl.load_workbook(path)
 sheet = book.active
 last = sheet.max_column
 sheet.cell(1, last + 1, "Брак и отстрел"); sheet.cell(2, last + 1, "штук")
-sheet.cell(1, last + 2, "1.4НФ")
+sheet.cell(1, last + 2, "1,4 НФ пустотел"); sheet.cell(2, last + 2, "штук")
 sheet.cell(1, last + 3, "10,7НФ"); sheet.cell(2, last + 3, "м3")
 sheet.cell(1, last + 4, "4,6 НФ"); sheet.cell(2, last + 4, "м3")
 
-sheet.cell(3, last + 1, 900)        # брак
-sheet.cell(3, last + 2, 34000)      # 1.4НФ, штуки
-sheet.cell(3, last + 3, 20.8)       # 10,7НФ, м³ → 1000 шт при 0,0208
-sheet.cell(3, last + 4, 50)         # 4,6НФ, м³ — коэффициента нет
+sheet.cell(3, last + 1, 900)        # брак, штуки
+sheet.cell(3, last + 2, 34000)      # пустотелый, штуки
+sheet.cell(3, last + 3, 20.8)       # блок: 20,8 м³ → 1000 шт при 0,0208
+sheet.cell(3, last + 4, 50.5)       # 4,6НФ, м³ — коэффициента нет
+sheet.cell(4, last + 1, 2.496)      # брак кубометрами: 120 блоков
 book.save(output)
 
 data_out = read_workbook(str(output), 2026)
 save_workbook(data_out, "с-выпуском.xlsx", "Проверка")
 totals = production_totals(2026)
 
-by_title = {(item["title"], item["unit"]): item for item in totals["products"]}
+by_title = {item["title"]: item for item in totals["products"]}
+
+check("«1,4 НФ пустотел» и «1.4НФ» — разные колонки, но группы известны",
+      product_group("1,4 НФ пустотел") == "hollow"
+      and product_group("1.4НФ") == "nf14"
+      and product_group("1,4 НФ полнател") == "solid"
+      and product_group("10,7НФ") == "block")
+check("«6,9 НФ пустотел» не приписан к 1,4НФ — это другой кирпич",
+      product_group("6,9 НФ пустотел") == "other")
 
 check("штуки прочитаны как штуки",
-      by_title.get(("1.4НФ", "шт"), {}).get("pieces") == 34000, by_title.get(("1.4НФ", "шт")))
-check("брак посчитан отдельно от выпуска",
-      totals["defect_pieces"] == 900, totals["defect_pieces"])
+      by_title.get("1,4 НФ пустотелый", {}).get("pieces") == 34000,
+      by_title.get("1,4 НФ пустотелый"))
 
-block = by_title.get(("10,7НФ", "м3"), {})
+block = by_title.get("Блок 10,7 НФ", {})
 check("блок пересчитан по коэффициенту владельца (0,0208 м³)",
       block.get("pieces") == 1000, block)
-check("и в пояснении видно, как посчитано",
-      "0.0208" in (block.get("note") or ""), block.get("note"))
+check("и в пояснении видно, как посчитано", "0,0208" in (block.get("note") or ""), block.get("note"))
+check("поддоны пустотелого считаются по тому же списку, что и ручной учёт",
+      by_title.get("1,4 НФ пустотелый", {}).get("per_pallet") == 440,
+      by_title.get("1,4 НФ пустотелый"))
+check("а у «1,4НФ без пометки» поддонов нет — 396 и 440 дают разный ответ",
+      by_title.get("1,4 НФ — в файле без пометки", {}).get("pallets") is None,
+      by_title.get("1,4 НФ — в файле без пометки"))
+check("поддоны считаются по 60 блоков",
+      block.get("pallets") == 1000 // BLOCK_PER_PALLET, block)
+check("коэффициент лежит в одном месте", BLOCK_M3 == 0.0208, BLOCK_M3)
 
-unknown = by_title.get(("4,6 НФ", "м3"), {})
-check("без коэффициента в штуки не переводим", unknown.get("pieces") is None, unknown)
-check("и говорим об этом прямо",
-      "коэффициент" in (unknown.get("note") or ""), unknown.get("note"))
-check("формат назван в списке «нет коэффициента»",
-      "4,6 НФ" in totals["cubic_unknown"], totals["cubic_unknown"])
+check("брак посчитан отдельно от выпуска и целыми штуками",
+      totals["defect_pieces"] == 900 + 120, totals["defect_pieces"])
+check("дробное число в браке — это блок в кубометрах",
+      abs(totals["defect_cubic"] - 2.496) < 1e-6, totals["defect_cubic"])
+check("годные = сделано минус брак",
+      totals["good_pieces"] == totals["pieces_total"] - totals["defect_pieces"], totals)
+check("в штуках нет дробей",
+      all(float(item["pieces"]).is_integer() for item in totals["products"]),
+      [item["pieces"] for item in totals["products"]])
 
-check("коэффициенты лежат в одном месте", "107" in VOLUME_PER_PIECE, VOLUME_PER_PIECE)
+other = {item["title"]: item for item in totals["other"]}
+check("формат без коэффициента в штуки не переводим", "4,6 НФ" in other, other)
+check("и в общий счёт штук он не попал",
+      totals["pieces_total"] == 34000 + 1000, totals["pieces_total"])
+check("но кубометры названы, а не выброшены",
+      abs(totals["other_cubic"] - 50.5) < 0.1, totals["other_cubic"])
 
-# Колонка, подписанная «м³», но с тысячами за смену — это штуки.
-sheet.cell(1, last + 5, "1,4 НФ пустотел"); sheet.cell(2, last + 5, "м3")
-sheet.cell(3, last + 5, 29000)
+# Колонка, подписанная «м³», но с тысячами за смену — это штуки:
+# владелец подтвердил, что пустотелый и полнотелый ведут поштучно.
+sheet.cell(2, last + 2, "м3")
+sheet.cell(5, last + 2, 29000)
 book.save(output)
 save_workbook(read_workbook(str(output), 2026), "с-выпуском.xlsx", "Проверка")
 totals = production_totals(2026)
-strange = next(item for item in totals["products"]
-               if item["title"] == "1,4 НФ пустотел" and item["unit"] == "м3")
-# Владелец подтвердил: пустотелый и полнотелый ведут поштучно, а
-# подпись «м3» в шапке осталась от старой версии файла.
-check("колонка с тысячами за смену считается штуками",
-      strange["pieces"] == 29000, strange)
-check("и человеку сказано, почему",
-      "ведут поштучно" in (strange["note"] or ""), strange["note"])
+check("целое число под подписью «м³» считается штуками",
+      by_title and production_totals(2026)["products"][0]["pieces"] >= 29000,
+      totals["products"][0])
+
+print("\n11б. Периоды считаются от последней смены в файле")
+
+last_date = totals["last_shift_date"]
+day = production_totals(2026, "day")
+check("«последняя смена» берёт именно её", day["period_from"] == last_date, day["period_title"])
+check("и в названии периода стоит её дата",
+      last_date[8:10] in day["period_title"], day["period_title"])
+check("за месяц не больше, чем за всё время",
+      production_totals(2026, "month")["pieces_total"] <= totals["pieces_total"])
+check("неизвестный период не ломает ответ",
+      production_totals(2026, "вчера")["period"] == "all")
+
+print("\n11в. Какая смена сколько сделала")
+
+check("одна фамилия в разных написаниях — одна бригада",
+      master_key("Досмагамбетов А.") == master_key("досмагамбетов А")
+      == master_key("Досмагамбетов  А.Б."))
+check("разные фамилии не склеиваются",
+      master_key("Баянбаев А.Б.") != master_key("Байтемиров Е.С"))
+
+brigades = brigade_output(2026, "year")["brigades"]
+check("бригады посчитаны", len(brigades) >= 1, brigades[:1])
+check("штук за смену не делится на смены без выпуска",
+      all(row["per_shift"] is None or row["per_shift"] > 0 for row in brigades), brigades[:1])
+check("смены разделены на день и ночь",
+      all(row["day_shifts"] + row["night_shifts"] == row["shifts"] for row in brigades),
+      brigades[:1])
+check("неизвестный период сводится к месяцу",
+      brigade_output(2026, "пятилетка")["span"] == "month")
+
+print("\n11г. Старый файл не затирает свежий молча")
+
+from backend.services.production_import_service import compare_with_saved
+
+# Копия того же файла, но без последних дней — ровно та ошибка, из-за
+# которой 21.09.2026 пропали три дня отчёта.
+short = folder / "старый.xlsx"
+book2 = openpyxl.load_workbook(output)
+sheet2 = book2.active
+for row in range(sheet2.max_row, 4, -1):
+    for col in range(1, sheet2.max_column + 1):
+        sheet2.cell(row, col).value = None
+book2.save(short)
+
+diff = compare_with_saved(read_workbook(str(short), 2026))
+check("файл без последних дней помечен как старый", diff["older"], diff)
+check("и загрузка требует подтверждения", diff["shrinks"], diff)
+
+same = compare_with_saved(read_workbook(str(output), 2026))
+check("тот же файл повторно грузится молча", not same["shrinks"], same)
 
 print("\n12. Одна беда — одна строка")
 
