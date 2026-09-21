@@ -632,3 +632,63 @@ def delete_equipment_doc(equipment_id: int, doc_id: int, user: dict = Depends(re
         conn.commit()
     conn.close()
     return {"success": True}
+
+
+# Адрес намеренно НЕ /api/equipment/coverage: выше объявлен
+# /api/equipment/{equipment_id}, он подхватил бы «coverage» как номер
+# станка и вернул 422. Совпадающие адреса ловит tests/test_routes_unique.py,
+# но этот случай — не дубль, а перехват, его видно только запросом.
+@router.get("/api/equipment-coverage")
+def equipment_coverage(user: dict = Depends(get_current_user)):
+    """
+    По каким станкам ИИ может отвечать, а по каким скажет «нет руководства».
+
+    Нужно затем, что «ИИ отвечает плохо» и «по этому станку ИИ нечего
+    читать» — разные беды с разным лечением. Первая лечится правилами
+    и поиском, вторая — только загруженным паспортом. 21.09.2026
+    оказалось, что своё руководство есть у 23 станков из 49; по
+    остальным ИИ честно зовёт специалиста, и выглядит это как «ИИ не
+    работает».
+
+    Считается быстро, без поиска: берём папки документации этого станка
+    (`resolve_docs_folders`) и оставляем те, из которых в базе знаний
+    реально есть фрагменты.
+    """
+    from backend.services.vector_service import documentation_for
+    from backend.services.equipment_service import get_all_equipment
+
+    covered, missing = [], []
+
+    for item in get_all_equipment():
+        if not item.get("is_active", 1):
+            continue
+
+        row = {
+            "id": item["id"],
+            "name": item["name"],
+            "location": item.get("location") or item.get("stage"),
+            "discipline": item.get("discipline"),
+        }
+
+        folders = documentation_for(item["name"])
+
+        if folders:
+            row["folders"] = folders
+            covered.append(row)
+        else:
+            missing.append(row)
+
+    return {
+        "success": True,
+        "total": len(covered) + len(missing),
+        "covered": covered,
+        "missing": missing,
+        # Осторожно с трактовкой: «папка с документами есть» ещё не
+        # значит «ИИ сможет ответить». У упаковочной машины паспорт —
+        # таблицы электросхем, поиск из них не достаёт ничего полезного,
+        # и человек всё равно слышит «нет руководства». Здесь считаются
+        # только станки, у которых документов нет вовсе.
+        "note": "Считаются станки, у которых нет ни одного документа в базе знаний. "
+                "Документы бывают нечитаемыми для поиска (сканы, таблицы схем) — "
+                "тогда ИИ тоже ответит «нет руководства».",
+    }

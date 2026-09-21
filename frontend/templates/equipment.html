@@ -128,10 +128,22 @@ function toInfo(eq){
   return{label:`ТО ${Math.ceil(diff)}д`,cls:'ok'};
 }
 
+// Станки, по которым ИИ отвечать нечем: у них нет ни одного документа
+// в базе знаний. Инженеру нужен именно этот список — по нему видно,
+// что загружать, чтобы ИИ перестал отвечать «нет руководства».
+let noDocs = new Set();
+
+async function loadNoDocs(){
+  try{
+    const r = await ACAI.get('/api/equipment-coverage');
+    noDocs = new Set((r.missing||[]).map(item => item.id));
+  }catch{ noDocs = new Set(); }
+}
+
 async function loadEquipment(){
   const r=await ACAI.get('/api/equipment');
   allEquipment=r.equipment||r||[];
-  await Promise.all([loadMaintenanceSummary(), loadHealth()]);   // до отрисовки: от них зависят счётчики
+  await Promise.all([loadMaintenanceSummary(), loadHealth(), loadNoDocs()]);   // до отрисовки: от них зависят счётчики
   renderFilters();renderEquipment();renderMetrics();renderEqVerdict();
 }
 
@@ -167,6 +179,9 @@ function renderEqVerdict(){
   if(overdue.length) rows.push({level:'warning',
     what:`ТО просрочено: ${overdue.length}`,
     where:'работы по графику не отмечены', href:'/maintenance'});
+  if(noDocs.size) rows.push({level:'warning',
+    what:`Без руководства: ${noDocs.size}`,
+    where:'по этим станкам ИИ отвечает «нет руководства» — нужен паспорт в базе знаний'});
 
   if(rows.length){ ACAI.verdict('eqVerdict', {title:'Не в порядке', rows}); return; }
 
@@ -197,6 +212,7 @@ function renderFilters(){
   document.getElementById('filters').innerHTML=[
     `<button class="filter-btn ${activeFilter==='all'?'active':''}" data-filter="all">Все (${counts.all})</button>`,
     `<button class="filter-btn ${activeFilter==='problem'?'active':''}" data-filter="problem" style="${activeFilter==='problem'?'':'color:var(--warn)'}">⚠ Проблемы</button>`,
+    (noDocs.size ? `<button class="filter-btn ${activeFilter==='nodocs'?'active':''}" data-filter="nodocs" title="По этим станкам ИИ отвечает «нет руководства»">📄 Без руководства (${noDocs.size})</button>` : ''),
     `<button class="filter-btn ${activeFilter==='to'?'active':''}" data-filter="to" style="${activeFilter==='to'?'':'color:var(--warn)'}">🔧 ТО скоро (${counts.to})</button>`,
     ...sorted.map(l=>`<button class="filter-btn ${activeFilter===l?'active':''}" data-filter="${l}">${l} (${counts[l]})</button>`)
   ].join('');
@@ -210,10 +226,11 @@ function renderEquipment(){
   let items=allEquipment;
   if(activeFilter==='problem')items=items.filter(e=>e.status!=='Работает');
   else if(activeFilter==='to')items=items.filter(e=>toState(e.id));
+  else if(activeFilter==='nodocs')items=items.filter(e=>noDocs.has(e.id));
   else if(activeFilter!=='all')items=items.filter(e=>(e.location||e.stage||'Без цеха')===activeFilter);
   if(q)items=items.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.type||'').toLowerCase().includes(q)||(e.location||'').toLowerCase().includes(q));
   if(!items.length){document.getElementById('equipmentContent').innerHTML='<div class="empty">Ничего не найдено</div>';return;}
-  if(activeFilter==='all'||activeFilter==='problem'||activeFilter==='to'){
+  if(activeFilter==='all'||activeFilter==='problem'||activeFilter==='to'||activeFilter==='nodocs'){
     const byStage={};for(const e of items){const s=e.location||e.stage||'Без цеха';if(!byStage[s])byStage[s]=[];byStage[s].push(e);}
     const sorted=[...ZONES.filter(z=>byStage[z]),...Object.keys(byStage).filter(z=>!ZONES.includes(z))];
     document.getElementById('equipmentContent').innerHTML=sorted.map(stage=>`
