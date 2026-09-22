@@ -287,9 +287,26 @@ def change_password_route(request: dict, user: dict = Depends(get_current_user))
     return {"success": True}
 
 
-# ── Смена пароля другому пользователю (только admin) ─────
+# ── Смена пароля подчинённому ─────────────────────────────
+# Раньше это мог только администратор, и забытый пароль электрика в
+# ночную смену ждал до утра. Теперь — начальник своего участка:
+# гл. механик слесарю, начальник смены оператору СВОЕЙ бригады.
+# Кто кого ведёт, решает staff_rbac.can_manage, а не эта ручка.
 @router.put("/api/settings/users/{user_id}/password")
-def set_user_password_route(user_id: int, request: dict, user: dict = Depends(require_roles("admin"))):
+def set_user_password_route(user_id: int, request: dict,
+                            user: dict = Depends(get_current_user)):
+    from backend.services.auth_service import get_all_users
+    from backend.services.staff_rbac import can_manage
+
+    target = next((item for item in get_all_users() if item["id"] == user_id), None)
+    if not target:
+        return {"success": False, "message": "Сотрудник не найден."}
+
+    if not can_manage(user, target):
+        return {"success": False,
+                "message": "Этот сотрудник не в вашем подчинении — "
+                           "пароль ему меняет его начальник или главный инженер."}
+
     from backend.services.auth_service import set_password, validate_password_strength
     new_p = request.get("password", "")
     try:

@@ -171,29 +171,89 @@ check("рабочий остался рабочим", role_now == "worker", role
 # ─────────────────────────────────────────────────────────
 print("\n4. Не-администраторы пробуют управление")
 
-ADMIN_ONLY = (
-    ("GET", "/api/settings/users", None),
+# Заводить, удалять и менять роли может тот, кто отвечает за завод
+# целиком: admin, директор, гл. инженер (владелец, 22.09.2026).
+# Остальным — ни при каких условиях.
+BOSS_ONLY = (
     ("POST", "/api/settings/users", {"username": "hacker", "password": "Hacker12345x", "full_name": "x", "role": "admin"}),
     ("PUT", f"/api/settings/users/{worker.id}/active", {"active": False}),
-    ("PUT", f"/api/settings/users/{worker.id}/password", {"password": "Hacker12345x"}),
     ("DELETE", f"/api/settings/users/{worker.id}", None),
-    ("POST", "/api/admin/revoke-user-sessions", {"username": worker.username}),
+    # Структура завода: станки заводит тот же круг — правило
+    # structure.edit в regulation_rbac.
     ("POST", "/api/settings/equipment", {"name": "x"}),
+)
+
+# Это — только admin, и директора с гл. инженером тоже не пускаем:
+# станки, бэкапы, чужие сессии, подтверждение удалений.
+ADMIN_ONLY = (
+    ("POST", "/api/admin/revoke-user-sessions", {"username": worker.username}),
     ("POST", "/api/backups/create", {}),
     ("POST", "/api/backups/restore", {}),
     ("POST", "/api/backups/restore", {"filename": "factory_20260101_000000.db"}),
     ("POST", "/api/protected/delete-requests/999999/approve", {}),
 )
+
+NOT_BOSSES = ("mechanic", "electrician", "shift_supervisor", "technologist",
+              "chief_mechanic", "chief_electrician", "production_chief")
+
 leaks = []
-for role in ("mechanic", "electrician", "shift_supervisor", "technologist", "chief_mechanic",
-             "chief_electrician", "production_chief", "chief_engineer", "director"):
+for role in NOT_BOSSES:
+    client = users[role]
+    for method, path, body in BOSS_ONLY:
+        resp = client.http.request(method, path, json=body) if body is not None else client.http.request(method, path)
+        if resp.status_code != 403:
+            leaks.append(f"{role} {method} {path} → {resp.status_code}")
+check(f"заводить и удалять людей — не их дело ({len(BOSS_ONLY)} действий × {len(NOT_BOSSES)} ролей)",
+      not leaks, leaks)
+
+leaks = []
+for role in NOT_BOSSES + ("chief_engineer", "director"):
     client = users[role]
     for method, path, body in ADMIN_ONLY:
         resp = client.http.request(method, path, json=body) if body is not None else client.http.request(method, path)
         # 400/404/422 — значит, запрос дошёл до разбора, а должен был получить отказ сразу
         if resp.status_code != 403:
             leaks.append(f"{role} {method} {path} → {resp.status_code}")
-check(f"сотрудники, станки, бэкапы — только admin ({len(ADMIN_ONLY)} действий × 9 ролей)", not leaks, leaks)
+check(f"станки, бэкапы, чужие сессии — только admin ({len(ADMIN_ONLY)} действий × 9 ролей)",
+      not leaks, leaks)
+
+
+print("\n4а. Начальник ведёт своих — и только своих")
+
+# Начальник смены меняет пароль оператору СВОЕЙ бригады, но не чужой.
+# Это главное правило иерархии: список ролей мало, нужна ещё бригада.
+own = sb.db().execute(
+    "SELECT id, username, brigade FROM users WHERE role = 'worker' AND brigade IS NOT NULL LIMIT 1"
+).fetchone()
+master = users["shift_supervisor"]
+master_row = sb.db().execute(
+    "SELECT brigade FROM users WHERE id = ?", (master.id,)
+).fetchone()
+
+if own and master_row:
+    same_brigade = own["brigade"] == master_row["brigade"]
+    resp = master.http.put(f"/api/settings/users/{own['id']}/password",
+                           json={"password": "AcaiNewPass123"})
+    body = resp.json() if resp.status_code == 200 else {}
+    allowed = body.get("success") is True
+    check("свой оператор — пароль меняется" if same_brigade else "чужой оператор — отказ",
+          allowed == same_brigade, (own["brigade"], master_row["brigade"], body))
+
+# Главный механик — над слесарями, но не над электриками.
+sparky = sb.db().execute("SELECT id FROM users WHERE role = 'electrician' LIMIT 1").fetchone()
+if sparky:
+    resp = users["chief_mechanic"].http.put(
+        f"/api/settings/users/{sparky['id']}/password", json={"password": "AcaiNewPass123"})
+    body = resp.json() if resp.status_code == 200 else {}
+    check("гл. механик не трогает электрика", body.get("success") is not True, body)
+
+# В своём списке чужих людей не видно — фильтрует сервер, а не страница.
+seen = users["chief_mechanic"].get("/api/settings/users").json().get("users", [])
+roles_seen = {item["role"] for item in seen}
+check("гл. механик видит только слесарей и себя",
+      roles_seen <= {"mechanic", "chief_mechanic"}, roles_seen)
+check("и роли менять ему нечем",
+      users["chief_mechanic"].get("/api/settings/users").json().get("full_access") is False)
 
 # Выдавать доступ людям директору и гл. инженеру разрешено решением заказчика
 # (backend/api/admin_routes.py) — но стать через это администратором нельзя.
@@ -242,7 +302,7 @@ for method, path, body in (
 
 
 # ─────────────────────────────────────────────────────────
-print("\n4а. Фото и обходы смены")
+print("\n4б. Фото и обходы смены")
 
 import io
 from PIL import Image

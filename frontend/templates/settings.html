@@ -75,6 +75,7 @@
         <div class="card-head">
           <h2>Пользователи</h2>
           <span id="userCount" style="font-size:11px;color:var(--text-dim);background:var(--surface-2);padding:2px 8px;border-radius:999px">—</span>
+          <span id="userScope" style="font-size:11px;color:var(--text-dim);margin-left:auto"></span>
         </div>
         <div class="card-body" style="padding:10px 14px">
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -143,7 +144,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=28"></script>
+<script src="/static/acai_layout.js?v=29"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
@@ -156,7 +157,16 @@ function avatarColor(n){const c=['#2563eb','#7c3aed','#be185d','#b45309','#04785
 function initials(n){return(n||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();}
 
 // Ставка часа простоя: смотрит и меняет директор (и админ).
-async function loadRates(){
+// Роль проверяем ДО запроса: у начальника участка он вернёт 403, и в
+// консоли останется красная строка — человек решит, что сломалось,
+// хотя ему просто не положено.
+const RATES_ROLES = ['admin', 'director'];
+
+async function loadRates(role){
+  if (!RATES_ROLES.includes(role)) {
+    document.getElementById('ratesCard')?.remove();
+    return;
+  }
   const card = document.getElementById('ratesCard');
   const box = document.getElementById('ratesList');
   let d;
@@ -201,28 +211,45 @@ async function saveRate(section, title){
   }catch(e){ ACAI.toast(e.message, 'danger'); }
 }
 
+// Кто что может, решает сервер. Страница только повторяет его ответ:
+// full_access — заводить, удалять и менять роли (директор, гл.
+// инженер, admin); остальные начальники ведут своих людей и меняют им
+// пароли. Правило прежнее: кнопка есть — значит, она работает.
+let fullAccess = false;
+
 async function load(){
-  // Директор заходит сюда ради стоимости часа простоя. Учётные записи
-  // и статус коллектора ему сервер не отдаст — значит, и показывать их
-  // нельзя: кнопка есть — значит, она работает.
   let me = null;
   try { me = (await ACAI.get('/auth/me'))?.user || await ACAI.get('/auth/me'); } catch {}
   const isAdmin = (me?.role || '') === 'admin';
 
-  loadRates();
+  loadRates(me?.role || '');
 
-  if (!isAdmin) {
+  // Статус коллектора и версия системы — дело администратора.
+  if (!isAdmin) document.getElementById('systemCard')?.remove();
+
+  let r = null;
+  try { r = await ACAI.get('/api/settings/users'); } catch {}
+
+  if (!r) {
+    // Учётные записи этой роли не положены вовсе — карточку убираем,
+    // а не показываем пустую с «Загрузка…».
     document.getElementById('usersCard')?.remove();
-    document.getElementById('systemCard')?.remove();
-    document.querySelector('.topbar-right .btn.primary')?.remove();   // «+ Пользователь»
+    document.querySelector('.topbar-right .btn.primary')?.remove();
     return;
   }
 
-  const r=await ACAI.get('/api/settings/users');
-  validRoles=r.valid_roles||[];
-  allUsers=r.users||[];
+  fullAccess = !!r.full_access;
+  validRoles = r.valid_roles || [];
+  allUsers = r.users || [];
   allUsers.sort((a,b)=>(ROLE_ORDER[a.role]??99)-(ROLE_ORDER[b.role]??99));
-  document.getElementById('userCount').textContent=`${allUsers.length} чел.`;
+
+  // Заводить новых людей может только тот, кто отвечает за завод
+  // целиком: у начальника участка этой кнопки нет.
+  if (!fullAccess) document.querySelector('.topbar-right .btn.primary')?.remove();
+
+  document.getElementById('userCount').textContent = `${allUsers.length} чел.`;
+  const scope = document.getElementById('userScope');
+  if (scope && r.scope) scope.textContent = r.scope;
   renderUsers();
 
   // статус коллектора
@@ -255,13 +282,13 @@ function renderUsers(){
       </div>
       <span style="font-size:11px;font-weight:600;color:${ROLE_COLORS[u.role]||'var(--text-dim)'};flex-shrink:0">${ROLE_LABELS[u.role]||u.role}</span>
       <div style="display:flex;gap:6px">
-        <button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>
+        ${fullAccess ? `<button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>` : ''}
         <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')">🔑 Пароль</button>
         <button class="btn secondary sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
-        ${off
+        ${!fullAccess ? '' : off
           ? `<button class="btn primary sm" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`
           : `<button class="btn danger sm" onclick="setUserActive(${u.id},false,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Закрыть доступ</button>`}
-        ${u.can_delete
+        ${!fullAccess ? '' : u.can_delete
           ? `<button class="btn secondary sm" title="Учётка пустая — ни одной записи в системе"
                onclick="deleteEmptyUser(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Удалить пустую</button>`
           : `<button class="btn danger sm btn-forever" title="Стереть учётную запись без возврата"

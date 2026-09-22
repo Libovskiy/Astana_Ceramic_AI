@@ -82,4 +82,33 @@ for role in PAGE_VIEWERS:
     check(f"{role}: отказ объяснён словами", bool(detail and len(str(detail)) > 20), detail)
 
 
+print("\n9. Загрузка отчёта и учётки подчинённых")
+
+import re
+
+from backend.api.production_routes import REPORT_IMPORT_ROLES
+
+page = Path("frontend/templates/production.html").read_text()
+block = re.search(r"XLS_IMPORT_ROLES = \[(.*?)\]", page, re.S).group(1)
+on_page = set(re.findall(r"'([a-z_]+)'", block))
+check("кнопка «Загрузить файл отчёта» показана ровно тем, кого пустит сервер",
+      on_page == set(REPORT_IMPORT_ROLES), (sorted(on_page), sorted(REPORT_IMPORT_ROLES)))
+
+from backend.api.common import SETTINGS_ALLOWED_ROLES, SETTINGS_PAGE_ROLES
+from backend.services.staff_rbac import FULL_ACCESS_ROLES, SUBORDINATE_ROLES
+
+check("«Настройки» открыты всем, у кого есть подчинённые",
+      set(SETTINGS_PAGE_ROLES) == set(SUBORDINATE_ROLES),
+      (sorted(SETTINGS_PAGE_ROLES), sorted(SUBORDINATE_ROLES)))
+check("заводить и удалять людей может тот же круг, что назван в staff_rbac",
+      set(SETTINGS_ALLOWED_ROLES) == set(FULL_ACCESS_ROLES),
+      (sorted(SETTINGS_ALLOWED_ROLES), sorted(FULL_ACCESS_ROLES)))
+
+settings_page = Path("frontend/templates/settings.html").read_text()
+check("кнопки «Изменить», «Закрыть доступ» и «Удалить» спрятаны от начальника участка",
+      settings_page.count("fullAccess ?") + settings_page.count("!fullAccess ?") >= 3,
+      settings_page.count("fullAccess"))
+check("а чьи это учётки — написано словами",
+      "userScope" in settings_page and "scope" in settings_page)
+
 finish("Кнопки и права")

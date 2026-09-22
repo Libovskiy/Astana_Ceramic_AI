@@ -51,7 +51,14 @@ def require_roles(*roles: str):
     return dependency
 
 
-SETTINGS_ALLOWED_ROLES = ("admin",)
+# Кто заводит, удаляет и меняет роли — те же, что в staff_rbac.
+# Начальники и главные тоже видят «Настройки», но только свой участок
+# людей и только смену пароля: их права проверяет can_manage.
+SETTINGS_ALLOWED_ROLES = ("admin", "director", "chief_engineer")
+
+# Кому страница «Настройки» вообще показывается.
+SETTINGS_PAGE_ROLES = ("admin", "director", "chief_engineer", "production_chief",
+                       "shift_supervisor", "chief_mechanic", "chief_electrician")
 
 
 

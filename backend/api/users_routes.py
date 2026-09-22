@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from backend.api.common import (
     SETTINGS_ALLOWED_ROLES,
+    SETTINGS_PAGE_ROLES,
     require_roles,
 )
 
@@ -50,26 +51,43 @@ class AssignEquipmentRequest(BaseModel):
 
 @router.get("/api/settings/users")
 def get_users_route(
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*SETTINGS_PAGE_ROLES))
 ):
+    """
+    Сотрудники, которых этот человек ведёт.
 
+    Главный механик видит слесарей, начальник смены — операторов своей
+    бригады, директор и главный инженер — всех. Список фильтрует
+    СЕРВЕР, а не страница: иначе чужие фамилии уходили бы в браузер и
+    достаточно было бы открыть консоль, чтобы их прочитать.
+    """
     from backend.services.auth_service import user_traces
+    from backend.services.staff_rbac import full_access, manageable_users, scope_text
 
-    users = get_all_users()
+    users = manageable_users(user, get_all_users())
+    boss = full_access(user["role"])
 
     # Удалять можно только пустую учётку (завели по ошибке). У того, кто
     # работал, история останется в обращениях и отчётах — ему «закрыть доступ».
     for item in users:
-        try:
-            item["traces"] = user_traces(item["id"])
-        except ValueError:
+        if boss:
+            try:
+                item["traces"] = user_traces(item["id"])
+            except ValueError:
+                item["traces"] = {}
+            item["can_delete"] = not item["traces"]
+        else:
+            # Начальник участка учётки не удаляет и роли не меняет —
+            # не показываем ему того, чего он всё равно не сможет.
             item["traces"] = {}
-        item["can_delete"] = not item["traces"]
+            item["can_delete"] = False
 
     return {
         "success": True,
         "users": users,
-        "valid_roles": list(VALID_ROLES)
+        "valid_roles": list(VALID_ROLES) if boss else [],
+        "full_access": boss,
+        "scope": scope_text(user),
     }
 
 
@@ -154,8 +172,15 @@ def update_user_role_route(
 @router.post("/api/settings/users/{user_id}/revoke-sessions")
 def revoke_user_sessions_route(
     user_id: int,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*SETTINGS_PAGE_ROLES))
 ):
+    """Выкинуть человека из системы. Своих — может и начальник участка."""
+    from backend.services.staff_rbac import can_manage
+
+    target = next((item for item in get_all_users() if item["id"] == user_id), None)
+    if not target or not can_manage(user, target):
+        return {"success": False,
+                "message": "Этот сотрудник не в вашем подчинении."}
 
     count = revoke_all_sessions(user_id)
 

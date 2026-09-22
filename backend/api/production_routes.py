@@ -435,7 +435,11 @@ def get_production_shift_chart_route(
 
 # Кто загружает отчёт. Это данные всего завода за год, поэтому список
 # узкий — те же, кто отвечает за производство в целом.
-REPORT_IMPORT_ROLES = ("admin", "director", "chief_engineer", "shift_supervisor")
+# Кто загружает файл отчёта. Владелец, 22.09.2026: начальник
+# производства (его файл), начальники смен (они его заполняют),
+# главный инженер и аналитик. Директор и admin — как всегда.
+REPORT_IMPORT_ROLES = ("admin", "director", "chief_engineer",
+                       "production_chief", "shift_supervisor", "analyst")
 
 MAX_REPORT_BYTES = 25 * 1024 * 1024
 
