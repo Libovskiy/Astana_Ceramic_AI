@@ -1172,7 +1172,7 @@ def get_changes(product_type=None, limit=50):
 # являются обязательными участниками ознакомления.
 ACK_REQUIRED_ROLES = (
     "chief_engineer",
-    "engineer",
+    "production_chief",
     "shift_supervisor",
     "technologist",
     "lab_technician",
@@ -1187,7 +1187,7 @@ ACK_CONTROL_ROLES = (
     "admin",
     "director",
     "chief_engineer",
-    "engineer",
+    "production_chief",
     "shift_supervisor",
     "technologist",
     "lab_technician",

@@ -46,7 +46,7 @@ VALID_ROLES = (
     "admin",
     "director",
     "chief_engineer",
-    "engineer",
+    "production_chief",
     "shift_supervisor",
     "worker",
     "technologist",

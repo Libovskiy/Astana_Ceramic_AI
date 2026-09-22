@@ -34,7 +34,7 @@ class CreateTaskRequest(BaseModel):
 TASK_CREATE_ROLES = (
     "director",
     "chief_engineer",
-    "engineer",
+    "production_chief",
     "shift_supervisor",
     "technologist",
     "chief_mechanic",
@@ -45,7 +45,7 @@ TASK_CREATE_ROLES = (
 TASK_VIEW_ROLES = (
     "director",
     "chief_engineer",
-    "engineer",
+    "production_chief",
     "shift_supervisor",
     "technologist",
     "lab_technician",

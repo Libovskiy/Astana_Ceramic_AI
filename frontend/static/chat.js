@@ -129,7 +129,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const HOME_BY_ROLE = {
         worker: "/production",
         shift_supervisor: "/production",
-        engineer: "/production",
+        production_chief: "/production",
         chief_engineer: "/",
         director: "/",
         admin: "/",

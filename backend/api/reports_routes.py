@@ -24,7 +24,9 @@ def reports_summary(
     # Сводка по всему заводу: план, простои, худшее оборудование.
     # Её зовут только /reports и /analytics, а они закрыты для цеха —
     # значит и сам запрос не должен отвечать рабочему или лаборанту.
-    user: dict = Depends(require_roles("director", "chief_engineer", "analyst"))
+    user: dict = Depends(require_roles(
+        "director", "chief_engineer", "production_chief", "analyst",
+        "chief_mechanic", "chief_electrician"))
 ):
     """
     Сводные данные для раздела «Отчёты».
@@ -143,15 +145,7 @@ def get_audit_log_route(
 
     entries = get_audit_log(limit=limit, action=action, role=role, search=search)
 
-    if user["role"] == "engineer":
-
-        entries = [
-            entry
-            for entry in entries
-            if entry["role"] in ("worker", "technologist")
-        ]
-
-    elif user["role"] != "admin":
+    if user["role"] != "admin":
 
         entries = [
             entry

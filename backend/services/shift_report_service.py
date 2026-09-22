@@ -57,7 +57,11 @@ STATUS_LABELS = {
 FILL_ROLES = {"worker", "admin"}                                  # ведёт вагонетки, сдаёт
 CHECK_ROLES = {"shift_supervisor", "admin"}                       # проверяет и передаёт выше
 APPROVE_ROLES = {"chief_engineer", "admin"}                       # подтверждает окончательно
-VIEW_ALL_ROLES = {"admin", "director", "chief_engineer", "analyst"}
+# Смотрят сводку все, у кого открыта «Аналитика» (PAGE_ROLES):
+# страница показывает этот блок, значит ручка обязана отвечать —
+# иначе на странице дыра и отказ в консоли.
+VIEW_ALL_ROLES = {"admin", "director", "chief_engineer", "production_chief",
+                  "analyst", "chief_mechanic", "chief_electrician"}
 
 # Стартовый список причин брака. Не догма: гл. инженер правит его под
 # завод прямо в интерфейсе — важно лишь, чтобы причина выбиралась из

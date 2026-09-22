@@ -29,8 +29,8 @@ ACTIONS = {
     # Смотреть регламенты
     "regulation.view": (
         "technologist", "lab_technician",
-        "chief_engineer", "director", "admin", "analyst", "engineer",
-        "shift_supervisor",
+        "chief_engineer", "director", "admin", "analyst",
+        "shift_supervisor", "production_chief",
         "chief_mechanic", "mechanic",
         "chief_electrician", "electrician",
         "worker",
@@ -61,7 +61,7 @@ ACTIONS = {
     # Внести факт руками
     "measurement.create": (
         "lab_technician", "technologist",
-        "shift_supervisor", "engineer", "admin",
+        "shift_supervisor", "admin",
     ),
 
     "measurement.view": (
@@ -95,7 +95,7 @@ ACTIONS = {
         "chief_mechanic", "mechanic",
         "chief_electrician", "electrician",
         "chief_engineer", "director", "admin",
-        "shift_supervisor", "engineer", "analyst",
+        "shift_supervisor", "production_chief", "analyst",
     ),
 
     # =====================================================

@@ -152,7 +152,7 @@ def recurring_issues_route(
 # списком этой страницы в PAGE_ROLES — механик и электрик тоже видят
 # журнал, они по нему и работают.
 CASES_OVERVIEW_ROLES = (
-    "director", "chief_engineer", "engineer", "shift_supervisor",
+    "director", "chief_engineer", "production_chief", "shift_supervisor",
     "chief_mechanic", "mechanic", "chief_electrician", "electrician",
 )
 

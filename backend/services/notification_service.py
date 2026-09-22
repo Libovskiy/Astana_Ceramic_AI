@@ -122,7 +122,7 @@ def _report_import_notifications(user):
 
 # Кому напоминать про обход — тем, кто его проводит (ROUND_ROLES в
 # checklist_routes).
-ROUND_ROLES = ("director", "chief_engineer", "engineer", "shift_supervisor",
+ROUND_ROLES = ("director", "chief_engineer", "production_chief", "shift_supervisor",
                "chief_mechanic", "chief_electrician")
 
 
@@ -433,7 +433,7 @@ def _backup_notifications(user):
 
 MAINTENANCE_NOTIFY_ROLES = {
     "admin", "director", "chief_engineer",
-    "chief_mechanic", "chief_electrician", "engineer",
+    "chief_mechanic", "chief_electrician", "production_chief",
 }
 
 

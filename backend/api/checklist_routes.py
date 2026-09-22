@@ -46,7 +46,7 @@ def current_user(session_token: str | None = Cookie(default=None)):
 # совпадение проверяет tests/test_access_denied.py.
 
 # Проводят обход: страница /checklist
-ROUND_ROLES = ("director", "chief_engineer", "engineer", "shift_supervisor",
+ROUND_ROLES = ("director", "chief_engineer", "production_chief", "shift_supervisor",
                "chief_mechanic", "chief_electrician")
 
 # Смотрят фото и обходы: там, где фото показываются, — /checklist,

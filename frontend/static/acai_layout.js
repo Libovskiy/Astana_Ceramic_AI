@@ -248,36 +248,36 @@ const ACAI = {
 // ── НАВИГАЦИЯ ─────────────────────────────────────────────
 const NAV_ITEMS = [
   { section: 'Главное' },
-  { icon: '🏠', label: 'Главная',       href: '/',   roles: ['admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
+  { icon: '🏠', label: 'Главная',       href: '/',   roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','analyst','technologist','chief_mechanic','chief_electrician'] },
   // Обращения — вторым пунктом: это переписка с ИИ по поломке, самое
   // частое, зачем сюда заходят с цеха. Ведёт на /chat (мессенджер), а не
   // на /cases: /cases — управленческий список, он ниже, в Аналитике.
-  { icon: '💬', label: 'Обращения',     href: '/chat',         roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
+  { icon: '💬', label: 'Обращения',     href: '/chat',         roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
   // Переписка между людьми — отдельно от «Обращений»: там разговор о
   // поломке со статусом и станком, здесь просто общение.
   { icon: '💭', label: 'Переписка',     href: '/messenger',    roles: '*' },
-  { icon: '🔧', label: 'Диагностика',   href: '/diagnostics',  roles: ['worker','shift_supervisor','engineer','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician'] },
-  { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
+  { icon: '🔧', label: 'Диагностика',   href: '/diagnostics',  roles: ['admin','worker','shift_supervisor','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician'] },
+  { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
   { icon: '🔩', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic'] },
   { icon: '⚡', label: 'Электрика',     href: '/electrical',   roles: ['admin','director','chief_engineer','chief_electrician','electrician'] },
   // worker тут не случайно: сменный отчёт упаковки заполняют бригады
   // А/Б/В/Г, а у них роль worker. Без этой ссылки они не могли дойти
   // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
-  { icon: '🏭', label: 'Производство',  href: '/production',   roles: ['worker','admin','director','chief_engineer','engineer','shift_supervisor','analyst','chief_mechanic','chief_electrician'] },
-  { icon: '✅', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','chief_electrician'] },
-  { icon: '🗓️', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','engineer'] },
+  { icon: '🏭', label: 'Производство',  href: '/production',   roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
+  { icon: '✅', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
+  { icon: '🗓️', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician'] },
   { section: 'Аналитика' },
-  { icon: '📊', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','analyst'] },
-  { icon: '⚠️', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','engineer','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
-  { icon: '📌', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','engineer','shift_supervisor'] },
-  { icon: '📄', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','analyst'] },
+  { icon: '📊', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
+  { icon: '⚠️', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician'] },
+  { icon: '📌', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
+  { icon: '📄', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
   { section: 'База знаний' },
   { icon: '📚', label: 'Инструкции',    href: '/instructions', roles: '*' },
   { icon: '⚖️', label: 'Регламенты',    href: '/regulations',  roles: '*' },
-  { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','engineer','chief_mechanic','chief_electrician'] },
+  { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician'] },
   { section: 'Производство' },
   { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
-  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','engineer'] },
+  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician'] },
   { icon: '🧱', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist'] },
   { section: 'Система' },
   { icon: '👥', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer'] },
@@ -323,10 +323,10 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
   const initials = ACAI.initials(user?.full_name || '');
   const roleLabel = {
     admin: 'Администратор', director: 'Директор',
-    chief_engineer: 'Гл. инженер', engineer: 'Инженер',
+    chief_engineer: 'Гл. инженер', production_chief: 'Нач. производства',
     worker: 'Рабочий', shift_supervisor: 'Мастер смены',
     chief_mechanic: 'Гл. механик', mechanic: 'Механик',
-    chief_electrician: 'Гл. электрик', electrician: 'Электрик',
+    chief_electrician: 'Гл. энергетик', electrician: 'Электрик',
     analyst: 'Аналитик', technologist: 'Технолог',
     lab_technician: 'Лаборант',
   }[role] || role;

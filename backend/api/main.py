@@ -200,44 +200,53 @@ app.mount(
 # Роль admin проходит везде.
 
 PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
-    "/": ("director", "chief_engineer", "engineer", "shift_supervisor",
-          "analyst", "chief_mechanic", "chief_electrician"),
-    "/chat": ("worker", "director", "chief_engineer", "engineer", "shift_supervisor",
-              "chief_mechanic", "mechanic", "chief_electrician", "electrician"),
-    "/diagnostics": ("worker", "shift_supervisor", "engineer", "chief_engineer",
+    # Главная — сводка по заводу и помощник. Тем, кто отвечает за цех
+    # целиком, а не за свой станок.
+    "/": ("director", "chief_engineer", "production_chief", "shift_supervisor",
+          "analyst", "technologist", "chief_mechanic", "chief_electrician"),
+    "/chat": ("worker", "director", "chief_engineer", "production_chief",
+              "shift_supervisor", "chief_mechanic", "mechanic",
+              "chief_electrician", "electrician"),
+    "/diagnostics": ("worker", "shift_supervisor", "chief_engineer",
                      "director", "chief_mechanic", "mechanic",
                      "chief_electrician", "electrician"),
-    "/equipment": ("director", "chief_engineer", "engineer", "shift_supervisor",
-                   "chief_mechanic", "chief_electrician"),
+    "/equipment": ("director", "chief_engineer", "production_chief",
+                   "shift_supervisor", "chief_mechanic", "chief_electrician"),
     "/mechanics": ("director", "chief_engineer", "chief_mechanic", "mechanic"),
     "/electrical": ("director", "chief_engineer", "chief_electrician", "electrician"),
     # worker здесь потому, что сменный отчёт упаковки заполняют бригады
     # А/Б/В/Г — у них роль worker, а отчёт живёт на этой странице.
-    "/production": ("worker", "director", "chief_engineer", "engineer",
-                    "shift_supervisor", "analyst", "chief_mechanic",
-                    "chief_electrician"),
-    "/checklist": ("director", "chief_engineer", "engineer", "shift_supervisor",
-                   "chief_mechanic", "chief_electrician"),
-    "/maintenance": ("director", "chief_engineer", "chief_mechanic",
-                     "chief_electrician", "engineer"),
-    "/analytics": ("director", "chief_engineer", "analyst"),
-    "/cases": ("director", "chief_engineer", "engineer", "shift_supervisor",
+    # technologist — потому что выпуск и брак по видам кирпича это его
+    # работа, а раньше он этой страницы не видел вовсе.
+    "/production": ("worker", "director", "chief_engineer", "production_chief",
+                    "shift_supervisor", "technologist", "analyst",
+                    "chief_mechanic", "chief_electrician"),
+    "/checklist": ("director", "chief_engineer", "production_chief",
+                   "shift_supervisor", "chief_mechanic", "chief_electrician"),
+    "/maintenance": ("director", "chief_engineer", "production_chief",
+                     "chief_mechanic", "chief_electrician"),
+    # Разбор за длинные периоды. Начальнику производства — обязательно:
+    # это разбор его собственного отчёта.
+    "/analytics": ("director", "chief_engineer", "production_chief",
+                   "analyst", "chief_mechanic", "chief_electrician"),
+    "/cases": ("director", "chief_engineer", "production_chief", "shift_supervisor",
                "chief_mechanic", "mechanic", "chief_electrician", "electrician"),
-    "/events": ("director", "chief_engineer", "engineer", "shift_supervisor"),
-    "/reports": ("director", "chief_engineer", "analyst"),
+    "/events": ("director", "chief_engineer", "production_chief", "shift_supervisor",
+                "chief_mechanic", "chief_electrician"),
+    "/reports": ("director", "chief_engineer", "production_chief", "analyst",
+                 "chief_mechanic", "chief_electrician"),
     "/instructions": "*",
     "/regulations": "*",
     "/my-regulation": "*",
     # Переписка между людьми открыта всем: договориться о подмене или
     # позвать электрика нужно любому, независимо от должности.
     "/messenger": "*",
-    "/knowledge": ("director", "chief_engineer", "engineer",
-                   "chief_mechanic", "chief_electrician"),
+    "/knowledge": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
     # lab_technician раньше отсутствовал: логин уводил лаборанта на /lab,
     # а ссылки на /lab у него в меню не было.
     "/lab": ("director", "chief_engineer", "analyst", "technologist", "lab_technician"),
     "/parts": ("director", "chief_engineer", "chief_mechanic",
-               "chief_electrician", "mechanic", "engineer", "electrician"),
+               "chief_electrician", "mechanic", "electrician"),
     "/technolog": ("director", "chief_engineer", "technologist"),
     "/audit": ("director", "chief_engineer", "chief_mechanic", "chief_electrician"),
     # Пользуются ли системой: кто заходит, какие разделы, сколько работы
@@ -251,13 +260,14 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     "/settings": ("director",),  # + admin, он проходит все проверки
 }
 
+
 # Куда отправить человека, которому тут не место (совпадает с
 # ROLE_HOME_PAGE в frontend/static/login.js).
 ROLE_HOME_PAGE = {
     "worker": "/chat",
     "technologist": "/lab",
     "lab_technician": "/lab",
-    "engineer": "/production",
+    "production_chief": "/production",
     "shift_supervisor": "/production",
     "chief_mechanic": "/mechanics",
     "mechanic": "/mechanics",
@@ -267,10 +277,11 @@ ROLE_HOME_PAGE = {
 
 ROLE_LABELS = {
     "admin": "Администратор", "director": "Директор",
-    "chief_engineer": "Гл. инженер", "engineer": "Инженер",
+    "chief_engineer": "Гл. инженер",
+    "production_chief": "Нач. производства",
     "worker": "Рабочий", "shift_supervisor": "Мастер смены",
     "chief_mechanic": "Гл. механик", "mechanic": "Механик",
-    "chief_electrician": "Гл. электрик", "electrician": "Электрик",
+    "chief_electrician": "Гл. энергетик", "electrician": "Электрик",
     "analyst": "Аналитик", "technologist": "Технолог",
     "lab_technician": "Лаборант",
 }

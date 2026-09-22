@@ -27,7 +27,7 @@ ASSIGNER_ROLES = (
 
 # кого имеет смысл ставить исполнителем
 WORKER_ROLES = (
-    "technician", "worker", "engineer", "electrician", "mechanic",
+    "technician", "worker", "electrician", "mechanic",
     "chief_engineer", "chief_mechanic", "chief_electrician",
     "shift_supervisor", "technologist",
 )

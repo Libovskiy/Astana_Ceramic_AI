@@ -96,7 +96,7 @@ check("показания датчиков с чужим ключом не пр�
 print("\n2. Чужие страницы — по PAGE_ROLES")
 
 ROLES = ("worker", "mechanic", "electrician", "shift_supervisor", "technologist",
-         "lab_technician", "analyst", "engineer", "chief_mechanic", "chief_electrician",
+         "lab_technician", "analyst", "production_chief", "chief_mechanic", "chief_electrician",
          "chief_engineer", "director")
 users = {role: sb.user(role) for role in ROLES}
 
@@ -186,7 +186,7 @@ ADMIN_ONLY = (
 )
 leaks = []
 for role in ("mechanic", "electrician", "shift_supervisor", "technologist", "chief_mechanic",
-             "chief_electrician", "engineer", "chief_engineer", "director"):
+             "chief_electrician", "production_chief", "chief_engineer", "director"):
     client = users[role]
     for method, path, body in ADMIN_ONLY:
         resp = client.http.request(method, path, json=body) if body is not None else client.http.request(method, path)
@@ -216,7 +216,7 @@ for role in ("director", "chief_engineer"):
 check("ни одной лишней учётки администратора не появилось",
       sb.db().execute("SELECT COUNT(*) FROM users WHERE username LIKE 'evil-%' OR username = 'hacker'").fetchone()[0] == 0)
 
-for role in ("mechanic", "electrician", "shift_supervisor", "engineer", "chief_mechanic", "chief_electrician"):
+for role in ("mechanic", "electrician", "shift_supervisor", "production_chief", "chief_mechanic", "chief_electrician"):
     client = users[role]
     denied_all = all(
         client.http.request(m, p, json=b).status_code == 403 for m, p, b in (
@@ -308,14 +308,14 @@ forged = sb.anonymous()
 forged.cookies.set("session_token", "a" * 64)
 check("поддельная сессия не пускает", forged.get("/auth/me").status_code == 401)
 
-expiring = sb.user("engineer")
+expiring = sb.user("production_chief")
 conn = sb.db()
 conn.execute("UPDATE sessions SET expires_at = '2000-01-01 00:00:00' WHERE user_id = ?", (expiring.id,))
 conn.commit()
 conn.close()
 check("истёкшая сессия не пускает", expiring.get("/auth/me").status_code == 401)
 
-leaving = sb.user("engineer")
+leaving = sb.user("production_chief")
 token = leaving.http.cookies.get("session_token")
 leaving.post("/auth/logout")
 replay = sb.anonymous()

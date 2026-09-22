@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 worker: "/chat",
                 technologist: "/lab",
                 lab_technician: "/lab",
-                engineer: "/production",
+                production_chief: "/production",
                 shift_supervisor: "/production",
                 chief_mechanic: "/mechanics",
                 mechanic: "/mechanics",

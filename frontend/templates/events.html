@@ -70,8 +70,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=26"></script>
-<script src="/static/mobile_nav_v2.js?v=3"></script>
+<script src="/static/acai_layout.js?v=27"></script>
+<script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allTasks=[];let currentFilter='';let currentUser=null;
 
@@ -246,7 +246,7 @@ async function openAssign(taskId){
   }
   if(!users.length){ ACAI.toast('Некого назначить — в системе нет исполнителей','danger'); return; }
 
-  const ROLE={technician:'Техник',worker:'Рабочий',engineer:'Инженер',
+  const ROLE={technician:'Техник',worker:'Рабочий',production_chief:'Нач. производства',
               electrician:'Электрик',mechanic:'Механик',
               chief_engineer:'Гл. инженер',chief_mechanic:'Гл. механик',
               chief_electrician:'Гл. энергетик',shift_supervisor:'Нач. смены',
@@ -414,7 +414,7 @@ function openAddTask(){
       <select class="input" id="nt-role">
         <option value="director">Директор</option>
         <option value="chief_engineer">Гл. инженер</option>
-        <option value="engineer">Инженер</option>
+        <option value="production_chief">Начальник производства</option>
         <option value="shift_supervisor">Мастер смены</option>
         <option value="chief_mechanic">Гл. механик</option>
         <option value="mechanic">Механик</option>

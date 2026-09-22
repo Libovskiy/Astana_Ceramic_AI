@@ -65,8 +65,9 @@ SETTINGS_ALLOWED_ROLES = ("admin",)
 # по всему заводу. Гл. механик/гл. электрик — видят (нужно для
 # "Производство 👁️" по матрице прав), но управлять не могут.
 DASHBOARD_ALLOWED_ROLES = (
-    "admin", "director", "chief_engineer", "engineer",
-    "shift_supervisor", "analyst", "chief_mechanic", "chief_electrician"
+    "admin", "director", "chief_engineer", "production_chief",
+    "shift_supervisor", "analyst", "technologist",
+    "chief_mechanic", "chief_electrician"
 )
 
 

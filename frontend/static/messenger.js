@@ -14,10 +14,10 @@
 
 const ROLE_LABELS = {
   admin: 'Администратор', director: 'Директор',
-  chief_engineer: 'Гл. инженер', engineer: 'Инженер',
+  chief_engineer: 'Гл. инженер', production_chief: 'Нач. производства',
   worker: 'Рабочий', shift_supervisor: 'Мастер смены',
   chief_mechanic: 'Гл. механик', mechanic: 'Механик',
-  chief_electrician: 'Гл. электрик', electrician: 'Электрик',
+  chief_electrician: 'Гл. энергетик', electrician: 'Электрик',
   analyst: 'Аналитик', technologist: 'Технолог',
   lab_technician: 'Лаборант',
 };
