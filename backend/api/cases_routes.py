@@ -317,12 +317,20 @@ def management_ai(
     answer = ask_management_ai(question, dashboard_data, losses=losses)
 
     if answer is None:
+        # Директору «проверьте OPENAI_API_KEY» не говорит ничего: ключ
+        # не его забота. Называем причину так, как он может с ней
+        # что-то сделать, — и отдельно говорим, что цифры по простоям
+        # посчитал сервер и они верные, молчит только пересказ.
+        from backend.services.ai_service import unavailable_reason
+
+        outage = unavailable_reason() or "ИИ не ответил"
+        tail = (" Цифры по простоям считает сервер, они ниже и не зависят от ИИ."
+                if losses else "")
+
         return {
             "success": False,
-            "answer": (
-                "ACAI не смог получить AI-ответ. "
-                "Проверьте OPENAI_API_KEY и подключение к сервису."
-            )
+            "answer": f"Помощник сейчас не работает — {outage}.{tail}",
+            "reason": outage,
         }
 
     return {

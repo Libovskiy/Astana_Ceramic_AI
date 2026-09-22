@@ -5,6 +5,70 @@ from backend.config import OPENAI_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
+# ── ПОЧЕМУ ИИ МОЛЧИТ ──────────────────────────────────────
+#
+# Молчание бывает двух разных видов, и путать их нельзя:
+#
+#   1. модели нечего предложить по этой неисправности — тогда честно
+#      передаём обращение специалисту;
+#   2. ИИ вообще недоступен: кончились деньги на счёте, нет ключа,
+#      нет интернета. Тогда про неисправность мы НИЧЕГО не узнали.
+#
+# Раньше оба случая выглядели одинаково — `None`, и механику писали
+# «не могу предложить надёжное решение». Это неправда: при пустом
+# счёте так ответили бы и на самую простую поломку. А главное, по
+# такому сообщению никто не догадается пополнить счёт — будут думать,
+# что ИИ поглупел.
+#
+# Поэтому запоминаем причину последнего отказа и даём её наружу.
+_LAST_FAILURE = {"at": None, "text": None}
+
+# Как выглядят «инфраструктурные» отказы в сообщении OpenAI.
+_OUTAGE_SIGNS = (
+    ("credit", "на счёте OpenAI закончились деньги"),
+    ("quota", "на счёте OpenAI закончились деньги"),
+    ("insufficient_quota", "на счёте OpenAI закончились деньги"),
+    ("rate limit", "OpenAI ограничил частоту запросов"),
+    ("401", "ключ OpenAI не принят"),
+    ("authentication", "ключ OpenAI не принят"),
+    ("connection", "нет связи с OpenAI"),
+    ("timeout", "OpenAI не ответил вовремя"),
+)
+
+
+def _remember_failure(error) -> None:
+    """Запомнить, почему запрос не прошёл, — человеческими словами."""
+    from datetime import datetime
+
+    low = str(error).lower()
+    text = next((words for sign, words in _OUTAGE_SIGNS if sign in low), None)
+    _LAST_FAILURE["at"] = datetime.now()
+    _LAST_FAILURE["text"] = text or "ИИ не отвечает"
+
+
+def _forget_failure() -> None:
+    _LAST_FAILURE["at"] = None
+    _LAST_FAILURE["text"] = None
+
+
+def unavailable_reason() -> str | None:
+    """
+    Почему ИИ сейчас недоступен. None — если он в порядке.
+
+    Свежесть важна: отказ получасовой давности ничего не говорит про
+    сейчас, а вот отказ минуту назад — говорит.
+    """
+    from datetime import datetime, timedelta
+
+    if client is None:
+        return "ключ OpenAI не настроен"
+    if not _LAST_FAILURE["at"]:
+        return None
+    if datetime.now() - _LAST_FAILURE["at"] > timedelta(minutes=10):
+        return None
+    return _LAST_FAILURE["text"]
+
+
 def ask_gpt(context, question):
     """
     Возвращает None, если ключ не настроен или произошла ошибка API —
@@ -39,11 +103,14 @@ def ask_gpt(context, question):
             ]
         )
 
+        _forget_failure()
         return response.choices[0].message.content
 
     except Exception as error:
 
         print(f"[ai_service] Ошибка запроса к OpenAI: {error}")
+
+        _remember_failure(error)
 
         return None
 
@@ -178,9 +245,11 @@ def ask_management_ai(question, dashboard_data, losses=None):
                 }
             ]
         )
+        _forget_failure()
         return (response.choices[0].message.content or "").strip() or None
     except Exception as error:
         print(f"[ai_service] Ошибка запроса к OpenAI (management): {error}")
+        _remember_failure(error)
         return None
 
 def suggest_next_action(machine, question, doc_context, tried_actions, knowledge_hints, journal_hints=None):
@@ -309,6 +378,7 @@ def suggest_next_action(machine, question, doc_context, tried_actions, knowledge
             ]
         )
 
+        _forget_failure()
         text = response.choices[0].message.content.strip()
 
         if text.upper().startswith("ЭСКАЛАЦИЯ"):
@@ -319,6 +389,8 @@ def suggest_next_action(machine, question, doc_context, tried_actions, knowledge
     except Exception as error:
 
         print(f"[ai_service] Ошибка запроса к OpenAI (suggest_next_action): {error}")
+
+        _remember_failure(error)
 
         return None
 
@@ -382,6 +454,7 @@ def suggest_mix_proportion(note, history):
             ]
         )
 
+        _forget_failure()
         text = response.choices[0].message.content.strip()
 
         if "НЕТ ДАННЫХ" in text.upper():
@@ -397,6 +470,8 @@ def suggest_mix_proportion(note, history):
     except Exception as error:
 
         print(f"[ai_service] Ошибка suggest_mix_proportion: {error}")
+
+        _remember_failure(error)
 
         return None
 
@@ -454,6 +529,7 @@ def detect_resolution(machine, dialogue):
             ]
         )
 
+        _forget_failure()
         answer = (response.choices[0].message.content or "").strip().upper()
 
         return answer.startswith("ДА")
@@ -461,6 +537,8 @@ def detect_resolution(machine, dialogue):
     except Exception as error:
 
         print(f"[ai_service] Ошибка detect_resolution: {error}")
+
+        _remember_failure(error)
 
         return False
 
@@ -523,6 +601,7 @@ def detect_discipline(machine, dialogue, equipment_discipline=None):
             ]
         )
 
+        _forget_failure()
         answer = (response.choices[0].message.content or "").strip().upper()
 
         if answer.startswith("МЕХАНИКА"):
@@ -536,6 +615,8 @@ def detect_discipline(machine, dialogue, equipment_discipline=None):
     except Exception as error:
 
         print(f"[ai_service] Ошибка detect_discipline: {error}")
+
+        _remember_failure(error)
 
         return None
 
@@ -635,11 +716,14 @@ def suggest_lab_mix(current_conditions, best_mixes, moisture_effect, similar_sta
             ]
         )
 
+        _forget_failure()
         return response.choices[0].message.content.strip()
 
     except Exception as error:
 
         print(f"[ai_service] Ошибка suggest_lab_mix: {error}")
+
+        _remember_failure(error)
 
         return None
 def lab_consult(question, journal_stats, history=None):
@@ -725,11 +809,14 @@ def lab_consult(question, journal_stats, history=None):
             ]
         )
 
+        _forget_failure()
         return response.choices[0].message.content.strip()
 
     except Exception as error:
 
         print(f"[ai_service] Ошибка lab_consult: {error}")
+
+        _remember_failure(error)
 
         return None
 
