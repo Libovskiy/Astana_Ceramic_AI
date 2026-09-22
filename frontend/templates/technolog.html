@@ -7,7 +7,7 @@
 <title>Технолог — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=21">
+<link rel="stylesheet" href="/static/acai.css?v=23">
 <style>
 .stage-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;}
 .stage-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
@@ -25,8 +25,38 @@
 .param-input.warn{border-color:var(--warn);}
 .param-input.danger{border-color:var(--danger);}
 .live-val{font-family:var(--mono);font-size:14px;font-weight:700;text-align:center;}
+.param-field{display:contents;}
+.param-field span{display:none;}
 .col-head{font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;text-align:center;padding:6px 18px;}
 .param-grid-head{display:grid;grid-template-columns:1fr 80px 80px 80px 120px 36px 36px;gap:8px;padding:6px 18px;background:var(--surface-2);border-bottom:1px solid var(--border);}
+
+/* ТЕЛЕФОН. Семь колонок (1fr + 80+80+80+120+36+36) требуют минимум
+   450 px — на 390 они вылезали за экран. Сворачиваем строку в
+   карточку: название сверху, под ним допуски подписанными полями.
+   Подписи ставим здесь, потому что в разметке их нет вовсе — они
+   жили только в шапке таблицы, а шапка на телефоне прячется. */
+@media (max-width: 560px) {
+  .param-grid-head { display: none; }
+  /* Заголовок участка: «▼ Свернуть» вылезал за край на 12 px. */
+  .stage-head { flex-wrap: wrap; gap: 6px; }
+  .stage-head > div { flex-wrap: wrap; }
+  .param-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 12px 14px;
+  }
+  .param-row > *:first-child { flex: 1 0 100%; }
+  .param-row .param-field { display: flex; align-items: center; gap: 6px; }
+  .param-row .param-field span {
+    display: inline;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .param-row .param-input { width: 64px; }
+  .param-row .live-val { margin-left: auto; }
+}
 .sensor-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;}
 .sensor-ok{background:rgba(34,197,94,.15);color:var(--ok);}
 .sensor-warn{background:rgba(245,158,11,.15);color:var(--warn);}
@@ -70,7 +100,7 @@
 
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=27"></script>
+<script src="/static/acai_layout.js?v=28"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const STAGE_ICONS={
@@ -230,15 +260,18 @@ function renderStages(){
               <div class="param-name">${p.param_name}</div>
               <div style="font-size:10px;color:var(--text-dim)">${p.updated_by?`обновил ${p.updated_by}`:''} ${p.updated_at?p.updated_at.slice(0,10):''}</div>
             </div>
+            <label class="param-field"><span>Мин</span>
             <input class="param-input ${canEdit?'':'readonly'}" type="number" step="0.1"
               value="${p.min_val??''}" ${canEdit?`onchange="updateParam(${p.id},'min_val',this.value,${p.max_val??'null'},${p.target_val??'null'})"`:' readonly'}
-              title="Минимальный допуск">
+              title="Минимальный допуск"></label>
+            <label class="param-field"><span>Макс</span>
             <input class="param-input ${canEdit?'':'readonly'}" type="number" step="0.1"
               value="${p.max_val??''}" ${canEdit?`onchange="updateParam(${p.id},'max_val',${p.min_val??'null'},this.value,${p.target_val??'null'})"`:' readonly'}
-              title="Максимальный допуск">
+              title="Максимальный допуск"></label>
+            <label class="param-field"><span>Цель</span>
             <input class="param-input ${canEdit?'':'readonly'}" type="number" step="0.1"
               value="${p.target_val??''}" ${canEdit?`onchange="updateParam(${p.id},'target_val',${p.min_val??'null'},${p.max_val??'null'},this.value)"`:' readonly'}
-              title="Целевое значение">
+              title="Целевое значение"></label>
             <div class="live-val ${statusClass?'sensor-badge '+statusClass:''}" style="font-size:${lv!==null?'14':'12'}px">
               ${lv!==null?`${lv.toFixed(1)} ${p.unit||''}`:
                 lk?'<span style="color:var(--text-dim);font-size:11px">WebHMI офлайн</span>':

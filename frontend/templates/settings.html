@@ -7,12 +7,51 @@
 <title>Настройки — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=21">
+<link rel="stylesheet" href="/static/acai.css?v=23">
 <style>
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
 .u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
 .u-name{font-size:13px;font-weight:600;}
 .u-login{font-size:11px;color:var(--text-dim);font-family:var(--mono);}
+
+/* «Удалить навсегда» стоит рядом с «Закрыть доступ», и обе красные —
+   промахнуться пальцем слишком легко, а цена разная: одну отменяют
+   той же кнопкой, вторую не отменяют никак. Поэтому редкая и опасная
+   — только обводкой: её видно, но она не зовёт нажать. */
+.btn.btn-forever {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+.btn.btn-forever:hover { background: rgba(239, 68, 68, .12); }
+
+/* ТЕЛЕФОН. Строка сотрудника — это аватар, имя, роль и пять кнопок в
+   один ряд: на 390 px имя ужималось в столбик по одному слову, а
+   кнопки уезжали за край. Разворачиваем в два яруса: сверху кто это,
+   снизу кнопки во всю ширину. Кнопку с отступом «Удалить навсегда»
+   отодвигаем вправо — чтобы её не нажимали, промахнувшись по
+   соседней. */
+@media (max-width: 560px) {
+  .user-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 10px;
+    padding: 12px 14px;
+  }
+  .user-row > div[style*="flex:1"] { flex: 1 1 60%; }
+  .user-row .u-name { font-size: 14px; }
+  .user-row > span { margin-left: auto; }
+  /* Ряд кнопок: со своей строки, каждая кнопка не уже пальца. */
+  .user-row > div:last-child {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .user-row > div:last-child .btn { flex: 1 1 auto; min-height: 34px; }
+  .user-row > div:last-child .btn.danger:last-child { margin-left: auto; flex-basis: 100%; }
+}
 .online-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0;}
 </style>
 </head>
@@ -104,7 +143,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=27"></script>
+<script src="/static/acai_layout.js?v=28"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
@@ -225,7 +264,8 @@ function renderUsers(){
         ${u.can_delete
           ? `<button class="btn secondary sm" title="Учётка пустая — ни одной записи в системе"
                onclick="deleteEmptyUser(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Удалить пустую</button>`
-          : ''}
+          : `<button class="btn danger sm btn-forever" title="Стереть учётную запись без возврата"
+               onclick="deleteUserForever(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}','${u.username}')">Удалить навсегда</button>`}
       </div>
     </div>`;}).join('')||'<div class="empty">Нет пользователей</div>';
 }
@@ -240,6 +280,49 @@ async function deleteEmptyUser(id, name){
     const d = await r.json().catch(()=>({}));
     if(!r.ok || d.success===false) throw new Error(d.message || d.detail || 'Не получилось');
     ACAI.toast('Учётка удалена');
+    await load();
+  }catch(e){ ACAI.toast(e.message, 'danger'); }
+}
+
+// Удаление навсегда. Отдельно от «Удалить пустую»: там учётка
+// заведена по ошибке и стирается бесследно, а здесь за человеком
+// стоит работа — обращения, обходы, отметки ТО. Записи никуда не
+// денутся, но останутся БЕЗ АВТОРА, и вернуть это нельзя.
+//
+// Поэтому спрашиваем дважды и по-разному: сначала показываем, что
+// именно осиротеет (числа берём с сервера, а не на глаз), потом
+// просим набрать логин руками. Случайно нажать на такую кнопку в
+// цеху с телефона — слишком легко.
+async function deleteUserForever(id, name, login){
+  let traces = {}, total = 0;
+  try{
+    const d = await ACAI.get(`/api/settings/users/${id}/traces`);
+    traces = d.traces || {}; total = d.total || 0;
+  }catch{
+    if(!confirm(`Не удалось проверить, что останется после «${name}».\n\nУдалять вслепую?`)) return;
+  }
+
+  const lines = Object.entries(traces).map(([label, count]) => `   • ${label}: ${count}`).join('\n');
+  const warning = total
+    ? `За «${name}» в системе ${total} ${total===1?'запись':'записей'}:\n${lines}\n\n` +
+      'Они останутся, но без автора: в журнале и отчётах на его месте будет пусто.\n' +
+      'Если человек просто уволился — правильнее «Закрыть доступ»: фамилия сохранится.'
+    : `За «${name}» в системе нет ни одной записи.`;
+
+  if(!confirm(`${warning}\n\nУдалить навсегда? Отменить будет нельзя.`)) return;
+
+  const typed = prompt(`Наберите логин «${login}», чтобы подтвердить удаление:`);
+  if(typed === null) return;
+  if(typed.trim() !== login){
+    ACAI.toast('Логин не совпал — ничего не удалено');
+    return;
+  }
+
+  try{
+    const r = await fetch(`/api/settings/users/${id}?force=true`, {method:'DELETE', credentials:'include'});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok || d.success===false) throw new Error(d.message || d.detail || 'Не получилось');
+    ACAI.toast(`Учётка «${name}» удалена навсегда`);
     await load();
   }catch(e){ ACAI.toast(e.message, 'danger'); }
 }

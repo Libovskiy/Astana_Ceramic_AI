@@ -579,3 +579,62 @@ html, body {
   #xlsBrigades > div > div:first-child > div:first-child { width: 110px; }
   #xlsBrigades > div > div:last-child { margin-left: 0 !important; }
 }
+
+/* ── ТАБЛИЦА КАК КАРТОЧКИ (телефон) ──
+   Подписи подставляет acai_layout.js из thead таблицы. Здесь только
+   вид. Правило одно на весь сайт: страницу вбок не мотаем. */
+@media (max-width: 560px) {
+  table.stacked,
+  table.stacked tbody { display: block; width: 100%; }
+
+  table.stacked thead { display: none; }
+
+  table.stacked tr {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    padding: 8px 11px;
+    margin-bottom: 8px;
+  }
+
+  table.stacked td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 3px 0 !important;
+    border: none !important;
+    text-align: right;
+  }
+
+  /* Длинная строка («в отчёте писали: …») должна переноситься, а не
+     вылезать за карточку: под неё уходит вторая строка. */
+  table.stacked td { flex-wrap: wrap; overflow-wrap: anywhere; }
+  table.stacked td > * { min-width: 0; max-width: 100%; }
+
+  table.stacked td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 400;
+    text-align: left;
+  }
+
+  /* Первая колонка — название строки: она и есть заголовок карточки. */
+  table.stacked td:first-child {
+    font-weight: 600;
+    font-size: 14px;
+    text-align: left;
+    padding-bottom: 6px !important;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  /* Пустая ячейка без подписи не должна занимать строку. */
+  table.stacked td:empty { display: none; }
+
+  /* Свёрнутой таблице прокрутка больше не нужна. */
+  .xls-scroll table.stacked { min-width: 0; }
+}

@@ -7,7 +7,7 @@
 <title>График ТО — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=21">
+<link rel="stylesheet" href="/static/acai.css?v=23">
 <style>
 .to-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
 .to-table{width:100%;border-collapse:collapse;min-width:900px;}
@@ -17,6 +17,28 @@
 .to-table td{padding:6px 8px;border:1px solid var(--border);font-size:12px;vertical-align:middle;}
 .to-table td.eq-cell{font-weight:700;background:var(--surface-2);font-size:11px;}
 .to-table td.work-cell{font-size:11px;color:var(--text-dim);background:var(--surface);}
+
+/* ТЕЛЕФОН. График ТО — это год по месяцам, семнадцать колонок. В
+   карточки его не свернуть: двенадцать строк вместо одной читать
+   хуже, чем мотать вбок. Поэтому оставляем прокрутку, но закрепляем
+   колонку с названием работы — иначе, домотав до декабря, человек уже
+   не знает, чья это строка. */
+@media (max-width: 560px) {
+  .to-table { min-width: 760px; }
+  .to-table th.work-col,
+  .to-table td.work-cell {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 132px;
+    max-width: 132px;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .to-table th.work-col { background: var(--surface-2); }
+  .to-table th.eq-col,
+  .to-table td.eq-cell { min-width: 120px; }
+}
 .to-table tr:hover td{background:rgba(59,130,246,.04);}
 
 /* ячейка месяца */
@@ -109,7 +131,7 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:560px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=27"></script>
+<script src="/static/acai_layout.js?v=28"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];

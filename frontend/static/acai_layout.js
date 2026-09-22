@@ -646,3 +646,63 @@ async function loadBell() {
     </button>`);
 }
 
+
+
+/* ================================================================
+   ТАБЛИЦЫ НА ТЕЛЕФОНЕ
+
+   На 390 px таблица в четыре колонки не помещается. Раньше её можно
+   было мотать вбок внутри карточки — страница при этом не ехала, но
+   человек видел «Вид | Штук | Под…» и должен был догадаться, что
+   правее есть ещё колонки. На телефоне в цеху так не работают.
+
+   Поэтому на узком экране каждая строка становится карточкой:
+   подпись колонки слева, значение справа. Подписи берём из самой
+   таблицы (thead), а не пишем второй раз руками — иначе они
+   разойдутся при первой же правке.
+
+   Сетки шире семи колонок не трогаем: «График ТО» — это год по
+   месяцам, и двенадцать строк вместо одной сделали бы хуже. Такие
+   остаются с прокруткой внутри карточки.
+   ================================================================ */
+(function () {
+  'use strict';
+
+  const NARROW = 560;
+  const MAX_COLUMNS = 7;
+
+  function apply() {
+    const narrow = window.innerWidth <= NARROW;
+
+    document.querySelectorAll('table').forEach(table => {
+      const heads = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      if (!heads.length || heads.length > MAX_COLUMNS) return;
+
+      table.classList.toggle('stacked', narrow);
+      if (!narrow) return;
+
+      table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = [...row.children];
+        // Строка-заголовок группы (один td на всю ширину) — не данные,
+        // подписывать нечего.
+        if (cells.length !== heads.length) return;
+        cells.forEach((cell, index) => {
+          if (heads[index]) cell.setAttribute('data-label', heads[index]);
+          else cell.removeAttribute('data-label');
+        });
+      });
+    });
+  }
+
+  let timer = null;
+  const later = () => { clearTimeout(timer); timer = setTimeout(apply, 60); };
+
+  document.addEventListener('DOMContentLoaded', later);
+  window.addEventListener('resize', later);
+
+  // Таблицы рисуются после ответа сервера, то есть позже загрузки
+  // страницы. Следим за разметкой, иначе подписи достались бы только
+  // тем таблицам, что были в HTML с самого начала.
+  new MutationObserver(later).observe(document.documentElement,
+    { childList: true, subtree: true });
+})();

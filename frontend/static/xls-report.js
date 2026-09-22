@@ -263,6 +263,12 @@ async function loadXlsAnalytics(){
         Самые долгие разовые остановки <span style="font-weight:400;text-transform:none">— показать</span>
       </summary>
       <div class="xls-scroll"><table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">
+        <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Дата</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Причина</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Участок</th>
+          <th style="padding:8px;color:var(--text-dim);font-size:12px">Потеряно</th>
+        </tr></thead>
         <tbody>
           ${longest.map(r => `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:8px;color:var(--text-dim);white-space:nowrap">${xlsDate(r.date)}</td>

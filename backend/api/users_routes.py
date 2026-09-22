@@ -173,9 +173,32 @@ def revoke_user_sessions_route(
     }
 
 
+@router.get("/api/settings/users/{user_id}/traces")
+def user_traces_route(
+    user_id: int,
+    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+):
+    """
+    Что останется без автора, если удалить учётку навсегда.
+
+    Спрашивается ДО удаления: вернуть человека потом будет нечем, и
+    список «обращения: 12, обходы: 4» — единственный способ понять
+    цену решения заранее.
+    """
+    from backend.services.auth_service import user_traces
+
+    try:
+        traces = user_traces(user_id)
+    except ValueError as error:
+        return {"success": False, "message": str(error)}
+
+    return {"success": True, "traces": traces, "total": sum(traces.values())}
+
+
 @router.delete("/api/settings/users/{user_id}")
 def delete_user_route(
     user_id: int,
+    force: bool = False,
     user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
 ):
 
@@ -188,9 +211,20 @@ def delete_user_route(
             "message": "Нельзя удалить свой собственный аккаунт."
         }
 
+    # Что именно осиротеет — записываем в журнал ДО удаления: после
+    # него посчитать будет не по кому.
+    from backend.services.auth_service import get_connection, user_traces
+
+    conn = get_connection()
+    row = conn.execute("SELECT username, full_name FROM users WHERE id = ?",
+                       (user_id,)).fetchone()
+    conn.close()
+    victim = dict(row) if row else {}
+    traces = user_traces(user_id) if victim else {}
+
     try:
 
-        delete_user(user_id)
+        delete_user(user_id, force=force)
 
     except ValueError as error:
 
@@ -199,12 +233,16 @@ def delete_user_route(
             "message": str(error)
         }
 
+    left = ", ".join(f"{label}: {count}" for label, count in traces.items())
+
     log_action(
         username=user["username"],
         role=user["role"],
         action="user_deleted",
         target=f"user:{user_id}",
-        details=None
+        details=(f"{victim.get('full_name') or victim.get('username') or user_id}"
+                 + (" — удалён навсегда" if force else "")
+                 + (f"; без автора осталось — {left}" if left else "; следов в системе не было"))
     )
 
     return {
