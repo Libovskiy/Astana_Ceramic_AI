@@ -151,6 +151,7 @@ rsync -avzn \
   --exclude 'uploads/' \
   --exclude 'data/' \
   --exclude 'frontend/static/uploads/' \
+  --exclude 'ДОСТУП_ПЕРСОНАЛ.txt' --exclude '.DS_Store' \
   --exclude 'backups/' --exclude 'certs/' --exclude 'logs/' \
   ./ acai:/home/acaiadmin/FactoryAssistant/
 
@@ -176,6 +177,8 @@ rsync -avzn \
 | `data/` | фото с обходов смены |
 | `frontend/static/uploads/` | фото продукции и участков лежат ВНУТРИ папки с кодом — легко забыть, что это данные, а не статика |
 | `backups/`, `certs/`, `logs/` | принадлежат серверу; у разработчика свои, и они ничего не знают про боевую машину |
+| `ДОСТУП_ПЕРСОНАЛ.txt` | список паролей персонала открытым текстом. На боевой машине ему делать нечего — он для раздачи и удаления. 23.09.2026 найден там после ручной выкладки |
+| `.DS_Store` | мусор macOS, на Linux бессмыслен |
 
 После выкладки — перезапуск службы и проверка, что сайт отвечает.
 Новые файлы (например, `backend/services/staff_rbac.py`) доезжают
