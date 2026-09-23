@@ -80,7 +80,7 @@ DASHBOARD_ALLOWED_ROLES = (
 
 WORK_QUEUE_ROLES = (
     "chief_mechanic", "mechanic", "chief_electrician", "electrician",
-    "chief_engineer", "admin",
+    "chief_engineer", "admin", "analyst",
     # Директору страницы «Механика» и «Электрика» открыты, и очередь
     # работ — их главный блок. Без него страница грузилась с дырой и
     # отказом в консоли. Данных тут меньше, чем в журнале обращений,

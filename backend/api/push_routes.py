@@ -72,7 +72,9 @@ def push_test(user: dict = Depends(get_current_user)):
 
 
 @router.get("/api/push/overview")
-def push_overview(user: dict = Depends(require_roles("director", "chief_engineer"))):
+def push_overview(
+    user: dict = Depends(require_roles("director", "chief_engineer", "analyst"))
+):
     """Кто включил уведомления — для «Использования»."""
     return {"success": True, "configured": push_service.enabled(), "people": push_service.overview()}
 

@@ -18,8 +18,15 @@ router = APIRouter()
 # Кто работает со складом. Совпадает со списком страницы /parts в
 # PAGE_ROLES. Электрик раньше отсутствовал, хотя меняет те же
 # контакторы и датчики, что механик — подшипники.
-PARTS_ROLES = ("director", "chief_engineer", "engineer", "chief_mechanic",
+# Кто ДВИГАЕТ запчасти: списывает, приходует, правит остаток.
+# Роли «engineer» больше нет — убрана 22.09.2026 вместе с должностью.
+PARTS_ROLES = ("director", "chief_engineer", "chief_mechanic",
                "mechanic", "chief_electrician", "electrician")
+
+# Кто СМОТРИТ: те же плюс аналитик. Он видит всё, кроме «Настроек»
+# (владелец, 23.09.2026), но склад не трогает — списание остаётся за
+# теми, кто за него отвечает.
+PARTS_READ_ROLES = PARTS_ROLES + ("analyst",)
 
 @router.get("/api/parts")
 def get_parts(user: dict = Depends(get_current_user)):
@@ -133,14 +140,14 @@ def skip_writeoff(writeoff_id: int, request: dict, user: dict = Depends(get_curr
 
 
 @router.get("/api/parts/{part_id}/history")
-def part_history(part_id: int, user: dict = Depends(require_roles(*PARTS_ROLES))):
+def part_history(part_id: int, user: dict = Depends(require_roles(*PARTS_READ_ROLES))):
     """На что ушла деталь: обращение, станок, кто списал."""
     from backend.services.part_usage_service import history_for_part
     return {"success": True, "history": history_for_part(part_id)}
 
 
 @router.get("/api/parts/from-report")
-def parts_from_report(user: dict = Depends(require_roles(*PARTS_ROLES))):
+def parts_from_report(user: dict = Depends(require_roles(*PARTS_READ_ROLES))):
     """
     Что меняли и чинили по сменному отчёту начальника производства.
 

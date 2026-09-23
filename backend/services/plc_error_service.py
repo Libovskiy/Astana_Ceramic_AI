@@ -21,7 +21,11 @@ from datetime import datetime
 
 from backend.config import DB_NAME
 
-VIEW_ROLES = {"electrician", "chief_electrician", "chief_engineer", "director", "admin"}
+# Аналитик смотрит коды ошибок вместе со всеми (владелец,
+# 23.09.2026). Править базу кодов он по-прежнему не может —
+# это EDIT_ROLES ниже.
+VIEW_ROLES = {"electrician", "chief_electrician", "chief_engineer",
+              "director", "admin", "analyst"}
 # Гл. электрик (он же гл. энергетик на заводе) и гл. инженер ведут базу сами.
 EDIT_ROLES = {"chief_electrician", "chief_engineer", "admin"}
 

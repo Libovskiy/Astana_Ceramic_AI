@@ -106,7 +106,7 @@ def get_notifications_route(
 # (те, кто непосредственно на производстве), больше ничего.
 
 AUDIT_LOG_ALLOWED_ROLES = (
-    "admin", "director", "chief_engineer", "engineer",
+    "admin", "director", "chief_engineer", "analyst",
     "chief_mechanic", "chief_electrician"
 )
 
@@ -160,7 +160,8 @@ def get_audit_log_route(
 
 
 @router.get("/api/usage/summary")
-def usage_summary(days: int = 7, user: dict = Depends(require_roles("director", "chief_engineer"))):
+def usage_summary(days: int = 7,
+                  user: dict = Depends(require_roles("director", "chief_engineer", "analyst"))):
     # Вместе с тем, пользуются ли системой, отдаём и то, была ли она
     # вообще доступна: «никто не заходил» и «сервер спал» — разные
     # вещи, а выглядят одинаково.

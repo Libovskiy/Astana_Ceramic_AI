@@ -14,7 +14,9 @@ from backend.services import push_service
 
 router = APIRouter()
 
-OBSERVE_ROLES = ("director", "chief_engineer")
+# Наблюдение за работой в цеху: смотрит ещё и аналитик — это его
+# работа. Начинает и правит наблюдение по-прежнему руководство.
+OBSERVE_ROLES = ("director", "chief_engineer", "analyst")
 
 
 class ObservationUpdate(BaseModel):

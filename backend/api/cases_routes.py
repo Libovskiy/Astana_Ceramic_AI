@@ -154,6 +154,7 @@ def recurring_issues_route(
 CASES_OVERVIEW_ROLES = (
     "director", "chief_engineer", "production_chief", "shift_supervisor",
     "chief_mechanic", "mechanic", "chief_electrician", "electrician",
+    "analyst",
 )
 
 

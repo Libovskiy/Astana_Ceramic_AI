@@ -52,7 +52,10 @@ ROUND_ROLES = ("director", "chief_engineer", "production_chief", "shift_supervis
 # Смотрят фото и обходы: там, где фото показываются, — /checklist,
 # /equipment (карточка станка), /cases и /events (фото у обращений и
 # заявок с обхода; механику и электрику — по своим обращениям)
-VIEW_ROLES = ROUND_ROLES + ("mechanic", "electrician")
+# Аналитику открыто всё, кроме «Настроек» (владелец, 23.09.2026):
+# обходы и фото он СМОТРИТ, но не проводит — для него страница
+# показывает историю, а не форму.
+VIEW_ROLES = ROUND_ROLES + ("mechanic", "electrician", "analyst")
 
 
 def round_user(user: dict = Depends(current_user)):

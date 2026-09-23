@@ -305,12 +305,28 @@ for method, path, body in (
 print("\n4б. Фото и обходы смены")
 
 import io
+from pathlib import Path
+
 from PIL import Image
 from backend.api import checklist_routes
 
-check("проводят обход ровно те, кому открыта страница «Обход смены»",
-      set(checklist_routes.ROUND_ROLES) == set(PAGE_ROLES["/checklist"]),
-      set(checklist_routes.ROUND_ROLES) ^ set(PAGE_ROLES["/checklist"]))
+# Правило поменялось 23.09.2026: аналитику открыто всё, кроме
+# «Настроек», но обход он не проводит — страница показывает ему
+# историю обходов вместо формы. Поэтому не равенство, а вложенность:
+# каждый, кто проводит обход, страницу видит; обратное — не обязано.
+check("каждый, кто проводит обход, эту страницу видит",
+      set(checklist_routes.ROUND_ROLES) <= set(PAGE_ROLES["/checklist"]),
+      set(checklist_routes.ROUND_ROLES) - set(PAGE_ROLES["/checklist"]))
+
+# А тот, кто видит страницу, но не проводит обход, обязан получить
+# режим просмотра — иначе ему покажут форму, которую сервер отвергнет.
+watchers = set(PAGE_ROLES["/checklist"]) - set(checklist_routes.ROUND_ROLES)
+page = Path("frontend/templates/checklist.html").read_text()
+check("для них на странице есть режим просмотра",
+      not watchers or ("showPastRounds" in page and "ROUND_ROLES" in page), watchers)
+check("и смотреть обходы им разрешено",
+      watchers <= set(checklist_routes.VIEW_ROLES),
+      watchers - set(checklist_routes.VIEW_ROLES))
 shown_on = set().union(*(PAGE_ROLES[p] for p in ("/checklist", "/equipment", "/cases", "/events")))
 check("смотрят фото все, у кого они показываются (обход, оборудование, обращения, события)",
       set(checklist_routes.VIEW_ROLES) == shown_on, set(checklist_routes.VIEW_ROLES) ^ shown_on)

@@ -82,7 +82,7 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=29"></script>
+<script src="/static/acai_layout.js?v=30"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
@@ -413,7 +413,59 @@ async function showSchedule(){
   box.innerHTML=(st.state==='overdue'?'⚠️ ':'')+st.text;
 }
 
-initLayout().then(loadEquipment, loadEquipment);
+// Обход проводят мастер и главные специалисты. Аналитик страницу
+// видит (ему открыто всё, кроме «Настроек»), но ходить по цеху и
+// отмечать станки — не его работа. Показывать ему форму, которую
+// сервер не примет, нельзя: вместо неё — что показали прошлые обходы.
+const ROUND_ROLES = ['admin','director','chief_engineer','production_chief',
+                     'shift_supervisor','chief_mechanic','chief_electrician'];
+
+async function showPastRounds(){
+  // Убираем всё, что относится к проведению обхода: кнопку и полосу
+  // прогресса вместе с её подписью. «Прогресс 0 / 0» тому, кто обход
+  // не проводит, не говорит ничего.
+  document.getElementById('submitBtn')?.remove();
+  const bar = document.querySelector('.progress-bar');
+  bar?.previousElementSibling?.remove();
+  bar?.remove();
+
+  const box = document.getElementById('checklistContent');
+  let rounds = [];
+  try { rounds = (await ACAI.get('/api/checklist/rounds?limit=30')).rounds || []; } catch {}
+
+  ACAI.verdict('clVerdict', {
+    title: rounds.length ? `Обходов в истории: ${rounds.length}` : 'Обходов ещё не было',
+    sub: 'Обход проводят мастер смены и главные специалисты. Здесь — что они нашли.'
+  });
+
+  if (!rounds.length){
+    box.innerHTML = `<div class="empty">Ни одного обхода пока не сдали. Как только сдадут — появится здесь.</div>`;
+    return;
+  }
+
+  const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;border-bottom:2px solid var(--border)">
+      <th style="padding:8px;color:var(--text-dim);font-size:12px">Когда</th>
+      <th style="padding:8px;color:var(--text-dim);font-size:12px">Кто</th>
+      <th style="padding:8px;color:var(--text-dim);font-size:12px">Проверено</th>
+      <th style="padding:8px;color:var(--text-dim);font-size:12px">Замечания</th>
+      <th style="padding:8px;color:var(--text-dim);font-size:12px">Неисправно</th>
+    </tr></thead>
+    <tbody>${rounds.map(r => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px;white-space:nowrap">${esc(String(r.started_at||'').slice(0,16))}</td>
+      <td style="padding:8px">${esc(r.full_name || r.username || '—')}</td>
+      <td style="padding:8px;font-family:var(--mono)">${r.total_count ?? '—'}</td>
+      <td style="padding:8px;font-family:var(--mono);color:${r.warn_count?'var(--warn)':'var(--text-dim)'}">${r.warn_count ?? 0}</td>
+      <td style="padding:8px;font-family:var(--mono);color:${r.bad_count?'var(--danger)':'var(--text-dim)'}">${r.bad_count ?? 0}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+initLayout().then(ctx => {
+  const role = ctx?.user?.role || '';
+  if (ROUND_ROLES.includes(role)) loadEquipment();
+  else showPastRounds();
+}, loadEquipment);
 showSchedule();
 </script>
 </body>
