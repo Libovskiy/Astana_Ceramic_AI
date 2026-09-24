@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -95,9 +95,13 @@
 .week-strip{display:flex;gap:6px;}
 .week-day{flex:1;text-align:center;padding:8px 4px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);transition:all .15s;position:relative;}
 .week-day:hover{border-color:var(--accent);}
-.week-day.today{background:var(--accent);border-color:var(--accent);}
+/* Сегодня — обводка и подпись; выбранный день — заливка. Два разных
+   признака, поэтому их видно и в светлой теме, и при дальтонизме. */
+.week-day.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);}
+.week-day.today .wd-num{font-weight:700;}
+.wd-today{font-size:9px;font-weight:600;color:var(--accent);letter-spacing:.02em;margin-top:1px;}
 .week-day.has-task::after{content:'';position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--warn);}
-.week-day.today.has-task::after{background:#fff;}
+.week-day.today.has-task::after{background:var(--warn);}
 .wd-name{font-size:10px;color:var(--text-dim);margin-bottom:3px;}
 .wd-num{font-size:15px;font-weight:700;}
 .today .wd-name,.today .wd-num{color:#fff;}
@@ -108,9 +112,9 @@
 .cal-dn{font-size:10px;color:var(--text-dim);text-align:center;padding:3px;font-weight:600;}
 .cal-d{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;transition:background .15s;position:relative;}
 .cal-d:hover{background:var(--border);}
-.cal-d.today{background:var(--accent);color:#fff;font-weight:700;}
+.cal-d.today{background:var(--accent-solid);color:#fff;font-weight:700;}
 .cal-d.has-task::after{content:'';position:absolute;bottom:2px;width:4px;height:4px;border-radius:50%;background:var(--warn);}
-.cal-d.today.has-task::after{background:#fff;}
+.cal-d.today.has-task::after{background:#fff;}  /* на залитом синем белая точка видна */
 .cal-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:4px 10px;transition:color .15s;}
 .cal-toggle:hover{color:var(--text);}
 </style>
@@ -373,7 +377,15 @@ const ZONE_SVGS = {
 const ZONES_ORDER = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
 
 // норма — серая: зелёная цепочка из пяти цехов отвлекает от единственного красного
-function getColor(cls){ return cls==='danger'?'#ef4444':cls==='warn'?'#f59e0b':'#94a3b8'; }
+// Цвета берём из темы, а не задаём числами: в светлой теме #94a3b8
+// на белом даёт контраст 2,26 — «норма» и проценты зон было почти не
+// видно. Переменные --danger/--warn/--text-dim в светлой теме уже
+// затемнены до читаемых значений.
+function getColor(cls){
+  return cls === 'danger' ? 'var(--danger)'
+       : cls === 'warn'   ? 'var(--warn)'
+       : 'var(--text-dim)';
+}
 
 function renderProdMap(equipment, liveData){
   const byZone={};
@@ -429,7 +441,7 @@ function renderProdMap(equipment, liveData){
     </div>`);
 
     prevColor=color;
-    parts.push(`<div class="prod-zone ${cls}" onclick="window.location='/equipment'" title="${zone}">
+    parts.push(`<div class="prod-zone ${cls}" onclick="window.location='/equipment?zone='+encodeURIComponent('${zone}')" title="Открыть оборудование участка «${zone}»">
       <div class="zone-pulse ${cls}"></div>
       <div class="zone-3d">${svgFn?svgFn(color):''}</div>
       <div class="zone-name">${zone}</div>
@@ -643,13 +655,17 @@ function renderWeek(){
     const ht=allTasks.some(t=>{if(!t.due_at)return false;return dayKey(new Date(t.due_at))===dayKey(d);});
     const ts=d.getTime();
     let style='';
-    if(isSel) style='background:var(--accent);border-color:var(--accent);color:#fff';
-    return`<div class="week-day ${ht&&!isSel?'has-task':''}"
+    if(isSel) style='background:var(--accent-solid);border-color:var(--accent-solid);color:#fff';
+    // Сегодня и выбранный день различаются ФОРМОЙ, а не только цветом:
+    // выбранный — залит, сегодня — обведён рамкой и подписан. Раньше
+    // сегодня помечалось белой точкой, которая на светлой теме была
+    // белым по белому, то есть никак.
+    return`<div class="week-day ${isToday?'today':''} ${ht&&!isSel?'has-task':''}"
       style="${style}"
       onclick="selectDate(new Date(${ts}))">
       <div class="wd-name" style="${isSel?'color:rgba(255,255,255,.7)':''}">${DN[d.getDay()]}</div>
       <div class="wd-num">${d.getDate()}</div>
-      ${isToday&&!isSel?'<div style="width:4px;height:4px;border-radius:50%;background:#fff;margin:0 auto;margin-top:2px"></div>':''}
+      ${isToday?`<div class="wd-today" style="${isSel?'color:rgba(255,255,255,.85)':''}">сегодня</div>`:''}
     </div>`;
   }).join('');
   renderDayEvents();
@@ -853,7 +869,7 @@ setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
 <button id="aiFab" type="button" title="Спросить о заводе"
   style="display:none;position:fixed;right:20px;bottom:20px;z-index:65;
          width:56px;height:56px;border-radius:50%;border:none;
-         background:var(--accent);color:#fff;font-size:24px;cursor:pointer;
+         background:var(--accent-solid);color:#fff;font-size:24px;cursor:pointer;
          box-shadow:0 10px 28px rgba(59,130,246,.45)"><span data-icon=cases></span></button>
 
 <div id="aiPanel"
@@ -964,7 +980,7 @@ function aiAdd(who, text){
   row.style.cssText = 'margin-bottom:12px';
   row.innerHTML = who === 'user'
     ? `<div style="text-align:right"><span style="display:inline-block;
-         background:var(--accent);color:#fff;padding:8px 12px;border-radius:12px;
+         background:var(--accent-solid);color:#fff;padding:8px 12px;border-radius:12px;
          max-width:85%;text-align:left">${text}</span></div>`
     : `<div style="white-space:pre-wrap">${text}</div>`;
   body.appendChild(row);

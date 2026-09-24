@@ -7,7 +7,7 @@
 <title>Инструкции — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 .knowledge-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
 .k-card {
@@ -39,7 +39,7 @@
 .step-item:last-child { border-bottom:none; }
 .step-num {
   width:28px; height:28px; border-radius:50%;
-  background:var(--accent); color:#fff;
+  background:var(--accent-solid); color:#fff;
   display:flex; align-items:center; justify-content:center;
   font-size:12px; font-weight:700; flex-shrink:0;
 }
@@ -58,7 +58,7 @@
         <div class="topbar-sub">Пошаговые руководства по оборудованию</div>
       </div>
       <div class="topbar-right">
-        <input class="input" id="searchInst" placeholder="<span data-icon=search></span> Поиск..." style="width:200px">
+        <input class="input" id="searchInst" placeholder="Поиск..." style="width:200px">
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
@@ -75,9 +75,8 @@
         </div>
         <div class="card-body" style="padding:10px 14px">
           <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
-            Когда рабочий жалуется на этот станок, ИИ сначала ищет здесь — написанное человеком
-            надёжнее любой догадки. Работает, только если в названии есть слова, которыми
-            рабочий опишет проблему («подшипник», «плёнка», «струна»).
+            ИИ ищет здесь в первую очередь. Находит по словам из названия —
+            пишите так, как скажет рабочий: «подшипник», «плёнка», «струна».
           </div>
           <div id="procList"><div class="empty">Загрузка...</div></div>
         </div>
@@ -279,10 +278,7 @@ function openProcForm(){
     </div>
     <div class="field"><label>Название *</label>
       <input class="input" id="pr-title" placeholder="Например: Замена подшипника вала">
-      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
-        Важно: ИИ найдёт эту инструкцию, если слово из названия встретится в жалобе рабочего.
-        «Замена подшипника» сработает на «греется подшипник», «Ремонт №3» — ни на что.
-      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Название решает: ИИ найдёт инструкцию по словам из него. «Замена подшипника» сработает на «греется подшипник», «Ремонт №3» — ни на что.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="field"><label>Сколько занимает, мин</label><input class="input" id="pr-dur" type="number" min="1" placeholder="30"></div>

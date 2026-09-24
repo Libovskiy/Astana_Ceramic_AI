@@ -21,7 +21,15 @@
   --ok-solid:  #15803d;
   --warn:      #f59e0b;
   --danger:    #ef4444;
+  /* Заливка красных кнопок: на ярком --danger белые буквы дают 3,76.
+     Сам --danger остаётся ярким — им набран текст на тёмном фоне. */
+  --danger-solid: #b91c1c;
   --accent:    #3b82f6;
+  /* Заливка синих кнопок. На ярком --accent белые буквы дают 3,68 —
+     ниже нормы 4,5 для мелкого текста, а кнопки у нас 13 px. Для
+     заливки нужен тон темнее; сам --accent остаётся ярким, потому что
+     им набраны ссылки на тёмном фоне. Та же пара, что у --ok/--ok-solid. */
+  --accent-solid: #1d4ed8;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --radius: 12px;
@@ -47,11 +55,19 @@
   --border:    #dde2ea;
   --text:      #111827;
   --text-dim:  #414b5a;
-  --ok:        #15803d;
+  /* Цвета статусов в светлой теме затемнены (24.09.2026). Прежние
+     давали на второй поверхности (#eef1f6) контраст 4,27–4,57 при
+     норме 4,5 для мелкого текста: «просрочено», чипы фильтров и
+     подписи в таблицах читались на пределе. Проверено расчётом на
+     всех трёх фонах — теперь 5,7 и выше.
+     Заливки кнопок это не трогает: там белый текст на цвете. */
+  --ok:        #166534;
   --ok-solid:  #15803d;
-  --warn:      #b45309;
-  --danger:    #dc2626;
-  --accent:    #2563eb;
+  --warn:      #92400e;
+  --danger:    #b91c1c;
+  --danger-solid: #b91c1c;
+  --accent:    #1d4ed8;
+  --accent-solid: #1d4ed8;
 
   --ill-1: #cfd8e6; --ill-2: #e6ebf3; --ill-3: #d9e0eb;
   --ill-4: #dfe6f0; --ill-5: #c7d1e0; --ill-6: #d3dbe7;
@@ -103,7 +119,7 @@ html, body {
 }
 .sidebar-logo {
   width: 34px; height: 34px; border-radius: 8px;
-  background: var(--accent);
+  background: var(--accent-solid);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 13px; color: #fff;
   flex-shrink: 0;
@@ -215,7 +231,7 @@ html, body {
 .topbar-clock { font-family: var(--mono); font-size: 13px; color: var(--text-dim); }
 
 /* ── КОНТЕНТ ── */
-.page { padding: 20px 24px; flex: 1; }
+.page { padding: 14px 18px; flex: 1; }
 
 /* ── КАРТОЧКИ ── */
 .card {
@@ -224,16 +240,16 @@ html, body {
 }
 .card-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
 }
 .card-head h2 { font-size: 13px; font-weight: 600; }
-.card-body { padding: 14px 16px; }
+.card-body { padding: 11px 14px; }
 
 /* ── МЕТРИКИ ── */
-.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-bottom: 18px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 8px; margin-bottom: 12px; }
 .metric {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 16px;
+  border-radius: var(--radius); padding: 10px 13px;
   position: relative; overflow: hidden;
 }
 .metric::after {
@@ -246,13 +262,13 @@ html, body {
 .metric.warn::after  { background: var(--warn); height: 3px; }
 .metric.danger::after{ background: var(--danger); height: 3px; }
 .metric.accent::after{ background: var(--border); }
-.metric-label { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
-.metric-value { font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1; }
+.metric-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.metric-value { font-family: var(--mono); font-size: 25px; font-weight: 600; line-height: 1; }
 .metric-value.ok     { color: var(--text); }
 .metric-value.warn   { color: var(--warn); }
 .metric-value.danger { color: var(--danger); }
 .metric-value.accent { color: var(--text); }
-.metric-sub { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
+.metric-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
 
 /* ── ТАБЛИЦЫ ── */
 .table { width: 100%; border-collapse: collapse; }
@@ -273,9 +289,9 @@ html, body {
 }
 .btn:hover { filter: brightness(1.1); }
 .btn:disabled { opacity: .5; cursor: default; }
-.btn.primary  { background: var(--accent); color: #fff; }
+.btn.primary  { background: var(--accent-solid); color: #fff; }
 .btn.secondary{ background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
-.btn.danger   { background: var(--danger); color: #fff; }
+.btn.danger   { background: var(--danger-solid); color: #fff; }
 .btn.ok       { background: var(--ok); color: #fff; }
 .btn.sm       { padding: 4px 10px; font-size: 12px; }
 .btn.lg       { padding: 10px 20px; font-size: 14px; }
@@ -579,8 +595,8 @@ html, body {
 }
 .xls-tab:hover { color: var(--text); border-color: var(--accent); }
 .xls-tab.on {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
   color: #fff;
 }
 

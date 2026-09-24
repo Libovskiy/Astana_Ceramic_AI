@@ -8,10 +8,10 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 12px 14px;
+  margin-bottom: 11px;
 }
-.card-header { margin-bottom: 12px; }
+.card-header { margin-bottom: 9px; }
 .card-header h2 { font-size: 14px; font-weight: 600; }
 .card-header p { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
@@ -140,12 +140,12 @@
   color: var(--text);
   cursor: pointer;
 }
-.diagnostic-row-button { background: var(--accent); color: #fff; border-color: var(--accent); }
+.diagnostic-row-button { background: var(--accent-solid); color: #fff; border-color: var(--accent); }
 .diagnostic-row-button:hover,
 .diagnostic-row-button-secondary:hover { filter: brightness(1.1); }
 
 /* ── Кнопки-модификаторы (рядом с базовым .btn из acai.css) ── */
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent-solid); color: #fff; }
 .btn-success { background: var(--ok-solid); color: #fff; }
 .btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }

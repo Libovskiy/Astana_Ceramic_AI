@@ -495,7 +495,7 @@ function openNew() {
 
   ACAI.showModal(`
     <h3>Кому написать</h3>
-    <input class="input" id="mgPick" placeholder="<span data-icon=search></span> Имя или должность"
+    <input class="input" id="mgPick" placeholder="Имя или должность"
            style="width:100%;margin:10px 0" oninput="filterPeople()">
     <div class="mg-picker" id="mgPeople">${people || '<div class="mg-empty">Некому писать</div>'}</div>
     <div class="modal-foot">
@@ -558,7 +558,7 @@ function openGroupForm() {
       <label>Название</label>
       <input class="input" id="mgGroupTitle" placeholder="Например: Смена А — упаковка" style="width:100%">
     </div>
-    <input class="input" id="mgPick" placeholder="<span data-icon=search></span> Кого добавить"
+    <input class="input" id="mgPick" placeholder="Кого добавить"
            style="width:100%;margin-bottom:8px" oninput="filterPeople()">
     <div class="mg-picker" id="mgPeople">${people}</div>
     <div id="mgGroupErr" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:6px"></div>

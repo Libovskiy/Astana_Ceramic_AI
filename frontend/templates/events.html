@@ -7,7 +7,7 @@
 <title>События — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 .task-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px;border-left:4px solid var(--border);}
 .task-card.high{border-left-color:var(--danger);}
@@ -26,7 +26,7 @@
 .due-label.ok{color:var(--ok);}
 .filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
 .filter-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;}
-.filter-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.filter-chip.active{background:var(--accent-solid);color:#fff;border-color:var(--accent);}
 </style>
 </head>
 <body>
@@ -61,7 +61,7 @@
         <button class="filter-chip" data-f="in_progress">В работе</button>
         <button class="filter-chip" data-f="done">Выполненные</button>
         <button class="filter-chip" data-f="overdue" style="color:var(--danger)">Просроченные</button>
-        <input class="input" id="taskSearch" placeholder="<span data-icon=search></span> Поиск..." style="width:200px;margin-left:auto" oninput="renderTasks()">
+        <input class="input" id="taskSearch" placeholder="Поиск..." style="width:200px;margin-left:auto" oninput="renderTasks()">
       </div>
 
       <div id="taskList"><div class="empty">Загрузка...</div></div>

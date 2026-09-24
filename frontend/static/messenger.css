@@ -96,7 +96,7 @@
 .mg-unread {
     min-width: 20px; height: 20px; padding: 0 6px;
     border-radius: 999px;
-    background: var(--accent); color: #fff;
+    background: var(--accent-solid); color: #fff;
     font-size: 11px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;

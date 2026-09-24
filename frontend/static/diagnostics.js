@@ -702,14 +702,14 @@ function showSelectedEquipment(equipment) {
         label = document.createElement("div");
         label.id = "selectedEquipmentLabel";
         label.style.cssText =
-            "margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #0f172a;";
+            "margin-bottom: 10px; font-size: 14px; font-weight: 600; color: var(--text);";
 
         toolbar.parentNode.insertBefore(label, toolbar);
 
     }
 
     label.innerHTML =
-        '<span style="font-weight: 400; color: #64748b;">Диагностируем: </span>' +
+        '<span style="font-weight: 400; color: var(--text-dim);">Диагностируем: </span>' +
         escapeHtml(equipment.name);
 
 }

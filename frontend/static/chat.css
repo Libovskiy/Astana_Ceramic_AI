@@ -746,7 +746,8 @@ body[data-screen="list"] .chat-new-form { display: none; }
 
 .chat-action-danger {
     background: #fee2e2;
-    color: #dc2626;
+    /* было #dc2626 — на розовой подложке 3,95 при норме 4,5 */
+    color: #991b1b;
     font-weight: 600;
 }
 

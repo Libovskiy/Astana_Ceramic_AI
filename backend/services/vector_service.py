@@ -204,10 +204,29 @@ DOCS_FOLDER_OVERRIDES = {
 }
 
 
+# Подбор папок по названию станка — нечёткое сравнение со всеми
+# папками базы знаний. Одна проверка стоит ~4 мс, а страница
+# «Оборудование» спрашивает про 49 станков сразу: 200 мс на каждый
+# заход, при том что ответ не меняется, пока не загрузят новый
+# документ. Запоминаем (сбрасывается в forget_documented_folders).
+_folders_by_machine: dict[str, list] = {}
+
+
 def resolve_docs_folders(machine) -> list:
 
     if not machine:
         return []
+
+    key = str(machine).strip().lower()
+    if key in _folders_by_machine:
+        return _folders_by_machine[key]
+
+    result = _resolve_docs_folders_slow(machine)
+    _folders_by_machine[key] = result
+    return result
+
+
+def _resolve_docs_folders_slow(machine) -> list:
 
     folders = get_folders()
 
@@ -508,9 +527,11 @@ def _folders_with_chunks() -> set:
 
 
 def forget_documented_folders():
-    """Сбросить кэш — после загрузки нового руководства."""
-    global _documented_folders
+    """Сбросить кэши — после загрузки нового руководства."""
+    global _documented_folders, _folders
     _documented_folders = None
+    _folders = None
+    _folders_by_machine.clear()
 
 
 def documentation_for(machine) -> list:

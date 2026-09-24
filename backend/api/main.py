@@ -45,6 +45,39 @@ async def validation_error(request: Request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
 @app.on_event("startup")
+def warm_knowledge_index():
+    """
+    Прогреть список документированных станков в фоне.
+
+    Первый, кто открыл «Оборудование» после перезапуска, платил за всех:
+    страница спрашивает `/api/equipment-coverage`, а тот читает
+    метаданные всей базы знаний — 10,5 секунды (замерено 24.09.2026).
+    Дальше ответ берётся из кэша и стоит 0 мс.
+
+    Поэтому читаем сразу при старте, отдельным потоком: сервер
+    поднимается как обычно, а к приходу первого человека список уже
+    готов. Ошибку глушим — без базы знаний сайт работает, просто ИИ
+    отвечает «нет руководства».
+    """
+    import threading
+
+    def warm():
+        try:
+            from backend.services.vector_service import _folders_with_chunks
+            from backend.services.equipment_service import get_all_equipment
+            from backend.services.vector_service import resolve_docs_folders
+
+            _folders_with_chunks()
+            for item in get_all_equipment():
+                resolve_docs_folders(item.get("name"))
+            print("[knowledge] список документированных станков готов")
+        except Exception as error:
+            print(f"[knowledge] прогрев пропущен: {error}")
+
+    threading.Thread(target=warm, daemon=True).start()
+
+
+@app.on_event("startup")
 def start_webhmi_collector():
     # Коллектор ходит на панель WebHMI и получает 403: пароль в коде
     # не подходит. Каждые 30 секунд — строка ошибки в логе, и в этом

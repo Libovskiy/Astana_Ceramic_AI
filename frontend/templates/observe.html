@@ -7,7 +7,7 @@
 <title>Наблюдение — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 .ob { max-width: 640px; margin: 0 auto; }
 .ob-step { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
@@ -16,7 +16,7 @@
 .ob-step.done .ob-num { background: var(--text); color: var(--bg); }
 .ob-hint { font-size: 15px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 12px; }
 .ob-big { display: block; width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 17px; font-weight: 700; cursor: pointer; margin-top: 10px; }
-.ob-primary { background: var(--accent); color: #fff; }
+.ob-primary { background: var(--accent-solid); color: #fff; }
 .ob-plain { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
 .ob-danger { background: var(--danger); color: #fff; }
 .ob-row { display: flex; gap: 10px; }
@@ -91,8 +91,7 @@ function renderStart(pushOk) {
   document.getElementById('ob').innerHTML = `
     <div class="ob-step">
       <h2>Перед началом</h2>
-      <div class="ob-hint">Порядок: <b>сначала механик</b> — поставить сертификат и включить уведомления, проверить,
-        что проверочное приходит. Только потом оператор. Иначе оператор создаст обращение, а механик о нём не узнает.</div>
+      <div class="ob-hint">Порядок: <b>сначала механик</b>— сертификат и уведомления, проверить, что приходят. Потом оператор: иначе он создаст обращение, а механик о нём не узнает.</div>
       <div class="ob-hint">Если оператор застрянет на первом шаге — это не провал, а результат. Запишите, где именно.</div>
       ${pushOk ? '' : '<div class="ob-status bad">Уведомления на сервере не настроены — сообщите администратору.</div>'}
       <button class="ob-big ob-primary" onclick="startObservation()">Начать наблюдение</button>
@@ -163,9 +162,8 @@ function render() {
             <button class="ob-big ${o.test_received === 'да' ? 'ob-primary' : 'ob-plain'}" onclick="save({test_received:'да'})">Да, пришло</button>
             <button class="ob-big ${o.test_received === 'нет' ? 'ob-danger' : 'ob-plain'}" onclick="save({test_received:'нет'})">Нет</button>
           </div>
-          ${o.test_received === 'нет' ? `<div class="ob-hint">Проверьте по порядку: сайт открыт по <b>https</b> и без предупреждения о сертификате;
-            в браузере разрешены уведомления для сайта; у телефона есть интернет; на iPhone сайт открыт со значка на экране «Домой»;
-            не включён режим «Не беспокоить». Запишите в заметки, что оказалось.</div>` : ''}`;
+          ${o.test_received === 'нет' ? `<div class="ob-hint">Проверьте: сайт по <b>https</b> без предупреждения; уведомления разрешены;
+            есть интернет; на iPhone открыто со значка «Домой»; выключен «Не беспокоить». Что нашли — в заметки.</div>` : ''}`;
       }
     }
   }
@@ -219,9 +217,7 @@ function render() {
     <h2>Заметки</h2>
     <div class="ob-hint"><b>Смотрите на человека, а не в эту форму.</b> Руками здесь всего два нажатия:
       «проверочное пришло» и «механик увидел». Остальное записывается само.</div>
-    <div class="ob-hint">Как оператор уйдёт — <b>надиктуйте заметки сразу</b>, прямо в коридоре, пока свежо.
-      Через два часа вместо «трижды ткнул не туда и спросил, а где тут отправить» останется «вроде норм,
-      немного путался». Пишите его словами, а не выводы о них.</div>
+    <div class="ob-hint">Как оператор уйдёт — <b>надиктуйте заметки сразу</b>, пока свежо. Через два часа от «трижды ткнул не туда» останется «вроде норм». Пишите его словами, а не выводы.</div>
     <div class="ob-chips">
       ${['застрял', 'переспросил', 'не нашёл кнопку', 'не понял текст', 'не читается на солнце', 'надиктовал голосом', 'всё понял сам']
         .map(t => `<button class="ob-chip" onclick="addNote('${t}')">${t}</button>`).join('')}

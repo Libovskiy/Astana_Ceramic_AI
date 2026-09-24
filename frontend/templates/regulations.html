@@ -6,7 +6,7 @@
 <title>Регламенты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 .reg-card {
   background:var(--surface); border:1px solid var(--border);
@@ -40,7 +40,7 @@
       </div>
       <div class="topbar-right">
         <button class="btn primary" id="createRegBtn" style="display:none" onclick="openCreateReg()">+ Регламент</button>
-        <input class="input" id="searchReg" placeholder="<span data-icon=search></span> Поиск..." style="width:200px">
+        <input class="input" id="searchReg" placeholder="Поиск..." style="width:200px">
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
@@ -572,11 +572,7 @@ async function submitParam(regId, stageId, paramId){
 async function activateReg(regId){
   ACAI.showModal(`
     <h3>Ввести регламент в действие</h3>
-    <div style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px">
-      Черновик станет рабочим: параметры увидят рабочие на своих станках,
-      а руководителям уйдёт требование ознакомиться. Прежний активный
-      регламент на этот вид продукции уйдёт в архив.
-    </div>
+    <div style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px">Параметры увидят рабочие, руководителям уйдёт требование ознакомиться. Прежний регламент на этот вид продукции уйдёт в архив.</div>
     <div class="modal-foot">
       <button class="btn secondary" onclick="openReg(${regId})">Отмена</button>
       <button class="btn ok" onclick="doActivate(${regId})">✓ Ввести в действие</button>

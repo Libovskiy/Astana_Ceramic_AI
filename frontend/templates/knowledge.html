@@ -7,7 +7,7 @@
 <title>База знаний — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=24">
+<link rel="stylesheet" href="/static/acai.css?v=28">
 <style>
 .kb-card {
   background:var(--surface); border:1px solid var(--border);
@@ -97,7 +97,7 @@ async function load() {
 function renderKbVerdict(m){
   if(!m.total){
     ACAI.verdict('kbVerdict', {title:'База знаний пустая',
-      sub:'Ни одного решения не записано — ИИ по таким поломкам отвечает «своего описания нет, зову механика». Решения попадают сюда, когда специалист закрывает обращение с описанием ремонта.'});
+      sub:'Решений пока нет — ИИ по таким поломкам зовёт механика. Они появятся здесь, когда специалист закроет обращение с описанием ремонта.'});
     return;
   }
   const unconfirmed = m.total - m.confirmed;
@@ -207,7 +207,7 @@ function openItem(item) {
       <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">ПОШАГОВЫЕ ДЕЙСТВИЯ</div>
       ${item.steps.map((s,i)=>`
         <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${i+1}</div>
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--accent-solid);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${i+1}</div>
           <div style="font-size:13px">${s.title||s.action||s}</div>
         </div>`).join('')}
     ` : ''}
