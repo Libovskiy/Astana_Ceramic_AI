@@ -27,6 +27,30 @@
 var BREAKPOINT = 768;
 
 // Кому что чаще нужно. Порядок важен: первые четыре попадут в панель.
+// Как называются разделы в нижней панели телефона: коротко, чтобы
+// подпись не обрезалась. Полное имя остаётся в подсказке.
+var SHORT_LABELS = {
+  '/': 'Главная',
+  '/chat': 'Обращения',
+  '/messenger': 'Переписка',
+  '/diagnostics': 'Диагностика',
+  '/equipment': 'Станки',
+  '/mechanics': 'Механика',
+  '/electrical': 'Электрика',
+  '/production': 'Выпуск',
+  '/checklist': 'Обход',
+  '/maintenance': 'График ТО',
+  '/analytics': 'Аналитика',
+  '/cases': 'Журнал',
+  '/events': 'События',
+  '/reports': 'Отчёты',
+  '/regulations': 'Регламенты',
+  '/my-regulation': 'Мой участок',
+  '/instructions': 'Инструкции',
+  '/parts': 'Запчасти',
+  '/lab': 'Лаборатория'
+};
+
 var BY_ROLE = {
   worker:            ['/checklist', '/diagnostics', '/my-regulation', '/cases'],
   mechanic:          ['/cases', '/checklist', '/diagnostics', '/equipment'],
@@ -122,10 +146,16 @@ function createBottomNav(sidebar) {
     var badge = copy.querySelector('.ni-badge');
     if (badge) badge.remove();
 
+    // В нижней панели на кнопку приходится 74 px — «Журнал обращений»
+    // туда не влезает и обрезается многоточием. Берём короткое имя:
+    // значок рядом и так говорит, о чём речь.
+    var full = copy.textContent.replace(/\s+/g, ' ').trim();
+
     available[href] = {
       href: href,
-      icon: icon ? icon.textContent.trim() : '•',
-      label: copy.textContent.replace(/\s+/g, ' ').trim()
+      icon: icon ? icon.innerHTML.trim() : '',
+      label: SHORT_LABELS[href] || full,
+      title: full
     };
   });
 
@@ -150,7 +180,8 @@ function createBottomNav(sidebar) {
 
   var html = items.map(function (item) {
     var active = (item.href === here) ? ' active' : '';
-    return '<a href="' + item.href + '" class="bn-item' + active + '">' +
+    return '<a href="' + item.href + '" class="bn-item' + active +
+           '" title="' + (item.title || item.label) + '">' +
              '<span class="bn-icon">' + item.icon + '</span>' +
              '<span class="bn-label">' + item.label + '</span>' +
            '</a>';

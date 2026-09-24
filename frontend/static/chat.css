@@ -1013,3 +1013,28 @@ body[data-screen="list"] .chat-new-form { display: none; }
 :root[data-theme="dark"] .chat-item-status { color: #a3b0c2; }
 :root[data-theme="dark"] .chat-item-status-mine { color: #a5b4fc; }
 :root[data-theme="dark"] .chat-item-unread .chat-item-last { color: #f1f5f9; }
+
+/* ── ТЕЛЕФОН ──
+   Чат не подключает acai.css, поэтому общие правила для пальца сюда
+   не доходят — повторяем здесь. Проверено на 360 и 390 px. */
+@media (max-width: 560px), (pointer: coarse) {
+    .chat-action,
+    #chatTheme,
+    #chatSound,
+    #chatLogout,
+    .chat-tab {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Должность оператора в одну строку не влезает никогда, а
+       многоточие прячет как раз участок и бригаду. */
+    #chatSubtitle,
+    .chat-subtitle {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+    }
+}
