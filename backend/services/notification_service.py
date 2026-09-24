@@ -112,7 +112,7 @@ def _report_import_notifications(user):
     return [{
         "type": "report_import",
         "severity": "warning",
-        "icon": "📄",
+        "icon": "reports",
         "title": f"Сменный отчёт не обновляли {days} дн.",
         "subtitle": f"Файл «{run.get('filename') or '—'}» от {str(run.get('uploaded_at') or '')[:10]}. "
                     "Цифры по сменам и простоям — оттуда.",
@@ -154,7 +154,7 @@ def _checklist_notifications(user):
     return [{
         "type": "checklist_round",
         "severity": "warning" if state["state"] == "overdue" else "info",
-        "icon": "✅",
+        "icon": "ok",
         "title": titles[state["state"]],
         "subtitle": state["text"],
         "url": "/checklist",
@@ -178,7 +178,7 @@ def _writeoff_notifications(user):
     return [{
         "type": "part_writeoff",
         "severity": "warning",
-        "icon": "📦",
+        "icon": "parts",
         "title": f"Списать со склада: {len(items)}",
         "subtitle": ", ".join(
             item.get("equipment_name") or "—" for item in items[:2]
@@ -221,7 +221,7 @@ def get_notifications(user):
         notifications.append({
             "type": "downtime",
             "severity": "critical",
-            "icon": "🔴",
+            "icon": "alert",
             "title": f"Простой {downtime['duration_minutes']} мин",
             "subtitle": downtime.get("equipment_name") or "Оборудование",
             "url": f"/equipment?open={downtime['equipment_id']}" if downtime.get("equipment_id") else "/production"
@@ -251,7 +251,7 @@ def get_notifications(user):
         notifications.append({
             "type": "escalated_case",
             "severity": "critical",
-            "icon": "🔴",
+            "icon": "alert",
             "title": (
                 "Нужна электрика" if case.get("required_discipline") == "electrical"
                 else "Нужна механика" if case.get("required_discipline") == "mechanical"
@@ -288,7 +288,7 @@ def get_notifications(user):
                 "type": "pending_confirmation",
                 # для того, кто подтверждает, это его решение, а не справка
                 "severity": "warning",
-                "icon": "📋",
+                "icon": "equipment",
                 "title": "Ремонт сделан — подтвердите закрытие",
                 "subtitle": case.get("equipment_name") or case.get("machine") or "Обращение",
                 "url": f"/chat?case={case['id']}",
@@ -312,7 +312,7 @@ def get_notifications(user):
         notifications.append({
             "type": "recurring_issue",
             "severity": "warning",
-            "icon": "⚠️",
+            "icon": "alert",
             "title": f"Повторяющаяся неисправность ({issue['count']} раз за 14 дней)",
             "subtitle": issue.get("equipment_name") or "Оборудование",
             "url": f"/equipment?open={equipment_id}" if equipment_id else "/"
@@ -406,7 +406,7 @@ def _backup_notifications(user):
         return [{
             "type": "backup_missing",
             "severity": "critical",
-            "icon": "💾",
+            "icon": "archive",
             "title": "Резервных копий нет ни одной",
             "subtitle": "Проверьте задание com.acai.backup",
             "url": "/settings",
@@ -420,7 +420,7 @@ def _backup_notifications(user):
     return [{
         "type": "backup_missing",
         "severity": "critical",
-        "icon": "💾",
+        "icon": "archive",
         "title": f"Бэкап не делался {int(age_hours // 24)} сут {int(age_hours % 24)} ч",
         "subtitle": "Проверьте logs/backup.error.log",
         "url": "/settings",
@@ -592,7 +592,7 @@ def _maintenance_notifications(user):
     out.append({
         "type": "maintenance_due",
         "severity": severity,
-        "icon": "🔧",
+        "icon": "diagnostics",
         "title": title,
         "subtitle": subtitle,
         "url": "/maintenance",
@@ -746,7 +746,7 @@ def _sensor_notifications(user):
     return [{
         "type": "sensors_stale",
         "severity": "critical" if minutes >= 60 else "warning",
-        "icon": "📡",
+        "icon": "pulse",
         "title": f"Показания датчиков не пишутся {when}",
         "subtitle": "Откройте вкладку WebHMI на сервере и войдите в панель",
         "url": "/settings",

@@ -4,7 +4,7 @@
 Проверяется весь путь, ради которого это делалось:
 
   1. ИИ советует заменить деталь — рабочий видит в переписке, есть ли
-     она на складе (строка «📦 …»), и не идёт к полке зря;
+     она на складе (строка «Склад: …»), и не идёт к полке зря;
   2. специалист отмечает ремонт — остаток НЕ меняется сам, но
      появляется заявка ответственному за эту часть;
   3. механика уходит главному механику, электрика — главному
@@ -101,7 +101,7 @@ check("обращение создано", r.status_code == 200 and case_id, r.t
 
 add_stock_note(case_id, "Замените подшипник 6208 на валу")
 messages = worker.get(f"/api/conversation/{case_id}").json().get("messages", [])
-stock_lines = [m for m in messages if m["role"] == "system" and m["message"].startswith("📦")]
+stock_lines = [m for m in messages if m["role"] == "system" and m["message"].startswith("Склад:")]
 check("строка про склад видна рабочему в переписке", len(stock_lines) == 1, [m["message"] for m in messages])
 
 check("повторно та же строка не пишется",
@@ -111,7 +111,7 @@ check("повторно та же строка не пишется",
 # попасть в этот список, иначе шаги начнут повторяться по кругу.
 from backend.services.conversation_service import _tried_actions
 check("подсказка не считается советом ИИ",
-      all(not text.startswith("📦") for text in _tried_actions(messages)))
+      all(not text.startswith("Склад:") for text in _tried_actions(messages)))
 
 
 print("\n3. Отметка ремонта: склад не трогаем, но зовём ответственного")

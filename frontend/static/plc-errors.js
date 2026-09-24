@@ -205,7 +205,7 @@ function renderPlcErrors() {
             ${canEdit ? `
               <td>
                 <div style="display:flex;gap:6px">
-                  <button class="btn secondary sm" onclick="openPlcErrorForm(${e.id})" title="Редактировать">✎</button>
+                  <button class="btn secondary sm" onclick="openPlcErrorForm(${e.id})" title="Редактировать"><span data-icon=edit></span></button>
                   <button class="btn danger sm" onclick="deletePlcError(${e.id})" title="Убрать">✕</button>
                 </div>
               </td>

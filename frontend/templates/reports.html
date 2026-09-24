@@ -7,7 +7,7 @@
 <title>Отчёты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .report-card {
   background:var(--surface); border:1px solid var(--border);
@@ -61,13 +61,13 @@
         <div class="section-title">Быстрые отчёты</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px">
           <div class="report-card" onclick="showReport('equipment')">
-            <div class="rc-icon">⚙️</div>
+            <div class="rc-icon"><span data-icon=gear></span></div>
             <div class="rc-title">Состояние оборудования</div>
             <div class="rc-desc">Статусы, последние проверки, ТО</div>
             <button class="btn secondary sm rc-btn">Сформировать</button>
           </div>
           <div class="report-card" onclick="showReport('cases')">
-            <div class="rc-icon">📋</div>
+            <div class="rc-icon"><span data-icon=equipment></span></div>
             <div class="rc-title">Обращения за период</div>
             <div class="rc-desc">Все инциденты, время решения</div>
             <button class="btn secondary sm rc-btn">Сформировать</button>
@@ -79,7 +79,7 @@
             <button class="btn secondary sm rc-btn">Сформировать</button>
           </div>
           <div class="report-card" onclick="showReport('sensors')">
-            <div class="rc-icon">📊</div>
+            <div class="rc-icon"><span data-icon=analytics></span></div>
             <div class="rc-title">Показатели WebHMI</div>
             <div class="rc-desc">Загрузка массоподготовки</div>
             <button class="btn secondary sm rc-btn">Сформировать</button>
@@ -113,7 +113,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const PERIOD_LABELS = {today:'Сегодня',week:'7 дней',month:'30 дней'};
@@ -272,7 +273,7 @@ async function showReport(type) {
       </div>
       <div class="modal-foot">
         <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
-        <button class="btn primary" onclick="printReport()">🖨 Печать</button>
+        <button class="btn primary" onclick="printReport()"><span data-icon=print></span> Печать</button>
       </div>
     `);
   } else if (type==='sensors') {
@@ -340,7 +341,7 @@ async function showReport(type) {
          </div>`}
       <div class="modal-foot">
         <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
-        ${items.length ? '<button class="btn primary" onclick="printReport()">🖨 Печать</button>' : ''}
+        ${items.length ? '<button class="btn primary" onclick="printReport()"><span data-icon=print></span> Печать</button>' : ''}
       </div>
     `);
 
@@ -368,14 +369,14 @@ async function showReport(type) {
           <td class="mono">${hm(r.total_minutes)}</td></tr>`).join('')}</tbody></table>
       </div>
       ${stale.length ? `<div style="font-size:13px;color:var(--warn);margin-top:10px">
-        ⚠ Дольше смены: ${stale.map(x => esc(x.equipment_name)).join(', ')} — похоже, забыли закрыть обращение.</div>` : ''}`
+        <span data-icon=alert></span> Дольше смены: ${stale.map(x => esc(x.equipment_name)).join(', ')} — похоже, забыли закрыть обращение.</div>` : ''}`
       : `<div class="empty" style="padding:18px 0;line-height:1.5">
            <div style="font-size:14px;font-weight:600;color:var(--text)">Простоев за период не зафиксировано</div>
            <div style="font-size:13px;margin-top:4px">Простой начинается вместе с обращением о поломке. Обращений не было — значит, и простои никто не фиксировал.</div>
          </div>`}
       <div class="modal-foot">
         <button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button>
-        ${rows.length ? '<button class="btn primary" onclick="printReport()">🖨 Печать</button>' : ''}
+        ${rows.length ? '<button class="btn primary" onclick="printReport()"><span data-icon=print></span> Печать</button>' : ''}
       </div>
     `);
 

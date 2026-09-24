@@ -7,7 +7,7 @@
 <title>Переписка — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <link rel="stylesheet" href="/static/messenger.css?v=5">
 </head>
 <body data-screen="list">
@@ -30,8 +30,8 @@
       <!-- ── Список переписок ── -->
       <section class="mg-list" id="mgList">
         <div class="mg-list-head">
-          <input class="input" id="mgSearch" placeholder="🔍 Поиск" oninput="renderList()">
-          <button class="btn primary sm" onclick="openNew()" title="Написать">✎</button>
+          <input class="input" id="mgSearch" placeholder="<span data-icon=search></span> Поиск" oninput="renderList()">
+          <button class="btn primary sm" onclick="openNew()" title="Написать"><span data-icon=edit></span></button>
         </div>
         <div class="mg-items" id="mgItems">
           <div class="mg-empty">Загрузка…</div>
@@ -54,7 +54,7 @@
         </div>
 
         <div class="mg-messages" id="mgMessages">
-          <div class="mg-empty">Выберите переписку слева или нажмите ✎, чтобы написать</div>
+          <div class="mg-empty">Выберите переписку слева или нажмите <span data-icon=edit></span>, чтобы написать</div>
         </div>
 
         <div class="mg-composer" id="mgComposer" style="display:none">
@@ -62,10 +62,10 @@
                акты в xlsx, и просто фото. Ограничение одно — 50 МБ. -->
           <input type="file" id="mgFile" multiple style="display:none"
                  onchange="onFilePicked(this)">
-          <button class="mg-attach" onclick="pickFile()" title="Прикрепить файл">📎</button>
+          <button class="mg-attach" onclick="pickFile()" title="Прикрепить файл"><span data-icon=attach></span></button>
           <textarea id="mgInput" rows="1" placeholder="Сообщение…"></textarea>
-          <button class="mg-attach" id="mgMic" title="Голосовое сообщение">🎤</button>
-          <button class="mg-send" onclick="send()" title="Отправить">➤</button>
+          <button class="mg-attach" id="mgMic" title="Голосовое сообщение"><span data-icon=mic></span></button>
+          <button class="mg-send" onclick="send()" title="Отправить"><span data-icon=arrow></span></button>
         </div>
 
       </section>
@@ -76,7 +76,8 @@
 
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:460px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script src="/static/voice.js?v=1"></script>
 <script src="/static/messenger.js?v=9"></script>

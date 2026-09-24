@@ -504,7 +504,7 @@ function createEquipmentRow(item) {
 
             <div class="diagnostic-equipment-main">
 
-                <div class="diagnostic-equipment-icon">⚙</div>
+                <div class="diagnostic-equipment-icon"><span data-icon=gear></span></div>
 
                 <div>
                     <div class="diagnostic-equipment-name">${escapeHtml(item.name)}</div>
@@ -618,7 +618,7 @@ window.showEquipmentPassport = async function (equipmentId) {
         const documentsHtml = (documentsData.success && documentsData.documents.length)
             ? documentsData.documents.map(doc => `
                 <a href="${doc.url}" target="_blank" style="display: block; padding: 8px 0; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 14px;">
-                    📄 ${escapeHtml(doc.name)}
+                    <span data-icon=reports></span> ${escapeHtml(doc.name)}
                 </a>
             `).join("")
             : `<div style="color: var(--text-dim); font-size: 13px; padding: 8px 0;">Документация ещё не загружена для этого станка.</div>`;
@@ -674,7 +674,7 @@ window.showEquipmentPassport = async function (equipmentId) {
         const downtimeHtml = activeDowntime
             ? `
                 <div style="margin-top: 16px; padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--warn); color: var(--text);">
-                    <div style="font-weight: 600; font-size: 13px;">🔴 Простой идёт с ${formatDate(activeDowntime.started_at)}</div>
+                    <div style="font-weight: 600; font-size: 13px;"><span data-icon=alert></span> Простой идёт с ${formatDate(activeDowntime.started_at)}</div>
                     <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">Причина: ${escapeHtml(activeDowntime.reason || "не указана")}</div>
                     <button type="button" onclick="endDowntimeFromPassport(${activeDowntime.id}, ${equipmentId})" class="btn btn-success btn-block btn-sm" style="margin-top: 10px;">Завершить простой</button>
                 </div>
@@ -938,7 +938,7 @@ function createJournalEventRow(event) {
 
         return `
             <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--ok); font-size: 13px;">🔧 Обслуживание выполнено</span>
+                <span style="color: var(--ok); font-size: 13px;"><span data-icon=diagnostics></span> Обслуживание выполнено</span>
                 <div style="font-size: 12px; color: var(--text-dim);">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
         `;
@@ -947,7 +947,7 @@ function createJournalEventRow(event) {
 
     return `
         <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-            <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
+            <span style="font-size: 13px;"><span data-icon=alert></span> ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
             <div style="font-size: 12px; color: var(--text-dim);">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>
     `;

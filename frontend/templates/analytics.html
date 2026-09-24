@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -167,7 +167,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script src="/static/xls-report.js?v=2"></script>
 <script>
@@ -478,7 +479,7 @@ async function renderChecklist(c){
   if(!c || !c.rounds_count){
     const overdue = st.state==='overdue';
     box.innerHTML = `<div style="font-size:13px;line-height:1.6;color:${overdue?'var(--warn)':'var(--text-dim)'}">
-      ${overdue?'⚠️ ':''}${st.text || 'Обходы смены за период не проводились.'}
+      ${overdue?'<span data-icon=alert></span> ':''}${st.text || 'Обходы смены за период не проводились.'}
       ${st.state==='ok' ? '<br>За выбранный период обходов нет — по недельному сроку это нормально.' : ''}</div>`;
     return;
   }
@@ -514,7 +515,7 @@ function renderStaleDowntime(list){
             с ${ACAI.shortDate(item.started_at)} ${ACAI.shortTime(item.started_at)}</li>`;
   }).join('');
   box.innerHTML = `<div style="font-weight:600;color:var(--warn);margin-bottom:4px">
-      ⚠ Простой идёт дольше смены — вероятно, забыли закрыть обращение</div>
+      <span data-icon=alert></span> Простой идёт дольше смены — вероятно, забыли закрыть обращение</div>
     <ul style="margin:0;padding-left:18px;color:var(--text-dim)">${rows}</ul>
     <div style="margin-top:6px;color:var(--text-dim)">
       Пока обращение открыто, эти минуты продолжают капать в отчёт.</div>`;
@@ -635,8 +636,8 @@ function renderSensorsNow(lv){
                  :v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
       const pct=(isPct&&!bogus)?Math.min(v,100):0;
 
-      const shown=isAlarm?(v>0?'⚠ АВАРИЯ':'✓ Норма')
-                 :bogus?v.toFixed(1)+'% ⚠'
+      const shown=isAlarm?(v>0?'<span data-icon=alert></span> АВАРИЯ':'✓ Норма')
+                 :bogus?v.toFixed(1)+'% <span data-icon=alert></span>'
                  :v.toFixed(1)+'%';
 
       return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px"

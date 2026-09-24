@@ -1,3 +1,8 @@
+// Значки: страница «Обращения» не подключает acai_layout.js, поэтому
+// объекта ACAI здесь нет. Берём функцию напрямую из icons.js и не
+// падаем, если он почему-то не загрузился.
+const svgIcon = (name, size) => (window.acaiIcon ? window.acaiIcon(name, size) : "");
+
 /*
  * ACAI — обращения в виде мессенджера.
  *
@@ -191,11 +196,12 @@ function bindEvents() {
     const themeButton = document.getElementById("chatTheme");
 
     if (themeButton && window.acaiTheme) {
-        const icon = () => window.acaiTheme.get() === "light" ? "🌙" : "☀️";
-        themeButton.textContent = icon();
+        const themeIcon = () => window.acaiTheme.get() === "light"
+            ? svgIcon('moon2') : svgIcon('sun');
+        themeButton.innerHTML = themeIcon();
         themeButton.addEventListener("click", function () {
             window.acaiTheme.toggle();
-            themeButton.textContent = icon();
+            themeButton.innerHTML = themeIcon();
         });
     }
 
@@ -211,11 +217,11 @@ function bindEvents() {
             enabled = true;
         }
 
-        sound.textContent = enabled ? "🔊" : "🔇";
+        sound.innerHTML = enabled ? svgIcon('sound') : svgIcon('mute');
 
         sound.addEventListener("click", function () {
             const now = window.acaiToggleSound ? window.acaiToggleSound() : false;
-            sound.textContent = now ? "🔊" : "🔇";
+            sound.innerHTML = now ? svgIcon('sound') : svgIcon('mute');
         });
 
     }
@@ -507,7 +513,7 @@ async function loadConversations() {
                     <span class="chat-item-name">${unread ? '<span class="chat-unread-dot"></span>' : ""}${escapeHtml(machineName(item))}</span>
                     <span class="chat-item-time">${formatTime(item.last_at || item.created_at)}</span>
                 </div>
-                <div class="chat-item-last">${item.is_test ? "🧪 " : ""}${escapeHtml(item.last_message || item.worker_question || "")}</div>
+                <div class="chat-item-last">${item.is_test ? "<span data-icon=lab></span> " : ""}${escapeHtml(item.last_message || item.worker_question || "")}</div>
                 <div class="chat-item-status ${turn.mine ? "chat-item-status-mine" : ""}">
                     ${escapeHtml(turn.text)}${item.brigade && seesAllShifts
                         ? ` · смена ${escapeHtml(item.brigade)} (${escapeHtml(item.shift || "")})`
@@ -672,7 +678,7 @@ async function loadThread() {
             machineName(caseData) || "Обращение";
 
         document.getElementById("chatSubtitle").innerHTML =
-            `№${caseData.id} · ${escapeHtml(caseData.status || "")}${caseData.is_test ? " · 🧪 проверка" : ""}`;
+            `№${caseData.id} · ${escapeHtml(caseData.status || "")}${caseData.is_test ? " · <span data-icon=lab></span> проверка" : ""}`;
 
         document.getElementById("chatComposer").style.display =
             data.can_write ? "flex" : "none";
@@ -716,9 +722,12 @@ function renderMessages(messages) {
     box.innerHTML = messages.map(item => {
 
         if (item.role === "system") {
-            // Строка про склад («📦 подшипник — на складе 3 шт») читается
+            // Строка про склад («<span data-icon=parts></span> подшипник — на складе 3 шт») читается
             // как часть совета, поэтому выделяем её из прочих отметок.
-            const stock = String(item.message || "").startsWith("📦") ? " msg-stock" : "";
+            // Служебная строка про склад приходит с сервера и
+            // начинается со слова «Склад:» — раньше её узнавали по
+            // эмодзи, но эмодзи из текстов убраны.
+            const stock = String(item.message || "").startsWith("Склад:") ? " msg-stock" : "";
             return `<div class="msg-system${stock}">${escapeHtml(item.message)}</div>`;
         }
 
@@ -758,8 +767,8 @@ function renderQuickReplies(messages, caseData, role) {
     if (!box) return;
 
     // Последний СОВЕТ, а не последнее сообщение вообще. После совета
-    // система дописывает служебные строки — «🔎 уже было похожее» и
-    // «📦 на складе N шт». Пока проверялось последнее сообщение, после
+    // система дописывает служебные строки — «<span data-icon=search></span> уже было похожее» и
+    // «<span data-icon=parts></span> на складе N шт». Пока проверялось последнее сообщение, после
     // них кнопки пропадали, и человеку приходилось печатать «не
     // помогло» руками (21.09.2026).
     let last = null;
@@ -796,7 +805,7 @@ function renderQuickReplies(messages, caseData, role) {
     box.innerHTML = `
         <button type="button" class="quick-yes">✓ Помогло</button>
         <button type="button" class="quick-next">✕ Не помогло</button>
-        ${role === "worker" ? '<button type="button" class="quick-call">🙋 Позвать мастера</button>' : ''}
+        ${role === "worker" ? '<button type="button" class="quick-call"><span data-icon=hand></span> Позвать мастера</button>' : ''}
     `;
 
     box.querySelector(".quick-yes").addEventListener("click", async function () {
@@ -1245,7 +1254,7 @@ function renderActions(actions, caseData) {
     // его должно быть можно: механик у станка вправе спросить совет,
     // а не только читать переписку.
     if (["Требует специалиста", "В работе"].includes(caseData.status)) {
-        buttons.push(`<button type="button" class="act act-ask" data-act="ask-ai">🤖 Спросить ИИ</button>`);
+        buttons.push(`<button type="button" class="act act-ask" data-act="ask-ai"><span data-icon=bot></span> Спросить ИИ</button>`);
     }
 
     if (!buttons.length) {
@@ -1385,12 +1394,12 @@ function flashTitleForNew(count) {
    ========================================================= */
 
 const STAGES = [
-    { icon: "📝", label: "Зарегистрировано" },
-    { icon: "🤖", label: "ACAI разбирает" },
-    { icon: "🔧", label: "Специалист" },
-    { icon: "🛠", label: "Ремонт" },
-    { icon: "📋", label: "На подтверждении" },
-    { icon: "✅", label: "Восстановлено" }
+    { icon: svgIcon('note'), label: "Зарегистрировано" },
+    { icon: svgIcon('bot'), label: "ACAI разбирает" },
+    { icon: svgIcon('diagnostics'), label: "Специалист" },
+    { icon: svgIcon('tools'), label: "Ремонт" },
+    { icon: svgIcon('equipment'), label: "На подтверждении" },
+    { icon: svgIcon('ok'), label: "Восстановлено" }
 ];
 
 

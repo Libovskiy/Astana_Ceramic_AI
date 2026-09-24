@@ -215,7 +215,7 @@ def similar_note(machine, question):
     if not found:
         return ""
 
-    lines = ["🔎 На этом станке уже было похожее:"]
+    lines = ["Уже было похожее на этом станке:"]
 
     for row in found:
         when = (row.get("created_at") or "")[:10]

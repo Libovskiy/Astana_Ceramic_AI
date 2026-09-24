@@ -58,7 +58,7 @@ function renderList() {
   if (!shown.length) {
     $('mgItems').innerHTML = conversations.length
       ? '<div class="mg-empty">Ничего не нашлось</div>'
-      : '<div class="mg-empty">Пока никому не писали.<br>Нажмите ✎, чтобы начать.</div>';
+      : '<div class="mg-empty">Пока никому не писали.<br>Нажмите <span data-icon=edit></span>, чтобы начать.</div>';
     return;
   }
 
@@ -68,7 +68,7 @@ function renderList() {
       ? (last.user_id === me.id ? 'Вы: ' : '') + oneLine(last.body)
       : 'Нет сообщений';
     const active = current && current.id === c.id ? ' active' : '';
-    const icon = c.kind === 'group' ? '👥' : ACAI.initials(c.title);
+    const icon = c.kind === 'group' ? ACAI.icon('users') : ACAI.initials(c.title);
     const color = c.kind === 'group' ? 'var(--text-dim)' : ACAI.avatarColor(c.title);
 
     return `<button class="mg-item${active}" onclick="openConversation(${c.id})">
@@ -241,7 +241,7 @@ async function loadOlder() {
 
 function renderHead() {
   $('mgHeadTitle').textContent = current.title || '';
-  $('mgHeadAvatar').textContent = current.kind === 'group' ? '👥' : ACAI.initials(current.title || '');
+  $('mgHeadAvatar').innerHTML = current.kind === 'group' ? ACAI.icon('users') : ACAI.initials(current.title || '');
   $('mgHeadAvatar').style.background = current.kind === 'group'
     ? 'var(--text-dim)' : ACAI.avatarColor(current.title || '');
 
@@ -264,12 +264,12 @@ function humanSize(bytes) {
 
 function fileIcon(name) {
   const ext = String(name || '').split('.').pop().toLowerCase();
-  if (['pdf'].includes(ext)) return '📕';
-  if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return '📘';
-  if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return '📗';
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
-  if (['dwg', 'dxf'].includes(ext)) return '📐';
-  return '📎';
+  if (['pdf'].includes(ext)) return ACAI.icon('book');
+  if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return ACAI.icon('book');
+  if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return ACAI.icon('book');
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return ACAI.icon('zip');
+  if (['dwg', 'dxf'].includes(ext)) return ACAI.icon('ruler');
+  return ACAI.icon('attach');
 }
 
 function attachmentHtml(a) {
@@ -288,7 +288,7 @@ function attachmentHtml(a) {
 
   if (a.kind === 'audio') {
     return `<div class="mg-audio">
-      <span class="mg-audio-icon">🎤</span>
+      <span class="mg-audio-icon"><span data-icon=mic></span></span>
       <audio controls preload="metadata" src="${a.url}"></audio>
     </div>`;
   }
@@ -495,7 +495,7 @@ function openNew() {
 
   ACAI.showModal(`
     <h3>Кому написать</h3>
-    <input class="input" id="mgPick" placeholder="🔍 Имя или должность"
+    <input class="input" id="mgPick" placeholder="<span data-icon=search></span> Имя или должность"
            style="width:100%;margin:10px 0" oninput="filterPeople()">
     <div class="mg-picker" id="mgPeople">${people || '<div class="mg-empty">Некому писать</div>'}</div>
     <div class="modal-foot">
@@ -558,7 +558,7 @@ function openGroupForm() {
       <label>Название</label>
       <input class="input" id="mgGroupTitle" placeholder="Например: Смена А — упаковка" style="width:100%">
     </div>
-    <input class="input" id="mgPick" placeholder="🔍 Кого добавить"
+    <input class="input" id="mgPick" placeholder="<span data-icon=search></span> Кого добавить"
            style="width:100%;margin-bottom:8px" oninput="filterPeople()">
     <div class="mg-picker" id="mgPeople">${people}</div>
     <div id="mgGroupErr" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:6px"></div>
@@ -716,14 +716,14 @@ function openChatMenu() {
   const group = current.kind === 'group';
 
   const items = group ? `
-      <button class="btn secondary" onclick="ACAI.closeModal();openGroupSettings()">👥 Участники и название</button>
-      <button class="btn secondary" onclick="leaveGroup()">🚪 Выйти из группы</button>
+      <button class="btn secondary" onclick="ACAI.closeModal();openGroupSettings()"><span data-icon=users></span> Участники и название</button>
+      <button class="btn secondary" onclick="leaveGroup()"><span data-icon=door></span> Выйти из группы</button>
       ${current.can_delete_group ? `
-        <button class="btn danger" onclick="deleteGroup()">🗑 Удалить группу для всех</button>
+        <button class="btn danger" onclick="deleteGroup()"><span data-icon=trash></span> Удалить группу для всех</button>
         <div class="mg-menu-note">Группа пропадёт у всех участников вместе с сообщениями и файлами.</div>` : `
         <div class="mg-menu-note">Удалить группу для всех может её создатель или администратор.</div>`}
     ` : `
-      <button class="btn danger" onclick="clearChat()">🗑 Удалить чат</button>
+      <button class="btn danger" onclick="clearChat()"><span data-icon=trash></span> Удалить чат</button>
       <div class="mg-menu-note">Переписка пропадёт только у вас. У собеседника она останется, а если он напишет снова — чат вернётся без старых сообщений.</div>
     `;
 

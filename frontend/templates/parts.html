@@ -7,7 +7,7 @@
 <title>Запчасти — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
 .part-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;transition:border-color .15s;}
@@ -32,7 +32,7 @@
         <div class="topbar-sub">Наличие и учёт запчастей</div>
       </div>
       <div class="topbar-right">
-        <input class="input" id="searchParts" placeholder="🔍 Поиск..." style="width:200px" oninput="renderParts()">
+        <input class="input" id="searchParts" placeholder="<span data-icon=search></span> Поиск..." style="width:200px" oninput="renderParts()">
         <button class="btn primary" onclick="openAddPart()">+ Запчасть</button>
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
@@ -62,7 +62,7 @@
 
       <div class="filters-row">
         <button class="filter-chip active" data-f="">Все</button>
-        <button class="filter-chip" data-f="low" style="color:var(--danger)">⚠ Заканчиваются</button>
+        <button class="filter-chip" data-f="low" style="color:var(--danger)"><span data-icon=alert></span> Заканчиваются</button>
         <button class="filter-chip" data-f="mechanical">Механика</button>
         <button class="filter-chip" data-f="electrical">Электрика</button>
         <button class="filter-chip" data-f="consumable">Расходники</button>
@@ -86,7 +86,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allParts=[];let activeFilter='';

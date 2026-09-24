@@ -417,7 +417,7 @@ function renderEquipment(
 
                             <div class="diagnostic-equipment-icon">
 
-                                ⚙
+                                <span data-icon=gear></span>
 
                             </div>
 
@@ -612,7 +612,7 @@ function createJournalEventRow(event) {
 
         return `
             <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-                <span style="color: var(--ok); font-size: 13px;">🔧 Обслуживание выполнено</span>
+                <span style="color: var(--ok); font-size: 13px;"><span data-icon=diagnostics></span> Обслуживание выполнено</span>
                 <div style="font-size: 12px; color: var(--text-dim);">${date} · ${escapeHtml(event.username || "—")}</div>
             </div>
         `;
@@ -621,7 +621,7 @@ function createJournalEventRow(event) {
 
     return `
         <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
-            <span style="font-size: 13px;">⚠ ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
+            <span style="font-size: 13px;"><span data-icon=alert></span> ${escapeHtml(event.symptom || "Обращение")} — <em>${escapeHtml(event.status)}</em></span>
             <div style="font-size: 12px; color: var(--text-dim);">${date} ${event.resolution ? "· " + escapeHtml(event.resolution) : ""}</div>
         </div>
     `;

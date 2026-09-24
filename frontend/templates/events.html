@@ -7,7 +7,7 @@
 <title>События — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .task-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px;border-left:4px solid var(--border);}
 .task-card.high{border-left-color:var(--danger);}
@@ -61,7 +61,7 @@
         <button class="filter-chip" data-f="in_progress">В работе</button>
         <button class="filter-chip" data-f="done">Выполненные</button>
         <button class="filter-chip" data-f="overdue" style="color:var(--danger)">Просроченные</button>
-        <input class="input" id="taskSearch" placeholder="🔍 Поиск..." style="width:200px;margin-left:auto" oninput="renderTasks()">
+        <input class="input" id="taskSearch" placeholder="<span data-icon=search></span> Поиск..." style="width:200px;margin-left:auto" oninput="renderTasks()">
       </div>
 
       <div id="taskList"><div class="empty">Загрузка...</div></div>
@@ -70,7 +70,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allTasks=[];let currentFilter='';let currentUser=null;
@@ -86,7 +87,7 @@ const isClosed=t=>CLOSED_STATUSES.includes(t.status);
 function dueInfo(due_at,status){
   if(!due_at||CLOSED_STATUSES.includes(status))return{label:'',cls:''};
   const diff=new Date(due_at).getTime()-Date.now();
-  if(diff<0)return{label:'⚠ Просрочено',cls:'overdue'};
+  if(diff<0)return{label:'<span data-icon=alert></span> Просрочено',cls:'overdue'};
   if(diff<3600000)return{label:'Через <1ч',cls:'today'};
   if(diff<86400000)return{label:'Сегодня',cls:'today'};
   if(diff<86400000*3)return{label:`${Math.ceil(diff/86400000)}д`,cls:'soon'};
@@ -167,10 +168,10 @@ function renderTasks(){
       ${t.review_comment?`<div class="task-desc" style="color:var(--warn)">↩ Вернули на доработку: ${escapeTask(t.review_comment)}</div>`:''}
       ${t.completion_comment&&!t.review_comment?`<div class="task-desc" style="color:var(--text-dim)">✓ Отчёт исполнителя: ${escapeTask(t.completion_comment)}</div>`:''}
       <div class="task-meta">
-        ${dueStr?`<span>📅 ${dueStr}</span>`:''}
+        ${dueStr?`<span><span data-icon=calendar></span> ${dueStr}</span>`:''}
         ${di.label?`<span class="due-label ${di.cls}">${di.label}</span>`:''}
-        ${t.creator_name?`<span>✏️ ${t.creator_name}</span>`:''}
-        ${t.equipment_name?`<span>⚙️ ${t.equipment_name}</span>`:''}
+        ${t.creator_name?`<span><span data-icon=edit></span> ${t.creator_name}</span>`:''}
+        ${t.equipment_name?`<span><span data-icon=gear></span> ${t.equipment_name}</span>`:''}
         ${assigneeLabel(t.id)}
         ${taskButtons(t)}
       </div>
@@ -217,8 +218,8 @@ let assignees={};   // {task_id: [{id, full_name, role}]}
 function assigneeLabel(taskId){
   const a=assignees[taskId];
   if(!a) return '';
-  if(!a.length) return `<span style="color:var(--warn)">👤 Не назначен</span>`;
-  return `<span>👤 ${a.map(u=>u.full_name||u.username).join(', ')}</span>`;
+  if(!a.length) return `<span style="color:var(--warn)"><span data-icon=user></span> Не назначен</span>`;
+  return `<span><span data-icon=user></span> ${a.map(u=>u.full_name||u.username).join(', ')}</span>`;
 }
 
 async function loadAssignees(){
@@ -302,7 +303,7 @@ function taskButtons(t){
   const canConfirm=['chief_engineer','director','admin'].includes(currentUser?.role);
   const parts=[];
 
-  if(!isClosed(t)) parts.push(`<button class="btn secondary sm" style="margin-left:auto" onclick="openAssign(${t.id})">👤 Назначить</button>`);
+  if(!isClosed(t)) parts.push(`<button class="btn secondary sm" style="margin-left:auto" onclick="openAssign(${t.id})"><span data-icon=user></span> Назначить</button>`);
 
   if(t.status==='new'||t.status==='in_progress'){
     parts.push(`<button class="btn ok sm" onclick="openCompleteTask(${t.id})">✓ Выполнено</button>`);

@@ -7,7 +7,7 @@
 <title>Использование — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .us-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
 .us-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
@@ -88,7 +88,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 initLayout();   // меню, часы, колокольчик — без этого вызова боковое меню пустое
@@ -192,8 +193,8 @@ function render() {
   }
 
   document.getElementById('usPage').innerHTML = `
-    ${trackingNote ? `<div class="us-note">ℹ️ ${trackingNote}</div>` : ''}
-    ${uptimeNote ? `<div class="us-note"${up.gaps_count ? ' style="border-color:var(--warn)"' : ''}>${up.gaps_count ? '⚠️' : '✅'} ${uptimeNote}</div>` : ''}
+    ${trackingNote ? `<div class="us-note"><span data-icon=info></span> ${trackingNote}</div>` : ''}
+    ${uptimeNote ? `<div class="us-note"${up.gaps_count ? ' style="border-color:var(--warn)"' : ''}>${up.gaps_count ? ACAI.icon('alert') : ACAI.icon('ok')} ${uptimeNote}</div>` : ''}
 
     <div class="us-grid">
       <div class="us-kpi">
@@ -278,7 +279,7 @@ function render() {
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <div class="card-head"><h2>📲 Уведомления на телефон</h2></div>
+      <div class="card-head"><h2><span data-icon=bell></span> Уведомления на телефон</h2></div>
       <div class="card-body" id="usPush"><div class="empty">Загрузка...</div></div>
     </div>
 
@@ -331,7 +332,7 @@ async function loadPush() {
       <div style="font-size:13px;margin-bottom:8px">Включили <b>${r.people.length}</b> из ${data.totals.accounts}</div>
       ${r.people.map(p => `<div class="us-row"><span class="us-name">${esc(p.full_name || p.username)}</span>
         <span class="us-delta">${esc(ROLE_NAMES[p.role] || p.role)}${p.devices > 1 ? ` · ${p.devices} устр.` : ''}</span></div>`).join('')
-        || '<div style="font-size:12px;color:var(--text-dim)">Пока никто. Включается через колокольчик 🔔 → «Уведомления на телефон».</div>'}`;
+        || '<div style="font-size:12px;color:var(--text-dim)">Пока никто. Включается через колокольчик <span data-icon=bell></span> → «Уведомления на телефон».</div>'}`;
   } catch {
     box.innerHTML = '<div class="empty">Не удалось загрузить</div>';
   }

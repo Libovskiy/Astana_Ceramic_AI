@@ -7,7 +7,7 @@
 <title>Наблюдение — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .ob { max-width: 640px; margin: 0 auto; }
 .ob-step { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
@@ -62,7 +62,8 @@ details.ob-step ul { margin: 10px 0 0; padding-left: 20px; font-size: 15px; line
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script src="/static/voice.js?v=1"></script>
 <script>
@@ -139,14 +140,14 @@ function render() {
          </button>`
       : candidates.map(p => `
       <button class="ob-pick ${m && m.id === p.id ? 'active' : ''}" onclick="pickerOpen=false;save({mechanic_id:${p.id}})">
-        <span style="flex:1">${esc(p.full_name || p.username)}<small>${esc(p.username)} · ${p.devices ? '🔔 уведомления включены' : 'уведомления не включены'}</small></span>
+        <span style="flex:1">${esc(p.full_name || p.username)}<small>${esc(p.username)} · ${p.devices ? '<span data-icon=bell></span> уведомления включены' : 'уведомления не включены'}</small></span>
       </button>`).join('')}`;
 
   if (m) {
     html += `
       <label class="ob-check"><input type="checkbox" data-check="c1" ${checks.c1?'checked':''}> <span>На его телефоне открыть <code>${SITE_HTTP}/cert</code>, скачать и установить сертификат (там инструкция для Android и iPhone).</span></label>
       <label class="ob-check"><input type="checkbox" data-check="c2" ${checks.c2?'checked':''}> <span>Войти по защищённому адресу <code>${SITE_HTTPS}</code> под учёткой <b>${esc(m.username)}</b>. На iPhone — добавить «На экран Домой» и открыть со значка.</span></label>
-      <label class="ob-check"><input type="checkbox" data-check="c3" ${checks.c3?'checked':''}> <span>Колокольчик 🔔 → «Уведомления на телефон» → «Включить» → «Разрешить».</span></label>
+      <label class="ob-check"><input type="checkbox" data-check="c3" ${checks.c3?'checked':''}> <span>Колокольчик <span data-icon=bell></span> → «Уведомления на телефон» → «Включить» → «Разрешить».</span></label>
       <div class="ob-status ${mechReady ? '' : 'warn'}">${mechReady
         ? `✓ Уведомления включены на ${m.devices} тел.`
         : 'Ждём, пока механик включит уведомления… (обновляется само)'}</div>`;
@@ -206,7 +207,7 @@ function render() {
       <ul class="ob-tl">
         ${(state.timeline || []).map(t => `<li>
           <time>${hhmm(t.at)}</time>
-          <span class="${/НЕ/.test(t.label) ? 'bad' : ''}">${esc(t.label)}${t.who ? ` — ${esc(t.who)}` : ''}${t.extra ? ` <span style="color:var(--text-dim)">(${esc(t.extra)})</span>` : ''}${t.manual ? ' ✋' : ''}</span>
+          <span class="${/НЕ/.test(t.label) ? 'bad' : ''}">${esc(t.label)}${t.who ? ` — ${esc(t.who)}` : ''}${t.extra ? ` <span style="color:var(--text-dim)">(${esc(t.extra)})</span>` : ''}${t.manual ? ' <span data-icon=hand></span>' : ''}</span>
           <span class="plus">${t.after_created_min ? '+' + mins(t.after_created_min) + ' мин' : ''}</span>
         </li>`).join('')}
       </ul>
@@ -224,7 +225,7 @@ function render() {
     <div class="ob-chips">
       ${['застрял', 'переспросил', 'не нашёл кнопку', 'не понял текст', 'не читается на солнце', 'надиктовал голосом', 'всё понял сам']
         .map(t => `<button class="ob-chip" onclick="addNote('${t}')">${t}</button>`).join('')}
-      <button class="ob-chip" id="obMic" style="font-weight:700">🎤 надиктовать</button>
+      <button class="ob-chip" id="obMic" style="font-weight:700"><span data-icon=mic></span> надиктовать</button>
     </div>
     <textarea class="ob-notes" id="obNotes" placeholder="Например: 16:05 не нашёл, где выбрать станок — листал вниз">${esc(keepNotes ?? o.notes ?? '')}</textarea>
     <div class="ob-saved" id="obSaved"></div>

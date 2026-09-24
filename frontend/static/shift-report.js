@@ -228,7 +228,7 @@ function srCarRow(c, editable) {
       </td>
       ${editable ? `
         <td><div style="display:flex;gap:6px">
-          <button class="btn secondary sm" onclick="srCarForm(${c.id})" title="Править">✎</button>
+          <button class="btn secondary sm" onclick="srCarForm(${c.id})" title="Править"><span data-icon=edit></span></button>
           <button class="btn danger sm" onclick="srDeleteCar(${c.id})" title="Убрать">✕</button>
         </div></td>` : ""}
     </tr>`;

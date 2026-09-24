@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -144,7 +144,7 @@
       </div>
 
       <div class="sensor-strip" id="sensorStrip">
-        <span style="font-size:11px;color:var(--text-dim)">⚙️ Массаподготовка · WebHMI</span>
+        <span style="font-size:11px;color:var(--text-dim)"><span data-icon=gear></span> Массаподготовка · WebHMI</span>
         <span style="font-size:11px;color:var(--text-dim)">Откройте вкладку WebHMI</span>
       </div>
 
@@ -185,7 +185,7 @@
           <div class="card-head">
             <h2>Календарь</h2>
             <div class="cal-toggle" onclick="toggleCal()">
-              <span>📅</span><span id="calToggleText">Развернуть</span>
+              <span><span data-icon=calendar></span></span><span id="calToggleText">Развернуть</span>
             </div>
           </div>
           <div class="card-body" style="padding:10px 14px">
@@ -209,7 +209,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -438,7 +439,7 @@ function renderProdMap(equipment, liveData){
           <div class="zone-bar-fill" style="width:${pct}%;background:${color}"></div>
         </div>
         <div class="zone-status" style="color:${color}">
-          ${s.err>0?`⚠ ${s.err} ошибок`:cls==='danger'?'⚠ Низкая загрузка':s.warn>0?`! ${s.warn} внимание`:cls==='warn'?'! Ниже нормы':s.total>0?'норма':''}
+          ${s.err>0?`<span data-icon=alert></span> ${s.err} ошибок`:cls==='danger'?'<span data-icon=alert></span> Низкая загрузка':s.warn>0?`! ${s.warn} внимание`:cls==='warn'?'! Ниже нормы':s.total>0?'норма':''}
         </div>
         <div style="font-size:10px;color:var(--text-dim)">${s.total} ед.</div>
       </div>
@@ -496,9 +497,9 @@ function renderSensors(lv){
             : v<50?'var(--danger)':v<80?'var(--warn)':'var(--text)';
 
     const p=(pctKey && !bogus)?Math.min(v,100):0;
-    const text = a  ? (v>0?'⚠ АВАРИЯ':'нет')
+    const text = a  ? (v>0?'<span data-icon=alert></span> АВАРИЯ':'нет')
                : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
-               : bogus ? v.toFixed(1)+'% ⚠'
+               : bogus ? v.toFixed(1)+'% <span data-icon=alert></span>'
                : v.toFixed(1)+'%';
 
     return `<div class="ss-item"${bogus?' title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно"':''}>
@@ -518,7 +519,7 @@ function renderSensors(lv){
 
   document.getElementById('sensorStrip').innerHTML=
     `<div class="ss-row">
-       <span class="ss-group">⚙️ Массаподготовка</span>
+       <span class="ss-group"><span data-icon=gear></span> Массаподготовка</span>
        <div class="ss-sep"></div>${top}
        <span style="margin-left:auto;font-size:10px;color:var(--text-dim);font-family:var(--mono)">${now}</span>
      </div>
@@ -853,7 +854,7 @@ setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
   style="display:none;position:fixed;right:20px;bottom:20px;z-index:65;
          width:56px;height:56px;border-radius:50%;border:none;
          background:var(--accent);color:#fff;font-size:24px;cursor:pointer;
-         box-shadow:0 10px 28px rgba(59,130,246,.45)">💬</button>
+         box-shadow:0 10px 28px rgba(59,130,246,.45)"><span data-icon=cases></span></button>
 
 <div id="aiPanel"
   style="display:none;position:fixed;right:20px;bottom:88px;z-index:66;
@@ -864,7 +865,7 @@ setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
 
   <div style="display:flex;align-items:center;gap:10px;padding:13px 15px;
               border-bottom:1px solid var(--border)">
-    <span style="font-size:17px">💬</span>
+    <span style="font-size:17px"><span data-icon=cases></span></span>
     <span style="flex:1">
       <span style="display:block;font-size:13px;font-weight:700">Спросить о заводе</span>
       <span style="display:block;font-size:11px;color:var(--text-dim)">
@@ -1059,7 +1060,7 @@ async function askAi(){
     box.style.background = 'rgba(245,158,11,.1)';
     box.style.border = '1px solid rgba(245,158,11,.35)';
     box.style.color = 'var(--warn)';
-    box.innerHTML = `⚠ Показатели оборудования не обновляются: последние данные ${when}.
+    box.innerHTML = `<span data-icon=alert></span> Показатели оборудования не обновляются: последние данные ${when}.
       <span style="color:var(--text-dim)">Проверьте, открыта ли вкладка WebHMI в браузере на сервере.</span>`;
   }
 

@@ -6,7 +6,7 @@
 <title>Диагностика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 /* ШАГ 1 — выбор цеха */
 .zone-grid {
@@ -120,17 +120,18 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/voice.js?v=1"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const ZONES = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
 const ZONE_ICONS = {
-  'Массаподготовка': '⚙️',
-  'Формовка': '🏗️',
-  'Сушка / Углесушка': '🌬️',
-  'Обжиг': '🔥',
-  'Упаковка': '📦',
+  'Массаподготовка': ACAI.icon('gear'),
+  'Формовка': ACAI.icon('build'),
+  'Сушка / Углесушка': ACAI.icon('wind'),
+  'Обжиг': ACAI.icon('fire'),
+  'Упаковка': ACAI.icon('parts'),
 };
 const QUICK_PROBLEMS = [
   'Не запускается','Сильный шум','Вибрация','Перегрев',
@@ -186,9 +187,9 @@ function renderStep1() {
       ${zones.map(z => {
         const s = byZone[z] || {total:0,problems:0};
         const problemBadge = s.problems > 0
-          ? `<span style="color:var(--warn);font-size:11px">⚠ ${s.problems} проблем</span>` : '';
+          ? `<span style="color:var(--warn);font-size:11px"><span data-icon=alert></span> ${s.problems} проблем</span>` : '';
         return `<div class="zone-btn" onclick="selectZone('${z}')">
-          <div class="z-icon">${ZONE_ICONS[z]||'🏭'}</div>
+          <div class="z-icon">${ZONE_ICONS[z]||ACAI.icon('production')}</div>
           <div class="z-name">${z}</div>
           <div class="z-count">${s.total} единиц ${problemBadge}</div>
         </div>`;
@@ -227,17 +228,17 @@ function selectZone(zone) {
 
 function getEqIcon(nameOrType) {
   const s = (nameOrType||'').toLowerCase();
-  if (s.includes('пресс')||s.includes('press')) return '🔩';
-  if (s.includes('конвей')||s.includes('транспорт')||s.includes('conveyor')) return '➡️';
-  if (s.includes('печь')||s.includes('kiln')||s.includes('обжиг')) return '🔥';
-  if (s.includes('сушил')||s.includes('сушка')||s.includes('drying')) return '💨';
-  if (s.includes('насос')||s.includes('pump')) return '💧';
-  if (s.includes('вальц')||s.includes('дробил')) return '⚙️';
-  if (s.includes('упаков')||s.includes('packer')) return '📦';
-  if (s.includes('смесит')) return '🌀';
-  if (s.includes('бункер')) return '🗃️';
-  if (s.includes('датчик')) return '📡';
-  return '🔧';
+  if (s.includes('пресс')||s.includes('press')) return ACAI.icon('mechanics');
+  if (s.includes('конвей')||s.includes('транспорт')||s.includes('conveyor')) return ACAI.icon('arrow');
+  if (s.includes('печь')||s.includes('kiln')||s.includes('обжиг')) return ACAI.icon('fire');
+  if (s.includes('сушил')||s.includes('сушка')||s.includes('drying')) return ACAI.icon('wind');
+  if (s.includes('насос')||s.includes('pump')) return ACAI.icon('drop');
+  if (s.includes('вальц')||s.includes('дробил')) return ACAI.icon('gear');
+  if (s.includes('упаков')||s.includes('packer')) return ACAI.icon('parts');
+  if (s.includes('смесит')) return ACAI.icon('refresh');
+  if (s.includes('бункер')) return ACAI.icon('db');
+  if (s.includes('датчик')) return ACAI.icon('pulse');
+  return ACAI.icon('diagnostics');
 }
 
 // ── ШАГ 3: описание проблемы ──────────────────────────────
@@ -286,11 +287,11 @@ function renderStep3() {
         placeholder="Например: станок гудит и вибрирует, остановился через 5 минут работы..."
         style="margin-bottom:12px;font-size:14px"></textarea>
       <button type="button" class="btn secondary" id="problemMic" title="Надиктовать голосом"
-        style="position:absolute;right:8px;bottom:20px;border-radius:20px;height:40px">🎤</button>
+        style="position:absolute;right:8px;bottom:20px;border-radius:20px;height:40px"><span data-icon=mic></span></button>
       </div>
 
       <button class="btn primary lg" style="width:100%" onclick="submitProblem()">
-        🔍 Запустить диагностику
+        <span data-icon=search></span> Запустить диагностику
       </button>
     </div>
   `;
@@ -347,7 +348,7 @@ async function submitProblem() {
 function showLoading() {
   document.getElementById('pageContent').innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
-      <div style="font-size:40px;animation:spin 1s linear infinite">⚙️</div>
+      <div style="font-size:40px;animation:spin 1s linear infinite"><span data-icon=gear></span></div>
       <div style="font-size:16px;font-weight:600">ACAI анализирует проблему...</div>
       <div style="font-size:13px;color:var(--text-dim)">Проверяем базу знаний и историю ${selectedEquipment?.name}</div>
     </div>
@@ -410,7 +411,7 @@ function explanationBlock(explanation){
 
       ${r.escalated ? `
         <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:12px;margin-top:12px;color:var(--danger);font-size:13px">
-          ⚠️ Требуется специалист. Обратитесь к главному механику или инженеру.
+          <span data-icon=alert></span> Требуется специалист. Обратитесь к главному механику или инженеру.
         </div>` : ''}
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
@@ -434,7 +435,7 @@ async function sendFeedback(helped) {
   if (helped) {
     document.getElementById('pageContent').innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;text-align:center">
-        <div style="font-size:60px">✅</div>
+        <div style="font-size:60px"><span data-icon=ok></span></div>
         <div style="font-size:20px;font-weight:700">Отлично!</div>
         <div style="font-size:14px;color:var(--text-dim)">Проблема решена. Обращение зафиксировано.</div>
         <button class="btn primary" onclick="renderStep1()">← Вернуться к цехам</button>

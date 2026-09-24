@@ -7,7 +7,7 @@
 <title>Инструкции — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .knowledge-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
 .k-card {
@@ -58,7 +58,7 @@
         <div class="topbar-sub">Пошаговые руководства по оборудованию</div>
       </div>
       <div class="topbar-right">
-        <input class="input" id="searchInst" placeholder="🔍 Поиск..." style="width:200px">
+        <input class="input" id="searchInst" placeholder="<span data-icon=search></span> Поиск..." style="width:200px">
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
@@ -98,7 +98,8 @@
   <div class="modal" id="_modal" style="width:600px;max-width:95vw"></div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allKnowledge = [];
@@ -144,11 +145,11 @@ function render(grouped) {
     if (!filtered.length) return '';
 
     return `
-      <div class="section-head">🔧 ${machine}</div>
+      <div class="section-head"><span data-icon=diagnostics></span> ${machine}</div>
       <div class="knowledge-grid">
         ${filtered.map(item => `
           <div class="k-card" onclick="openInstruction(${JSON.stringify(item).replace(/"/g,'&quot;')})">
-            <div class="k-icon">📋</div>
+            <div class="k-icon"><span data-icon=equipment></span></div>
             <div class="k-title">${shortSymptom(item.symptom, machine)||'Инструкция'}</div>
             <div class="k-machine">${machine}</div>
             <div class="k-desc">${(item.resolution||'').slice(0,80)}${(item.resolution||'').length>80?'...':''}</div>
@@ -179,7 +180,7 @@ function openInstruction(item) {
 
   ACAI.showModal(`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <span style="font-size:24px">📋</span>
+      <span style="font-size:24px"><span data-icon=equipment></span></span>
       <div>
         <h3 style="margin:0">${shortSymptom(item.symptom, item.machine)||'Инструкция'}</h3>
         <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${item.machine||''}</div>

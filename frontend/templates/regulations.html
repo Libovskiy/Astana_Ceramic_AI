@@ -6,7 +6,7 @@
 <title>Регламенты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .reg-card {
   background:var(--surface); border:1px solid var(--border);
@@ -40,14 +40,14 @@
       </div>
       <div class="topbar-right">
         <button class="btn primary" id="createRegBtn" style="display:none" onclick="openCreateReg()">+ Регламент</button>
-        <input class="input" id="searchReg" placeholder="🔍 Поиск..." style="width:200px">
+        <input class="input" id="searchReg" placeholder="<span data-icon=search></span> Поиск..." style="width:200px">
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
 
     <div class="page">
       <div id="pendingBanner" style="display:none" class="pending-banner">
-        ⚠️ <span id="pendingText"></span>
+        <span data-icon=alert></span> <span id="pendingText"></span>
       </div>
       <div id="regList"><div class="empty">Загрузка...</div></div>
     </div>
@@ -58,7 +58,8 @@
   <div class="modal" id="_modal" style="width:640px;max-width:95vw"></div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 // В ACAI есть get и post, но не put — а правка этапа идёт через PUT.
@@ -127,7 +128,7 @@ function render() {
         const created = reg.created_at ? ACAI.shortDate(reg.created_at) : '—';
 
         return `<div class="reg-card" onclick="openReg(${reg.id})">
-          <div class="reg-icon">${isActive ? '📗' : '📔'}</div>
+          <div class="reg-icon">${isActive ? ACAI.icon('book') : ACAI.icon('manual')}</div>
           <div class="reg-body">
             <div class="reg-name">${reg.name}</div>
             <div class="reg-meta">
@@ -180,9 +181,9 @@ async function openReg(id) {
           ${canEdit ? `
             <button class="btn secondary sm" onclick="openParamForm(${id},${s.id})">+ Параметр</button>
             <button class="btn secondary sm" title="Переименовать"
-              onclick='openStageForm(${id}, ${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+              onclick='openStageForm(${id}, ${JSON.stringify(s).replace(/'/g,"&#39;")})'><span data-icon=edit></span></button>
             <button class="btn secondary sm" title="Удалить этап"
-              onclick="deleteStage(${id},${s.id})">🗑</button>` : ''}
+              onclick="deleteStage(${id},${s.id})"><span data-icon=trash></span></button>` : ''}
         </span>
       </div>
       ${s.description ? `<div style="font-size:12px;color:var(--text-dim)">${s.description}</div>` : ''}
@@ -202,7 +203,7 @@ async function openReg(id) {
                    border:1px solid var(--danger);border-radius:3px;padding:0 4px;
                    margin-left:6px;white-space:nowrap">важно</span>`:''}
                 ${p.equipment_name?`<span style="display:block;font-size:10px;color:var(--accent)">
-                   ⚙ ${p.equipment_name}</span>`:''}
+                   <span data-icon=gear></span> ${p.equipment_name}</span>`:''}
               </span>
               <span style="font-family:var(--mono);font-size:13px;font-weight:700;
                            white-space:nowrap;color:${filled?'var(--text)':'var(--text-dim)'}">
@@ -210,7 +211,7 @@ async function openReg(id) {
               </span>
               ${canEdit?`<span style="display:flex;gap:8px;flex-shrink:0">
                 <span style="cursor:pointer;color:var(--text-dim)" title="Изменить норму"
-                 onclick='openParamForm(${id}, ${p.stage_id}, ${JSON.stringify(p).replace(/'/g,"&#39;")})'>✎</span>
+                 onclick='openParamForm(${id}, ${p.stage_id}, ${JSON.stringify(p).replace(/'/g,"&#39;")})'><span data-icon=edit></span></span>
                 <span style="cursor:pointer;color:var(--text-dim)" title="Удалить параметр"
                  onclick="deleteParam(${id},${p.id})">✕</span>
               </span>`:''}
@@ -222,7 +223,7 @@ async function openReg(id) {
 
   ACAI.showModal(`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <span style="font-size:24px">${isActive?'📗':'📔'}</span>
+      <span style="font-size:24px">${isActive?ACAI.icon('book'):ACAI.icon('manual')}</span>
       <div style="flex:1">
         <h3 style="margin:0">${reg.name}</h3>
         <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
@@ -233,9 +234,9 @@ async function openReg(id) {
         <span class="badge ${isActive?'ok':'neutral'}">${isActive?'Активен':'Черновик'}</span>
         ${canEdit?`
           <button class="btn secondary sm" title="Переименовать"
-            onclick='openRegEdit(${id}, ${JSON.stringify({name:reg.name,product_type:reg.product_type,description:reg.description||''}).replace(/'/g,"&#39;")}, ${isActive})'>✎</button>
+            onclick='openRegEdit(${id}, ${JSON.stringify({name:reg.name,product_type:reg.product_type,description:reg.description||''}).replace(/'/g,"&#39;")}, ${isActive})'><span data-icon=edit></span></button>
           <button class="btn secondary sm" title="В архив"
-            onclick="archiveReg(${id})">🗄</button>`:''}
+            onclick="archiveReg(${id})"><span data-icon=archive></span></button>`:''}
       </span>
     </div>
 

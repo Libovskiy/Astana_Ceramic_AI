@@ -208,10 +208,10 @@ def stock_note(text: str, equipment_id=None, discipline=None) -> str:
         where = f" · {item['equipment_name']}" if item.get("equipment_name") else ""
         if item["stock"] > 0:
             low = " (это последнее — ниже минимума)" if item["stock"] <= item["min_quantity"] else ""
-            lines.append(f"📦 {item['name']} — на складе {item['stock']:g} {item['unit']}{low}{where}")
+            lines.append(f"Склад: {item['name']} — {item['stock']:g} {item['unit']}{low}{where}")
         else:
             last = f", последний раз брали {item['last_used_at'][:10]}" if item.get("last_used_at") else ""
-            lines.append(f"📦 {item['name']} — на складе НЕТ{last}. Скажите снабжению, не ищите зря.")
+            lines.append(f"Склад: {item['name']} — НЕТ{last}. Скажите снабжению, не ищите зря.")
 
     return "\n".join(lines)
 

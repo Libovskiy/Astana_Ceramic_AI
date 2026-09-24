@@ -78,6 +78,11 @@ window.AcaiSound = AcaiSound;
 
 // ── УТИЛИТЫ ───────────────────────────────────────────────
 const ACAI = {
+  // Значки. Сам набор — в icons.js, здесь только вход: страницы
+  // зовут ACAI.icon('production'), не зная, откуда он берётся.
+  icon(name, size) { return window.acaiIcon ? window.acaiIcon(name, size) : ''; },
+  paintIcons(root) { if (window.acaiPaintIcons) window.acaiPaintIcons(root); },
+
   // API запрос с сессионной кукой
   async get(path) {
     const r = await fetch(path, { credentials: 'include' });
@@ -239,7 +244,7 @@ const ACAI = {
       padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:8px;
       box-shadow:var(--shadow);animation:slideIn .2s ease;`;
     const colors = {ok:'var(--ok)',warn:'var(--warn)',danger:'var(--danger)'};
-    t.innerHTML = `<span style="color:${colors[type]||colors.ok}">${type==='ok'?'✓':type==='warn'?'⚠':'✕'}</span>${msg}`;
+    t.innerHTML = `<span style="color:${colors[type]||colors.ok}">${type==='ok'?'✓':type==='warn'?ACAI.icon('alert'):'✕'}</span>${msg}`;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3000);
   },
@@ -248,42 +253,42 @@ const ACAI = {
 // ── НАВИГАЦИЯ ─────────────────────────────────────────────
 const NAV_ITEMS = [
   { section: 'Главное' },
-  { icon: '🏠', label: 'Главная',       href: '/',   roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','analyst','technologist','chief_mechanic','chief_electrician'] },
+  { icon: 'home', label: 'Главная',       href: '/',   roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','analyst','technologist','chief_mechanic','chief_electrician'] },
   // Обращения — вторым пунктом: это переписка с ИИ по поломке, самое
   // частое, зачем сюда заходят с цеха. Ведёт на /chat (мессенджер), а не
   // на /cases: /cases — управленческий список, он ниже, в Аналитике.
-  { icon: '💬', label: 'Обращения',     href: '/chat',         roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  { icon: 'cases', label: 'Обращения',     href: '/chat',         roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
   // Переписка между людьми — отдельно от «Обращений»: там разговор о
   // поломке со статусом и станком, здесь просто общение.
-  { icon: '💭', label: 'Переписка',     href: '/messenger',    roles: '*' },
-  { icon: '🔧', label: 'Диагностика',   href: '/diagnostics',  roles: ['admin','worker','shift_supervisor','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
-  { icon: '📋', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
-  { icon: '🔩', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic','analyst'] },
-  { icon: '⚡', label: 'Электрика',     href: '/electrical',   roles: ['admin','director','chief_engineer','chief_electrician','electrician','analyst'] },
+  { icon: 'messenger', label: 'Переписка',     href: '/messenger',    roles: '*' },
+  { icon: 'diagnostics', label: 'Диагностика',   href: '/diagnostics',  roles: ['admin','worker','shift_supervisor','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  { icon: 'equipment', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'mechanics', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic','analyst'] },
+  { icon: 'electrical', label: 'Электрика',     href: '/electrical',   roles: ['admin','director','chief_engineer','chief_electrician','electrician','analyst'] },
   // worker тут не случайно: сменный отчёт упаковки заполняют бригады
   // А/Б/В/Г, а у них роль worker. Без этой ссылки они не могли дойти
   // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
-  { icon: '🏭', label: 'Производство',  href: '/production',   roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
-  { icon: '✅', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
-  { icon: '🗓️', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'production', label: 'Производство',  href: '/production',   roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
+  { icon: 'checklist', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'maintenance', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Аналитика' },
-  { icon: '📊', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
-  { icon: '⚠️', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
-  { icon: '📌', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
-  { icon: '📄', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
+  { icon: 'analytics', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
+  { icon: 'journal', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  { icon: 'events', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'reports', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
   { section: 'База знаний' },
-  { icon: '📚', label: 'Инструкции',    href: '/instructions', roles: '*' },
-  { icon: '⚖️', label: 'Регламенты',    href: '/regulations',  roles: '*' },
-  { icon: '🧠', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'instructions', label: 'Инструкции',    href: '/instructions', roles: '*' },
+  { icon: 'regulations', label: 'Регламенты',    href: '/regulations',  roles: '*' },
+  { icon: 'knowledge', label: 'База знаний',   href: '/knowledge',    roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Производство' },
-  { icon: '🔬', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
-  { icon: '📦', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','analyst'] },
-  { icon: '🧱', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist','analyst'] },
+  { icon: 'lab', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
+  { icon: 'parts', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','analyst'] },
+  { icon: 'technolog', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist','analyst'] },
   { section: 'Система' },
-  { icon: '👥', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer','analyst'] },
-  { icon: '👀', label: 'Наблюдение',    href: '/observe',      roles: ['admin','director','chief_engineer','analyst'] },
-  { icon: '📜', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','analyst'] },
-  { icon: '⚙️', label: 'Настройки',     href: '/settings',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
+  { icon: 'usage', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer','analyst'] },
+  { icon: 'observe', label: 'Наблюдение',    href: '/observe',      roles: ['admin','director','chief_engineer','analyst'] },
+  { icon: 'audit', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','analyst'] },
+  { icon: 'settings', label: 'Настройки',     href: '/settings',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
 ];
 
 function renderSidebar(user, openCases = 0, unreadMessages = 0) {
@@ -314,7 +319,7 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
       badge = `<span class="ni-badge">${unreadMessages}</span>`;
     }
     return `<a href="${item.href}" class="nav-item ${active}">
-      <span class="ni-icon">${item.icon}</span>
+      <span class="ni-icon">${ACAI.icon(item.icon, 18)}</span>
       ${item.label}${badge}
     </a>`;
   }).join('');
@@ -361,13 +366,13 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
 // ── ТЕМА ─────────────────────────────────────────────────
 // Сама тема ставится в theme.js в <head>; здесь только кнопка.
 function themeIcon() {
-  return window.acaiTheme && window.acaiTheme.get() === 'light' ? '🌙' : '☀️';
+  return window.acaiTheme && window.acaiTheme.get() === 'light' ? ACAI.icon('moon2') : ACAI.icon('sun');
 }
 
 function toggleTheme(button) {
   if (!window.acaiTheme) return;
   window.acaiTheme.toggle();
-  document.querySelectorAll('.theme-btn').forEach(b => { b.textContent = themeIcon(); });
+  document.querySelectorAll('.theme-btn').forEach(b => { b.innerHTML = themeIcon(); });
 }
 
 // ── УВЕДОМЛЕНИЯ НА ТЕЛЕФОН ───────────────────────────────
@@ -470,15 +475,16 @@ async function initLayout() {
 // в шапке показывает это на любой странице.
 
 const BELL_ICONS = {
-  task_overdue:        '⏰',
-  task_today:          '📅',
-  downtime:            '⏸',
-  escalated_case:      '🔺',
-  pending_confirmation:'✅',
-  recurring_issue:     '🔁',
-  maintenance_due:      '🔧',
-  backup_missing:      '💾',
+  task_overdue:         'clock',
+  task_today:           'calendar',
+  downtime:             'pulse',
+  escalated_case:       'alert',
+  pending_confirmation: 'ok',
+  recurring_issue:      'refresh',
+  maintenance_due:      'diagnostics',
+  backup_missing:       'archive',
 };
+
 
 const BELL_COLORS = {
   critical: 'var(--danger)',
@@ -529,7 +535,7 @@ async function initBell() {
       style="position:relative;width:36px;height:36px;border:1px solid var(--border);
              border-radius:9px;background:var(--surface-2);color:var(--text);
              cursor:pointer;font-size:16px;line-height:1">
-      🔔
+      <span data-icon=bell></span>
       <span id="bellCount" style="display:none;position:absolute;top:-6px;right:-6px;
             min-width:18px;height:18px;padding:0 4px;border-radius:9px;
             background:var(--danger);color:#fff;font-size:10px;font-weight:700;
@@ -549,7 +555,7 @@ async function initBell() {
   theme.type = 'button';
   theme.className = 'theme-btn theme-btn-top';
   theme.title = 'Светлая / тёмная тема';
-  theme.textContent = themeIcon();
+  theme.innerHTML = themeIcon();
   theme.addEventListener('click', () => toggleTheme());
   wrap.insertBefore(theme, wrap.firstChild);
 
@@ -606,9 +612,9 @@ async function loadBell() {
                 font-size:12px;color:var(--text-dim);display:flex;
                 align-items:center;justify-content:space-between;gap:8px">
       <span>Требует внимания: ${urgent.length} из ${items.length}</span>
-      <button type="button" onclick="event.stopPropagation();this.textContent=AcaiSound.toggle()?'🔊':'🔇'"
+      <button type="button" onclick="event.stopPropagation();this.innerHTML=AcaiSound.toggle()?ACAI.icon('sound'):ACAI.icon('mute')"
         title="Звук новых оповещений" style="border:none;background:none;cursor:pointer;
-        font-size:14px;color:var(--text-dim);flex-shrink:0">${AcaiSound.isEnabled()?'🔊':'🔇'}</button>
+        font-size:14px;color:var(--text-dim);flex-shrink:0">${AcaiSound.isEnabled()?ACAI.icon('sound'):ACAI.icon('mute')}</button>
     </div>
     ${items.map(item => {
       const link = bellLink(item);
@@ -618,7 +624,7 @@ async function loadBell() {
                   cursor:${link ? 'pointer' : 'default'};display:flex;gap:10px"
            onmouseover="${link ? "this.style.background='var(--surface-2)'" : ''}"
            onmouseout="${link ? "this.style.background=''" : ''}">
-        <span style="font-size:15px;line-height:1.2">${BELL_ICONS[item.type]||'•'}</span>
+        <span style="line-height:1;color:var(--text-dim)">${ACAI.icon(BELL_ICONS[item.type] || item.icon || 'info', 17)}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:12.5px;font-weight:600;line-height:1.35;
                        color:${BELL_COLORS[item.severity]||'var(--text)'}">
@@ -627,7 +633,7 @@ async function loadBell() {
           ${item.message?`<span style="display:block;font-size:11px;color:var(--text-dim);
              margin-top:2px;line-height:1.35">${item.message}</span>`:''}
           ${item.equipment_name||item.machine?`<span style="display:block;font-size:11px;
-             color:var(--accent);margin-top:2px">⚙ ${item.equipment_name||item.machine}</span>`:''}
+             color:var(--accent);margin-top:2px"><span data-icon=gear></span> ${item.equipment_name||item.machine}</span>`:''}
         </span>
       </div>
     `;}).join('')}
@@ -641,7 +647,7 @@ async function loadBell() {
       style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:none;
              border-top:1px solid var(--border);background:var(--surface-2);color:var(--text);
              cursor:pointer;font-size:12.5px;font-weight:600;text-align:left">
-      📲 Уведомления на телефон
+      <span data-icon=bell></span> Уведомления на телефон
       <span style="margin-left:auto;font-weight:400;color:var(--text-dim);white-space:nowrap">со звуком</span>
     </button>`);
 }

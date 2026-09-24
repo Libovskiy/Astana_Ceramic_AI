@@ -7,7 +7,7 @@
 <title>Журнал — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .log-item {
   display:flex; align-items:flex-start; gap:14px;
@@ -69,7 +69,7 @@
         <button class="filter-chip" data-action="case">Обращения</button>
         <button class="filter-chip" data-action="equipment">Оборудование</button>
         <button class="filter-chip" data-action="repair">Ремонты</button>
-        <input class="input" id="searchLog" placeholder="🔍 Поиск по имени..." style="width:200px;margin-left:auto">
+        <input class="input" id="searchLog" placeholder="<span data-icon=search></span> Поиск по имени..." style="width:200px;margin-left:auto">
         <select class="input" id="limitSelect" style="width:120px">
           <option value="50">50 записей</option>
           <option value="100">100 записей</option>
@@ -92,7 +92,8 @@
   </div>
 </div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allEntries = [];
@@ -101,20 +102,20 @@ let searchQ = '';
 
 const ACTION_META = {
   // авторизация
-  login:              { icon:'🔐', bg:'rgba(59,130,246,.1)', label:'Вход в систему' },
-  logout:             { icon:'🚪', bg:'rgba(100,116,139,.1)', label:'Выход' },
-  login_failed:       { icon:'⚠️', bg:'rgba(239,68,68,.1)', label:'Неудачный вход' },
+  login:              { icon:ACAI.icon('lock'), bg:'rgba(59,130,246,.1)', label:'Вход в систему' },
+  logout:             { icon:ACAI.icon('door'), bg:'rgba(100,116,139,.1)', label:'Выход' },
+  login_failed:       { icon:ACAI.icon('alert'), bg:'rgba(239,68,68,.1)', label:'Неудачный вход' },
   // обращения
-  case_created:       { icon:'📋', bg:'rgba(59,130,246,.1)', label:'Создано обращение' },
+  case_created:       { icon:ACAI.icon('equipment'), bg:'rgba(59,130,246,.1)', label:'Создано обращение' },
   case_taken:         { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
-  case_draft_close:   { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Черновик закрытия' },
-  case_approve_close: { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Закрыто' },
+  case_draft_close:   { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Черновик закрытия' },
+  case_approve_close: { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Закрыто' },
   // оборудование
-  equipment_archived: { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Архивировано' },
-  equipment_restored: { icon:'♻️', bg:'rgba(34,197,94,.1)', label:'Восстановлено' },
-  maintenance_completed: { icon:'🔧', bg:'rgba(34,197,94,.1)', label:'ТО выполнено' },
+  equipment_archived: { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Архивировано' },
+  equipment_restored: { icon:ACAI.icon('recycle'), bg:'rgba(34,197,94,.1)', label:'Восстановлено' },
+  maintenance_completed: { icon:ACAI.icon('diagnostics'), bg:'rgba(34,197,94,.1)', label:'ТО выполнено' },
   // ремонт
-  repair_completed:   { icon:'🛠️', bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
+  repair_completed:   { icon:ACAI.icon('tools'), bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
   downtime_started:   { icon:'⏸️', bg:'rgba(239,68,68,.1)', label:'Простой начат' },
   downtime_ended:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой завершён' },
 
@@ -126,84 +127,84 @@ const ACTION_META = {
   // «regulation_parameter_added» поймается на «regulation».
 
   // регламенты
-  regulation_parameter_added:    { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен параметр' },
-  regulation_parameter_archived: { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Параметр убран' },
+  regulation_parameter_added:    { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлен параметр' },
+  regulation_parameter_archived: { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Параметр убран' },
   regulation_parameters_reordered:{ icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок параметров' },
-  regulation_stage_equipment_changed:{ icon:'🔗', bg:'rgba(99,102,241,.1)', label:'Оборудование этапа' },
-  regulation_stage_archived:     { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Этап убран' },
-  regulation_stage_updated:      { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
-  regulation_stage_changed:      { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
-  regulation_stage_added:        { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен этап' },
+  regulation_stage_equipment_changed:{ icon:ACAI.icon('link'), bg:'rgba(99,102,241,.1)', label:'Оборудование этапа' },
+  regulation_stage_archived:     { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Этап убран' },
+  regulation_stage_updated:      { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+  regulation_stage_changed:      { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+  regulation_stage_added:        { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлен этап' },
   regulation_stages_reordered:   { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
-  regulation_acknowledged:       { icon:'👍', bg:'rgba(34,197,94,.1)', label:'Ознакомлен с регламентом' },
-  regulation_activated:          { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Регламент введён в действие' },
-  regulation_photo_uploaded:     { icon:'🖼️', bg:'rgba(99,102,241,.1)', label:'Фото регламента' },
-  regulation_renamed:            { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Регламент переименован' },
-  regulation_created:            { icon:'📄', bg:'rgba(59,130,246,.1)', label:'Создан регламент' },
-  regulation_changed:            { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Регламент изменён' },
+  regulation_acknowledged:       { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Ознакомлен с регламентом' },
+  regulation_activated:          { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Регламент введён в действие' },
+  regulation_photo_uploaded:     { icon:ACAI.icon('image'), bg:'rgba(99,102,241,.1)', label:'Фото регламента' },
+  regulation_renamed:            { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Регламент переименован' },
+  regulation_created:            { icon:ACAI.icon('reports'), bg:'rgba(59,130,246,.1)', label:'Создан регламент' },
+  regulation_changed:            { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Регламент изменён' },
 
   // документы и база знаний
-  equipment_document_uploaded:   { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
-  equipment_document_attached:   { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
-  stage_document_uploaded:       { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Документ этапа' },
-  document_uploaded:             { icon:'📎', bg:'rgba(59,130,246,.1)', label:'Загружен документ' },
-  document_approved:             { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Документ утверждён' },
-  document_rejected:             { icon:'❌', bg:'rgba(239,68,68,.1)', label:'Документ отклонён' },
-  document_archived:             { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Документ убран' },
-  knowledge_deleted_permanently: { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Удалено из базы знаний' },
-  knowledge_archived:            { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Убрано из базы знаний' },
-  knowledge_restored:            { icon:'♻️', bg:'rgba(34,197,94,.1)', label:'Возвращено в базу знаний' },
+  equipment_document_uploaded:   { icon:ACAI.icon('attach'), bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
+  equipment_document_attached:   { icon:ACAI.icon('attach'), bg:'rgba(59,130,246,.1)', label:'Документ прикреплён' },
+  stage_document_uploaded:       { icon:ACAI.icon('attach'), bg:'rgba(59,130,246,.1)', label:'Документ этапа' },
+  document_uploaded:             { icon:ACAI.icon('attach'), bg:'rgba(59,130,246,.1)', label:'Загружен документ' },
+  document_approved:             { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Документ утверждён' },
+  document_rejected:             { icon:ACAI.icon('close'), bg:'rgba(239,68,68,.1)', label:'Документ отклонён' },
+  document_archived:             { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Документ убран' },
+  knowledge_deleted_permanently: { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Удалено из базы знаний' },
+  knowledge_archived:            { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Убрано из базы знаний' },
+  knowledge_restored:            { icon:ACAI.icon('recycle'), bg:'rgba(34,197,94,.1)', label:'Возвращено в базу знаний' },
 
   // производство
-  production_plan_updated:       { icon:'🎯', bg:'rgba(99,102,241,.1)', label:'Изменён план' },
-  production_logged:             { icon:'🧱', bg:'rgba(34,197,94,.1)', label:'Внесён выпуск' },
-  maintenance_plan_created:      { icon:'🗓️', bg:'rgba(59,130,246,.1)', label:'Создан план ТО' },
-  checklist_round_saved:         { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Обход смены сдан' },
-  mix_entry_created:             { icon:'🧪', bg:'rgba(59,130,246,.1)', label:'Замес записан' },
-  mix_outcome_set:               { icon:'🧪', bg:'rgba(34,197,94,.1)', label:'Итог замеса' },
-  lab_product_archived:          { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Продукт убран' },
-  lab_product_added:             { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлен продукт' },
-  lab_entry_deleted:             { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Запись лаборатории удалена' },
+  production_plan_updated:       { icon:ACAI.icon('events'), bg:'rgba(99,102,241,.1)', label:'Изменён план' },
+  production_logged:             { icon:ACAI.icon('technolog'), bg:'rgba(34,197,94,.1)', label:'Внесён выпуск' },
+  maintenance_plan_created:      { icon:ACAI.icon('maintenance'), bg:'rgba(59,130,246,.1)', label:'Создан план ТО' },
+  checklist_round_saved:         { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Обход смены сдан' },
+  mix_entry_created:             { icon:ACAI.icon('lab'), bg:'rgba(59,130,246,.1)', label:'Замес записан' },
+  mix_outcome_set:               { icon:ACAI.icon('lab'), bg:'rgba(34,197,94,.1)', label:'Итог замеса' },
+  lab_product_archived:          { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Продукт убран' },
+  lab_product_added:             { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлен продукт' },
+  lab_entry_deleted:             { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Запись лаборатории удалена' },
 
   // оборудование и этапы
-  equipment_permanently_deleted: { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Оборудование удалено' },
-  equipment_status_changed:      { icon:'🔄', bg:'rgba(245,158,11,.1)', label:'Статус изменён' },
-  equipment_photo_updated:       { icon:'🖼️', bg:'rgba(99,102,241,.1)', label:'Фото оборудования' },
-  equipment_created:             { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлено оборудование' },
-  equipment_updated:             { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Оборудование изменено' },
+  equipment_permanently_deleted: { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Оборудование удалено' },
+  equipment_status_changed:      { icon:ACAI.icon('refresh'), bg:'rgba(245,158,11,.1)', label:'Статус изменён' },
+  equipment_photo_updated:       { icon:ACAI.icon('image'), bg:'rgba(99,102,241,.1)', label:'Фото оборудования' },
+  equipment_created:             { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлено оборудование' },
+  equipment_updated:             { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Оборудование изменено' },
   equipment_moved:               { icon:'↔️', bg:'rgba(99,102,241,.1)', label:'Перемещено' },
-  worker_equipment_assigned:     { icon:'🔗', bg:'rgba(99,102,241,.1)', label:'Закреплено за рабочим' },
+  worker_equipment_assigned:     { icon:ACAI.icon('link'), bg:'rgba(99,102,241,.1)', label:'Закреплено за рабочим' },
   stages_reordered:              { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
-  stage_archived:                { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Этап убран' },
-  stage_created:                 { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Создан этап' },
-  stage_updated:                 { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
+  stage_archived:                { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Этап убран' },
+  stage_created:                 { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Создан этап' },
+  stage_updated:                 { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
 
   // задачи, ремонт, запчасти
-  task_assignees_changed:        { icon:'👥', bg:'rgba(99,102,241,.1)', label:'Изменены исполнители' },
-  task_created:                  { icon:'📌', bg:'rgba(59,130,246,.1)', label:'Создана задача' },
-  case_complete_repair:          { icon:'🛠️', bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
-  case_escalated:                { icon:'🚨', bg:'rgba(239,68,68,.1)', label:'Передано специалисту' },
+  task_assignees_changed:        { icon:ACAI.icon('users'), bg:'rgba(99,102,241,.1)', label:'Изменены исполнители' },
+  task_created:                  { icon:ACAI.icon('events'), bg:'rgba(59,130,246,.1)', label:'Создана задача' },
+  case_complete_repair:          { icon:ACAI.icon('tools'), bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
+  case_escalated:                { icon:ACAI.icon('siren'), bg:'rgba(239,68,68,.1)', label:'Передано специалисту' },
   case_take:                     { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
   downtime_closed_by_status:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой закрыт по статусу' },
-  part_archived:                 { icon:'🗄️', bg:'rgba(239,68,68,.1)', label:'Запчасть убрана' },
-  part_created:                  { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Добавлена запчасть' },
-  part_updated:                  { icon:'✏️', bg:'rgba(245,158,11,.1)', label:'Запчасть изменена' },
-  procedure_created:             { icon:'📘', bg:'rgba(59,130,246,.1)', label:'Создана инструкция' },
-  procedure_deleted:             { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Инструкция удалена' },
+  part_archived:                 { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Запчасть убрана' },
+  part_created:                  { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлена запчасть' },
+  part_updated:                  { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Запчасть изменена' },
+  procedure_created:             { icon:ACAI.icon('book'), bg:'rgba(59,130,246,.1)', label:'Создана инструкция' },
+  procedure_deleted:             { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Инструкция удалена' },
 
   // учётные записи
-  admin_revoke_sessions:         { icon:'🔒', bg:'rgba(239,68,68,.1)', label:'Сессии завершены' },
-  user_password_changed:         { icon:'🔑', bg:'rgba(245,158,11,.1)', label:'Пароль сотрудника изменён' },
-  user_role_changed:             { icon:'🏷️', bg:'rgba(245,158,11,.1)', label:'Должность изменена' },
-  user_created:                  { icon:'➕', bg:'rgba(34,197,94,.1)', label:'Создан сотрудник' },
-  user_password_reset:           { icon:'🔑', bg:'rgba(245,158,11,.1)', label:'Пароль сотрудника сброшен' },
-  user_renamed:                  { icon:'✏️', bg:'rgba(59,130,246,.1)', label:'Сотрудник переименован' },
-  user_deleted:                  { icon:'🗑️', bg:'rgba(239,68,68,.1)', label:'Учётка удалена' },
-  user_enabled:                  { icon:'✅', bg:'rgba(34,197,94,.1)', label:'Доступ возвращён' },
-  user_disabled:                 { icon:'🚫', bg:'rgba(239,68,68,.1)', label:'Доступ закрыт' },
-  password_changed:              { icon:'🔑', bg:'rgba(245,158,11,.1)', label:'Пароль изменён' },
-  login_disabled:                { icon:'🚫', bg:'rgba(239,68,68,.1)', label:'Вход при закрытом доступе' },
-  login_blocked:                 { icon:'⛔', bg:'rgba(239,68,68,.1)', label:'Вход заблокирован (перебор)' },
+  admin_revoke_sessions:         { icon:ACAI.icon('lock'), bg:'rgba(239,68,68,.1)', label:'Сессии завершены' },
+  user_password_changed:         { icon:ACAI.icon('key'), bg:'rgba(245,158,11,.1)', label:'Пароль сотрудника изменён' },
+  user_role_changed:             { icon:ACAI.icon('events'), bg:'rgba(245,158,11,.1)', label:'Должность изменена' },
+  user_created:                  { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Создан сотрудник' },
+  user_password_reset:           { icon:ACAI.icon('key'), bg:'rgba(245,158,11,.1)', label:'Пароль сотрудника сброшен' },
+  user_renamed:                  { icon:ACAI.icon('edit'), bg:'rgba(59,130,246,.1)', label:'Сотрудник переименован' },
+  user_deleted:                  { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Учётка удалена' },
+  user_enabled:                  { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Доступ возвращён' },
+  user_disabled:                 { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Доступ закрыт' },
+  password_changed:              { icon:ACAI.icon('key'), bg:'rgba(245,158,11,.1)', label:'Пароль изменён' },
+  login_disabled:                { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Вход при закрытом доступе' },
+  login_blocked:                 { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Вход заблокирован (перебор)' },
 };
 
 function getMeta(action) {
@@ -213,7 +214,7 @@ function getMeta(action) {
   for (const [key, meta] of Object.entries(ACTION_META)) {
     if (action?.includes(key)) return meta;
   }
-  return { icon:'📝', bg:'rgba(100,116,139,.1)', label: action };
+  return { icon:ACAI.icon('note'), bg:'rgba(100,116,139,.1)', label: action };
 }
 
 // Раскрытие записи: что именно поменяли.

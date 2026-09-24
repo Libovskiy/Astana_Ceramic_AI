@@ -186,16 +186,16 @@
 
   var WHAT =
     '<div class="ap-dim">Что приходит:<br>' +
-    "🔴 обращение передано механикам / электрикам<br>" +
-    "🔧 специалист взял ваше обращение или ответил в нём<br>" +
-    "🟡 ремонт завершён — подтвердите закрытие<br>" +
-    "📌 на вас назначили задачу<br>" +
-    "💭 вам написали, пока вас нет на сайте</div>";
+    "<span data-icon=alert></span> обращение передано механикам / электрикам<br>" +
+    "<span data-icon=diagnostics></span> специалист взял ваше обращение или ответил в нём<br>" +
+    "<span data-icon=alert></span> ремонт завершён — подтвердите закрытие<br>" +
+    "<span data-icon=events></span> на вас назначили задачу<br>" +
+    "<span data-icon=messenger></span> вам написали, пока вас нет на сайте</div>";
 
   async function openDialog() {
-    var box = modal('<h3>🔔 Уведомления на телефон</h3><div class="ap-text">Проверяю…</div>');
+    var box = modal('<h3><span data-icon=bell></span> Уведомления на телефон</h3><div class="ap-text">Проверяю…</div>');
     var st = await state();
-    var html = "<h3>🔔 Уведомления на телефон</h3>";
+    var html = "<h3><span data-icon=bell></span> Уведомления на телефон</h3>";
 
     if (st.blocker === "insecure") {
       html +=
@@ -208,7 +208,7 @@
     } else if (st.blocker === "ios-home") {
       html +=
         '<div class="ap-text">На iPhone уведомления приходят, только если сайт добавлен на экран «Домой».</div>' +
-        '<div class="ap-dim">1. Нажмите «Поделиться» ⬆️ внизу Safari.<br>2. «На экран Домой» → «Добавить».<br>3. Откройте ACAI со значка на экране и снова нажмите «Уведомления».<br><br>Нужен iOS 16.4 или новее.</div>' +
+        '<div class="ap-dim">1. Нажмите «Поделиться» <span data-icon=up></span> внизу Safari.<br>2. «На экран Домой» → «Добавить».<br>3. Откройте ACAI со значка на экране и снова нажмите «Уведомления».<br><br>Нужен iOS 16.4 или новее.</div>' +
         '<div class="ap-btns"><button class="ap-btn ap-plain" data-close>Понятно</button></div>';
     } else if (st.blocker === "unsupported") {
       html +=
@@ -220,7 +220,7 @@
         '<div class="ap-btns"><button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
     } else if (st.thisDevice && st.permission === "granted") {
       html +=
-        '<div class="ap-status ap-ok">✅ Включены на этом телефоне</div>' + WHAT +
+        '<div class="ap-status ap-ok"><span data-icon=ok></span> Включены на этом телефоне</div>' + WHAT +
         '<div class="ap-btns">' +
         '<button class="ap-btn ap-primary" data-act="test">Прислать проверочное</button>' +
         '<button class="ap-btn ap-danger" data-act="off">Выключить на этом телефоне</button>' +
@@ -228,7 +228,7 @@
     } else if (st.permission === "denied") {
       html +=
         '<div class="ap-status ap-warn">Уведомления для сайта запрещены в браузере</div>' +
-        '<div class="ap-dim">Разрешите их: значок 🔒 рядом с адресом → «Разрешения» → «Уведомления» → «Разрешить». Потом снова откройте это окно.</div>' +
+        '<div class="ap-dim">Разрешите их: значок <span data-icon=lock></span> рядом с адресом → «Разрешения» → «Уведомления» → «Разрешить». Потом снова откройте это окно.</div>' +
         '<div class="ap-btns"><button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
     } else {
       html +=
@@ -258,7 +258,7 @@
           var msg = e.message;
           if (msg === "cert") {
             box.querySelector(".ap-box").innerHTML =
-              "<h3>🔔 Нужен заводской сертификат</h3>" +
+              "<h3><span data-icon=bell></span> Нужен заводской сертификат</h3>" +
               '<div class="ap-text">Телефон не доверяет адресу сайта, и уведомления не включаются.</div>' +
               '<div class="ap-btns"><a class="ap-btn ap-primary" href="/cert">Установить сертификат</a>' +
               '<button class="ap-btn ap-plain" data-close>Закрыть</button></div>';

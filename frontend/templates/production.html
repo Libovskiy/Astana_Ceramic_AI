@@ -7,7 +7,7 @@
 <title>ACAI — Производство</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <link rel="stylesheet" href="/static/equipment-page.css?v=3">
 <link rel="stylesheet" href="/static/production-page.css?v=4">
 </head>
@@ -67,7 +67,7 @@
         <div id="xlsBody"><div class="loading-state">Загрузка…</div></div>
         <div id="xlsActions" style="display:none;margin-top:14px;gap:8px;flex-wrap:wrap;align-items:center">
           <label class="btn secondary sm" style="cursor:pointer">
-            📥 Загрузить файл отчёта
+            <span data-icon=download></span> Загрузить файл отчёта
             <input type="file" id="xlsFile" accept=".xlsx,.xlsm" style="display:none">
           </label>
           <span id="xlsHint" style="font-size:12px;color:var(--text-dim)"></span>
@@ -82,7 +82,7 @@
            данные в них уже введены, и кто-то может ими пользоваться. -->
       <details id="manualForms" style="margin-top:6px">
         <summary style="cursor:pointer;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:14px;font-weight:600;list-style:none">
-          ✍️ Ручной ввод: отчёт упаковки, учёт выпуска, месячный план
+          <span data-icon=note></span> Ручной ввод: отчёт упаковки, учёт выпуска, месячный план
           <span style="font-weight:400;color:var(--text-dim);font-size:13px">— открыть</span>
         </summary>
         <div style="margin-top:10px">
@@ -181,7 +181,8 @@
      вместе с секцией «Производственный процесс»: открывавший их код
      удалён из production.js, разметка оставалась пустым грузом. -->
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script src="/static/production.js?v=43"></script>
 <script src="/static/xls-report.js?v=2"></script>
@@ -273,7 +274,7 @@ async function loadXls(role){
       </table></div>` : ''}
 
     <div style="font-size:12px;margin-top:10px;${data.stale ? 'color:var(--warn)' : 'color:var(--text-dim)'}">
-      ${data.stale ? '⚠️ ' : ''}Данные из файла «${xlsEsc(run.filename||'—')}» от ${xlsEsc((run.uploaded_at||'').slice(0,10))}${
+      ${data.stale ? '<span data-icon=alert></span> ' : ''}Данные из файла «${xlsEsc(run.filename||'—')}» от ${xlsEsc((run.uploaded_at||'').slice(0,10))}${
         data.uploaded_days_ago === 0 ? ' — загружен сегодня'
         : data.uploaded_days_ago != null ? `, прошло ${data.uploaded_days_ago} ${xlsPlural(data.uploaded_days_ago,'день','дня','дней')}` : ''}.
       Загрузил ${xlsEsc(run.uploaded_by||'—')}.

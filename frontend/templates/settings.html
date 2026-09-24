@@ -7,7 +7,7 @@
 <title>Настройки — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
 .u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
@@ -79,7 +79,7 @@
         </div>
         <div class="card-body" style="padding:10px 14px">
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-            <input class="input" id="userSearch" placeholder="🔍 Поиск..." style="width:200px" oninput="renderUsers()">
+            <input class="input" id="userSearch" placeholder="<span data-icon=search></span> Поиск..." style="width:200px" oninput="renderUsers()">
           </div>
           <div id="userList"><div class="empty">Загрузка...</div></div>
         </div>
@@ -144,7 +144,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
@@ -283,7 +284,7 @@ function renderUsers(){
       <span style="font-size:11px;font-weight:600;color:${ROLE_COLORS[u.role]||'var(--text-dim)'};flex-shrink:0">${ROLE_LABELS[u.role]||u.role}</span>
       <div style="display:flex;gap:6px">
         ${fullAccess ? `<button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>` : ''}
-        <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')">🔑 Пароль</button>
+        <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')"><span data-icon=key></span> Пароль</button>
         <button class="btn secondary sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
         ${!fullAccess ? '' : off
           ? `<button class="btn primary sm" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`

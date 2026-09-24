@@ -7,7 +7,7 @@
 <title>Технолог — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .stage-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;}
 .stage-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
@@ -100,15 +100,16 @@
 
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 const STAGE_ICONS={
-  'Массаподготовка':'⚙️',
-  'Формовка':'🏗️',
-  'Сушка':'💨',
-  'Обжиг':'🔥',
-  'Упаковка':'📦'
+  'Массаподготовка':ACAI.icon('gear'),
+  'Формовка':ACAI.icon('build'),
+  'Сушка':ACAI.icon('wind'),
+  'Обжиг':ACAI.icon('fire'),
+  'Упаковка':ACAI.icon('parts')
 };
 const STAGE_ORDER=['Массаподготовка','Формовка','Сушка','Обжиг','Упаковка'];
 
@@ -233,10 +234,10 @@ function renderStages(){
     return`<div class="stage-card">
       <div class="stage-head" onclick="toggleStage('${stage}')">
         <div style="display:flex;align-items:center;gap:8px">
-          <span class="stage-icon">${STAGE_ICONS[stage]||'🔧'}</span>
+          <span class="stage-icon">${STAGE_ICONS[stage]||ACAI.icon('diagnostics')}</span>
           <span class="stage-title">${stage}</span>
           <span style="font-size:11px;color:var(--text-dim)">${params.length} параметров</span>
-          ${violations>0?`<span class="sensor-badge sensor-danger">⚠ ${violations} вне допуска</span>`:''}
+          ${violations>0?`<span class="sensor-badge sensor-danger"><span data-icon=alert></span> ${violations} вне допуска</span>`:''}
         </div>
         <span style="color:var(--text-dim);font-size:12px">${isCollapsed?'▶ Развернуть':'▼ Свернуть'}</span>
       </div>
@@ -279,10 +280,10 @@ function renderStages(){
             </div>
             <button onclick="showHistory(${p.id},'${p.param_name}')"
               style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px"
-              title="История изменений">📋</button>
+              title="История изменений"><span data-icon=equipment></span></button>
             ${canEdit?`<button onclick="deleteParam(${p.id},'${p.param_name.replace(/'/g,"\\'")}',event)"
               style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:4px"
-              title="Удалить">🗑</button>`:''}
+              title="Удалить"><span data-icon=trash></span></button>`:''}
           </div>`;
         }).join('')}
       `}
@@ -332,7 +333,7 @@ async function showHistory(paramId, paramName){
       ${history.length?history.map(h=>`
         <div style="padding:10px 12px;border-radius:8px;background:var(--surface-2);margin-bottom:6px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:13px;font-weight:600">👤 ${h.changed_by||'—'}</span>
+            <span style="font-size:13px;font-weight:600"><span data-icon=user></span> ${h.changed_by||'—'}</span>
             <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono)">${h.changed_at?.slice(0,16)||'—'}</span>
           </div>
           <div style="font-size:12px;color:var(--text-dim)">

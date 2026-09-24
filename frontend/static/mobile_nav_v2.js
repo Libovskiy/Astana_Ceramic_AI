@@ -115,7 +115,7 @@ function createBottomNav(sidebar) {
 
     // Подпись берём без значка и без счётчика обращений: в
     // link.textContent они идут первыми, и подпись превращалась в
-    // тот же значок — на панели выходило «🏠🏠».
+    // тот же значок — на панели выходило «<span data-icon=home></span><span data-icon=home></span>».
     var copy = link.cloneNode(true);
     var strip = copy.querySelector('.ni-icon');
     if (strip) strip.remove();
@@ -157,7 +157,7 @@ function createBottomNav(sidebar) {
   }).join('');
 
   html += '<button type="button" class="bn-item bn-more">' +
-            '<span class="bn-icon">☰</span>' +
+            '<span class="bn-icon"><span data-icon=menu></span></span>' +
             '<span class="bn-label">Ещё</span>' +
           '</button>';
 

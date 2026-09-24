@@ -326,7 +326,7 @@ async function savePlanForBrickType(brickType, monthlyTarget, confirmed) {
 
             const anomaly = data.anomaly;
 
-            const icon = anomaly.severity === "critical" ? "🔴" : "🟡";
+            const icon = anomaly.severity === "critical" ? ACAI.icon('alert') : ACAI.icon('alert');
 
             const confirmedByUser = confirm(
                 `${icon} ${anomaly.message}\n\nСохранить всё равно?`

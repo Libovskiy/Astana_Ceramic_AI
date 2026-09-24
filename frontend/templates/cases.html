@@ -7,7 +7,7 @@
 <title>Обращения — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .case-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;border-left:4px solid var(--border);transition:border-color .15s;}
 .case-card:hover{border-color:var(--accent);}
@@ -71,7 +71,7 @@
           <option>Обжиг</option>
           <option>Упаковка</option>
         </select>
-        <input class="input" id="searchCases" placeholder="🔍 Поиск..." style="width:200px;margin-left:auto" oninput="renderCases()">
+        <input class="input" id="searchCases" placeholder="<span data-icon=search></span> Поиск..." style="width:200px;margin-left:auto" oninput="renderCases()">
       </div>
 
       <div id="casesList"><div class="empty">Загрузка...</div></div>
@@ -80,7 +80,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:520px;max-width:95vw"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allCases=[];let currentFilter='';let currentUser=null;
@@ -185,7 +186,7 @@ function renderCases(){
       <div class="case-head">
         <div>
           <div class="case-title">${c.equipment_name||c.machine||'Неизвестно'}</div>
-          ${c.equipment_location?`<div style="font-size:11px;color:var(--accent);margin-top:2px">📍 ${c.equipment_location}</div>`:''}
+          ${c.equipment_location?`<div style="font-size:11px;color:var(--accent);margin-top:2px"><span data-icon=events></span> ${c.equipment_location}</div>`:''}
         </div>
         <div class="case-badges">
           <span class="badge" style="background:${color}20;color:${color}">${label}</span>
@@ -197,7 +198,7 @@ function renderCases(){
       ${casePhotos(c.id)}
       <div class="case-meta">
         <span>⏱ Открыто: <span class="reaction-time ${rClass}">${rLabel} назад</span></span>
-        ${c.assigned_to?`<span>👤 ${c.assigned_to}</span>`:'<span style="color:var(--warn)">👤 Не назначен</span>'}
+        ${c.assigned_to?`<span><span data-icon=user></span> ${c.assigned_to}</span>`:'<span style="color:var(--warn)"><span data-icon=user></span> Не назначен</span>'}
         ${dur?`<span>✓ Решено за ${dur}</span>`:''}
         ${c.id?`<span style="font-family:var(--mono)">#${c.id}</span>`:''}
       </div>
@@ -216,12 +217,12 @@ function buildActions(c,cls){
     if(['shift_supervisor','chief_engineer','admin','director'].includes(role))
       parts.push(`<button class="btn secondary sm" onclick="openDraftClose(${c.id})">✓ Закрыть</button>`);
     if(['admin','director','chief_engineer'].includes(role))
-      parts.push(`<button class="btn secondary sm" onclick="openAssign(${c.id})">👤 Назначить</button>`);
+      parts.push(`<button class="btn secondary sm" onclick="openAssign(${c.id})"><span data-icon=user></span> Назначить</button>`);
   }
   if(cls==='draft'&&['chief_engineer','admin','director'].includes(role))
     parts.push(`<button class="btn ok sm" onclick="approveClose(${c.id})">✓ Подтвердить закрытие</button>`);
   if(c.equipment_id)
-    parts.push(`<a href="/diagnostics?equipment_id=${c.equipment_id}" class="btn secondary sm">🔧 Диагностика</a>`);
+    parts.push(`<a href="/diagnostics?equipment_id=${c.equipment_id}" class="btn secondary sm"><span data-icon=diagnostics></span> Диагностика</a>`);
   return parts.join('');
 }
 
@@ -357,7 +358,7 @@ function openNewCase(){
       <div id="nc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
       <div class="modal-foot">
         <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
-        <a href="/diagnostics" class="btn secondary">🤖 ИИ диагностика</a>
+        <a href="/diagnostics" class="btn secondary"><span data-icon=bot></span> ИИ диагностика</a>
         <button class="btn primary" onclick="submitNewCase()">Зафиксировать</button>
       </div>
     `);

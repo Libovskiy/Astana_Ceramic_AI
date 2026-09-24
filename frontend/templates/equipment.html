@@ -6,7 +6,7 @@
 <title>Оборудование — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
 .eq-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,transform .1s;position:relative;overflow:hidden;}
@@ -39,7 +39,7 @@
         <div class="topbar-sub">Производственная структура завода</div>
       </div>
       <div class="topbar-right">
-        <input class="input" id="searchInput" placeholder="🔍 Поиск..." style="width:200px" oninput="renderEquipment()">
+        <input class="input" id="searchInput" placeholder="<span data-icon=search></span> Поиск..." style="width:200px" oninput="renderEquipment()">
         <button class="btn primary" id="addEqBtn" style="display:none" onclick="openAddEquipment()">+ Оборудование</button>
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
@@ -61,7 +61,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:580px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let allEquipment=[];let activeFilter='all';let currentUser=null;
@@ -211,9 +212,9 @@ function renderFilters(){
   counts.to=allEquipment.filter(e=>toState(e.id)).length;
   document.getElementById('filters').innerHTML=[
     `<button class="filter-btn ${activeFilter==='all'?'active':''}" data-filter="all">Все (${counts.all})</button>`,
-    `<button class="filter-btn ${activeFilter==='problem'?'active':''}" data-filter="problem" style="${activeFilter==='problem'?'':'color:var(--warn)'}">⚠ Проблемы</button>`,
-    (noDocs.size ? `<button class="filter-btn ${activeFilter==='nodocs'?'active':''}" data-filter="nodocs" title="По этим станкам ИИ отвечает «нет руководства»">📄 Без руководства (${noDocs.size})</button>` : ''),
-    `<button class="filter-btn ${activeFilter==='to'?'active':''}" data-filter="to" style="${activeFilter==='to'?'':'color:var(--warn)'}">🔧 ТО скоро (${counts.to})</button>`,
+    `<button class="filter-btn ${activeFilter==='problem'?'active':''}" data-filter="problem" style="${activeFilter==='problem'?'':'color:var(--warn)'}"><span data-icon=alert></span> Проблемы</button>`,
+    (noDocs.size ? `<button class="filter-btn ${activeFilter==='nodocs'?'active':''}" data-filter="nodocs" title="По этим станкам ИИ отвечает «нет руководства»"><span data-icon=reports></span> Без руководства (${noDocs.size})</button>` : ''),
+    `<button class="filter-btn ${activeFilter==='to'?'active':''}" data-filter="to" style="${activeFilter==='to'?'':'color:var(--warn)'}"><span data-icon=diagnostics></span> ТО скоро (${counts.to})</button>`,
     ...sorted.map(l=>`<button class="filter-btn ${activeFilter===l?'active':''}" data-filter="${l}">${l} (${counts[l]})</button>`)
   ].join('');
   document.querySelectorAll('.filter-btn').forEach(btn=>{
@@ -312,7 +313,7 @@ async function openDetail(id){
 
     <!-- ТО РАСПИСАНИЕ -->
     <div style="background:var(--surface-2);border-radius:10px;padding:12px;margin-bottom:12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px">🔧 ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px"><span data-icon=diagnostics></span> ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Последнее ТО</div>
@@ -331,29 +332,29 @@ async function openDetail(id){
     </div>
 
     <!-- ДОКУМЕНТЫ -->
-    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📄 ДОКУМЕНТЫ</div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px"><span data-icon=reports></span> ДОКУМЕНТЫ</div>
     <div id="ed-docs" style="margin-bottom:8px"><div style="font-size:12px;color:var(--text-dim)">Загрузка...</div></div>
     ${canEdit?`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 12px;background:var(--surface-2);border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--text-dim);margin-bottom:12px">
-      📎 Прикрепить документ (PDF)
+      <span data-icon=attach></span> Прикрепить документ (PDF)
       <input type="file" accept=".pdf,.doc,.docx" style="display:none" onchange="uploadDoc(${e.id},this)">
     </label>`:''}
 
     <!-- ФОТО С ОБХОДОВ -->
     <div id="ed-photos-wrap" style="display:none;margin-bottom:12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📷 ФОТО С ОБХОДОВ</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px"><span data-icon=camera></span> ФОТО С ОБХОДОВ</div>
       <div id="ed-photos" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
 
     <!-- ИСТОРИЯ -->
-    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">📋 ИСТОРИЯ (${journal.length})</div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px"><span data-icon=equipment></span> ИСТОРИЯ (${journal.length})</div>
     <div style="max-height:160px;overflow-y:auto;margin-bottom:10px">${journalHtml}</div>
 
     <div id="ed-err" style="color:var(--danger);font-size:12px;min-height:14px"></div>
     <div class="modal-foot">
-      ${isAdmin?`<button class="btn danger sm" onclick="archiveEquipment(${e.id})">🗄 Архив</button>`:''}
-      <a href="/diagnostics?equipment_id=${e.id}" class="btn secondary">🔧 Диагностика</a>
+      ${isAdmin?`<button class="btn danger sm" onclick="archiveEquipment(${e.id})"><span data-icon=archive></span> Архив</button>`:''}
+      <a href="/diagnostics?equipment_id=${e.id}" class="btn secondary"><span data-icon=diagnostics></span> Диагностика</a>
       <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
-      ${canEdit?`<button class="btn primary" onclick="saveEquipment(${e.id})">💾 Сохранить</button>`:''}
+      ${canEdit?`<button class="btn primary" onclick="saveEquipment(${e.id})"><span data-icon=archive></span> Сохранить</button>`:''}
     </div>
   `);
   loadDocs(id);
@@ -504,7 +505,7 @@ async function completeMaintenance(id){
 // почему система по нему молчит.
 const DOC_STATE = {
   indexed: {icon:'✓', color:'var(--ok)'},
-  scan:    {icon:'⚠', color:'var(--warn)'},
+  scan:    {icon:ACAI.icon('alert'), color:'var(--warn)'},
   pending: {icon:'…', color:'var(--text-dim)'},
   not_pdf: {icon:'—', color:'var(--text-dim)'},
   missing: {icon:'✕', color:'var(--danger)'},
@@ -517,7 +518,7 @@ async function loadDocs(id){
     const docs=r.documents||[];
     document.getElementById('ed-docs').innerHTML=docs.length
       ?docs.map(d=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface-2);border-radius:7px;margin-bottom:4px">
-          <span>📄</span>
+          <span><span data-icon=reports></span></span>
           <a href="${d.url}" target="_blank" style="flex:1;font-size:12px;color:var(--accent);text-decoration:none">${d.title||d.name}</a>
           <span class="doc-state" data-doc="${d.id}" style="font-size:11px;color:var(--text-dim)"></span>
           <button onclick="deleteDoc(${id},${d.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;padding:2px 6px" title="Удалить">✕</button>

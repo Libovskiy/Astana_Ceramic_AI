@@ -22,8 +22,8 @@
   --warn:      #f59e0b;
   --danger:    #ef4444;
   --accent:    #3b82f6;
-  --mono: 'JetBrains Mono', monospace;
-  --sans: 'Inter', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --radius: 12px;
   --nav-w: 220px;
 
@@ -142,7 +142,19 @@ html, body {
 }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: rgba(59,130,246,.12); color: var(--accent); }
-.nav-item .ni-icon { font-size: 15px; flex-shrink: 0; width: 20px; text-align: center; }
+.nav-item .ni-icon {
+  flex-shrink: 0; width: 20px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+}
+.nav-item.active .ni-icon,
+.nav-item:hover .ni-icon { color: inherit; }
+
+/* Значки вместо эмодзи: один набор на весь сайт, цвет берут от
+   текста рядом. Выравниваем по строке — иначе значок «подпрыгивает»
+   над буквами. */
+.ic { display: inline-block; vertical-align: -0.18em; flex-shrink: 0; }
+[data-icon] { display: inline-flex; align-items: center; }
 .nav-item .ni-badge {
   margin-left: auto; font-size: 10px; font-weight: 700;
   background: var(--danger); color: #fff;

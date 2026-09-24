@@ -414,7 +414,7 @@ def _part_writeoff_now(writeoff_id: int) -> None:
 
     send_to_roles(
         roles,
-        f"📦 Списать со склада? {row['equipment_name'] or '—'}",
+        f"Списать со склада? {row['equipment_name'] or '—'}",
         (f"Похоже, взяли: {', '.join(names)}" if names else "Проверьте, что уходило со склада")
         + f"\nРемонт по обращению №{row['case_id']}",
         url="/parts", tag=f"writeoff-{writeoff_id}",

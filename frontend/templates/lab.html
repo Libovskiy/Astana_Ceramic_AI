@@ -7,7 +7,7 @@
 <title>Лаборатория — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=23">
+<link rel="stylesheet" href="/static/acai.css?v=24">
 <style>
 .tab-bar{display:flex;gap:2px;background:var(--surface-2);border-radius:10px;padding:4px;margin-bottom:20px;}
 .tab-btn{flex:1;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-dim);transition:all .15s;}
@@ -51,8 +51,8 @@
       </div>
 
       <div class="tab-bar">
-        <button class="tab-btn active" onclick="switchTab('journal',this)">📋 Журнал</button>
-        <button class="tab-btn" onclick="switchTab('analytics',this)">📊 Аналитика</button>
+        <button class="tab-btn active" onclick="switchTab('journal',this)"><span data-icon=equipment></span> Журнал</button>
+        <button class="tab-btn" onclick="switchTab('analytics',this)"><span data-icon=analytics></span> Аналитика</button>
       </div>
 
       <div id="tab-journal">
@@ -70,7 +70,8 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:640px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
 
-<script src="/static/acai_layout.js?v=30"></script>
+<script src="/static/icons.js?v=4"></script>
+<script src="/static/acai_layout.js?v=34"></script>
 <script src="/static/mobile_nav_v2.js?v=4"></script>
 <script>
 let entries=[];let canWrite=false;let currentTab='journal';
@@ -138,7 +139,7 @@ function renderJournal(){
     <div class="journal-card" onclick="openEntry(${e.id})">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div>
-          <span class="journal-date">📅 ${e.log_date||'—'}</span>
+          <span class="journal-date"><span data-icon=calendar></span> ${e.log_date||'—'}</span>
           ${e.brigade?`<span style="font-size:11px;color:var(--text-dim);margin-left:8px">Бригада: ${e.brigade}</span>`:''}
           ${e.product_type?`<span class="badge neutral" style="font-size:10px;margin-left:8px">${e.product_type}</span>`:''}
         </div>
@@ -159,7 +160,7 @@ function renderJournal(){
         ${e.feed_clay_hz!=null?`<div class="journal-field"><div class="journal-field-label">Питатель глины (Гц)</div><div class="journal-field-val">${val(e.feed_clay_hz,' Гц')}</div></div>`:''}
         ${e.feed_sand_hz!=null?`<div class="journal-field"><div class="journal-field-label">Питатель песка (Гц)</div><div class="journal-field-val">${val(e.feed_sand_hz,' Гц')}</div></div>`:''}
       </div>
-      ${e.note?`<div style="font-size:12px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">📝 ${e.note}</div>`:''}
+      ${e.note?`<div style="font-size:12px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><span data-icon=note></span> ${e.note}</div>`:''}
     </div>`).join('');
 }
 

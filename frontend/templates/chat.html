@@ -31,8 +31,8 @@
                  (см. HOME_BY_ROLE в chat.js). Рабочему она нужна:
                  упаковочные бригады заполняют сменный отчёт, а он
                  живёт на отдельной странице. -->
-            <button type="button" id="chatTheme" class="chat-action" title="Светлая / тёмная тема">🌙</button>
-            <button type="button" id="chatSound" class="chat-action" title="Звук уведомлений">🔊</button>
+            <button type="button" id="chatTheme" class="chat-action" title="Светлая / тёмная тема"><span data-icon=moon2></span></button>
+            <button type="button" id="chatSound" class="chat-action" title="Звук уведомлений"><span data-icon=sound></span></button>
             <a href="/" id="chatHome" class="chat-action" style="display:none;" title="Другие разделы">Разделы</a>
             <button type="button" id="chatCardButton" class="chat-action" style="display:none;"
                     onclick="toggleCard()" title="История обращения">История</button>
@@ -49,7 +49,7 @@
 
         <!-- Уведомления на телефон: специалист взял обращение, ответил -->
         <button type="button" class="chat-push" id="chatPush" style="display:none;">
-            🔔 Включить уведомления на телефон
+            <span data-icon=bell></span> Включить уведомления на телефон
         </button>
 
         <button type="button" class="chat-new" id="chatNew">
@@ -100,8 +100,8 @@
                 rows="1"
                 placeholder="Напишите сообщение..."
             ></textarea>
-            <button type="button" id="chatMic" class="chat-mic" title="Надиктовать голосом">🎤</button>
-            <button type="button" id="chatSend" class="chat-send" title="Отправить">➤</button>
+            <button type="button" id="chatMic" class="chat-mic" title="Надиктовать голосом"><span data-icon=mic></span></button>
+            <button type="button" id="chatSend" class="chat-send" title="Отправить"><span data-icon=arrow></span></button>
         </div>
 
     </section>
@@ -127,7 +127,7 @@
                     rows="3"
                     placeholder="Например: плёнка рвётся при обмотке, подшипник греется и стучит"
                 ></textarea>
-                <button type="button" id="chatNewMic" class="chat-mic chat-mic-new" title="Надиктовать голосом">🎤</button>
+                <button type="button" id="chatNewMic" class="chat-mic chat-mic-new" title="Надиктовать голосом"><span data-icon=mic></span></button>
             </div>
         </div>
 
@@ -139,10 +139,11 @@
 
 </div>
 
+<script src="/static/icons.js?v=4"></script>
 <script src="/static/notify.js?v=31"></script>
 <script src="/static/voice.js?v=1"></script>
 <script src="/static/push.js?v=1"></script>
-<script src="/static/chat.js?v=43"></script>
+<script src="/static/chat.js?v=46"></script>
 
 </body>
 </html>
