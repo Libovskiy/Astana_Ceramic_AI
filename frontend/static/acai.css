@@ -127,19 +127,25 @@ html, body {
 .sidebar-title { font-size: 13px; font-weight: 700; line-height: 1.2; }
 .sidebar-sub   { font-size: 10px; color: var(--text-dim); }
 
-.sidebar-status {
-  margin: 10px 12px;
+/* Состояние завода: три строки живых данных вместо одной надписи,
+   которая горела всегда. Цвет не единственный признак — у каждой
+   строки свой значок, и текст говорит сам за себя. */
+.sidebar-state {
+  margin: 8px 12px;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 7px 9px; border-radius: 9px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.st-row {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border-radius: 8px;
-  font-size: 11px; font-weight: 600;
-  background: rgba(34,197,94,.08);
-  color: var(--ok); border: 1px solid rgba(34,197,94,.15);
+  font-size: 11px; font-weight: 500; line-height: 1.3;
+  color: var(--text-dim);
 }
-.sidebar-status .dot {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
-  animation: pulse 2s infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+.st-row.st-ok     { color: var(--text-dim); }
+.st-row.st-warn   { color: var(--warn); font-weight: 600; }
+.st-row.st-danger { color: var(--danger); font-weight: 600; }
+.st-row.st-none   { color: var(--text-dim); }
+.st-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sidebar-section {
   padding: 8px 12px 4px;
@@ -191,17 +197,34 @@ html, body {
   flex-shrink: 0;
 }
 /* Должности на заводе длинные («Оператор 1, Массаподготовка и
-   формовка, бригада А») — без обрезки карточка внизу меню
-   разъезжалась на четыре строки. Полное имя остаётся в подсказке. */
-.user-card > div:not(.user-avatar) { min-width: 0; flex: 1; }
+   формовка, бригада А»). Раньше имя обрезалось многоточием — человек
+   видел «Оператор 1, М» и не понимал, под кем сидит. Даём две строки
+   и переносим по словам; дальше — обрезка, но уже по строкам. */
+.user-who { min-width: 0; flex: 1; }
 .user-name {
-  font-size: 12px; font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px; font-weight: 500; line-height: 1.25;
+  /* Три строки: «Оператор 1, Массаподготовка и формовка, бригада А»
+     в две не помещается, а обрезанная должность — это ровно то, из-за
+     чего профиль и был бесполезным. */
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
 }
 .user-role {
-  font-size: 10px; color: var(--text-dim);
+  font-size: 10px; color: var(--text-dim); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* Действия профиля: подписаны словами. Выход был значком-стрелкой,
+   и его искали — а это первое, что нужно на общем компьютере. */
+.user-actions { display: flex; gap: 6px; margin-top: 6px; }
+.user-act {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center;
+  gap: 5px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text-dim); font-family: inherit; font-size: 11px; font-weight: 500;
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.user-act:hover { color: var(--text); border-color: var(--accent); }
 .logout-btn {
   margin-left: 0; background: none; border: none;
   color: var(--text-dim); cursor: pointer; font-size: 16px;

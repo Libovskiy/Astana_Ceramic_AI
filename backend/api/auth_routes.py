@@ -147,7 +147,7 @@ def login(data: LoginRequest, response: Response, request: Request):
         "user": {
             "username": user["username"],
             "full_name": user["full_name"],
-            "role": user["role"]
+            "role": user["role"],
         }
     }
 
@@ -265,7 +265,12 @@ def me(user: dict = Depends(get_current_user)):
             "id": user["id"],
             "username": user["username"],
             "full_name": user["full_name"],
-            "role": user["role"]
+            "role": user["role"],
+            # Бригада — для профиля в меню. У операторов вся должность
+            # записана одной строкой («Оператор 1, Массаподготовка и
+            # формовка, бригада А»), и хвост с бригадой в неё не
+            # помещался — а это то, что человеку важно видеть.
+            "brigade": user.get("brigade"),
         }
     }
 

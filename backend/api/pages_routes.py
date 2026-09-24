@@ -222,11 +222,6 @@ def web_manifest():
     return FileResponse("frontend/static/manifest.webmanifest", media_type="application/manifest+json")
 
 
-@router.get("/cert")
-def cert_page(request: Request):
-    return templates.TemplateResponse(request=request, name="cert.html")
-
-
 @router.get("/usage")
 def usage_page(request: Request):
 

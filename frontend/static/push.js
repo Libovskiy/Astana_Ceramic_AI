@@ -203,7 +203,6 @@
         '<div class="ap-dim">Если на этом телефоне ещё не установлен заводской сертификат — сначала установите его (один раз, 2 минуты).</div>' +
         '<div class="ap-btns">' +
         '<a class="ap-btn ap-primary" href="' + httpsUrl() + '">Открыть защищённый адрес</a>' +
-        '<a class="ap-btn ap-plain" href="/cert">Как установить сертификат</a>' +
         '<button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
     } else if (st.blocker === "ios-home") {
       html +=
@@ -260,7 +259,7 @@
             box.querySelector(".ap-box").innerHTML =
               "<h3><span data-icon=bell></span> Нужен заводской сертификат</h3>" +
               '<div class="ap-text">Телефон не доверяет адресу сайта, и уведомления не включаются.</div>' +
-              '<div class="ap-btns"><a class="ap-btn ap-primary" href="/cert">Установить сертификат</a>' +
+              '<div class="ap-btns">' +
               '<button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
             bind(box);
             return;

@@ -99,6 +99,8 @@ def start_webhmi_collector():
     except Exception as e:
         print(f"Коллектор WebHMI не запустился: {e}")
 
+from backend.api.status_routes import router as status_router
+app.include_router(status_router)
 from backend.api.lab_routes import router as lab_router
 app.include_router(lab_router)
 from backend.api.conversation_routes import router as conversation_router

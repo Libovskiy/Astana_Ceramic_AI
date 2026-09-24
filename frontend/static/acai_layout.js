@@ -344,24 +344,115 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
         <div class="sidebar-sub">ACAI v2</div>
       </div>
     </div>
-    <div class="sidebar-status" id="factoryStatusSidebar">
-      <div class="dot"></div>
-      <span id="factoryStatusText">Завод работает</span>
-    </div>
+    <!-- Состояние завода. Раньше здесь висело «Завод работает» — всегда,
+         при любом положении дел. Теперь три признака из настоящих
+         данных, и только тем, кому цех вообще интересен: лаборанту и
+         аналитику они место не занимают. -->
+    <div class="sidebar-state" id="factoryState"></div>
     <div style="flex:1">${items}</div>
     <div class="sidebar-bottom">
+      <!-- Профиль: имя целиком (должности на заводе длинные, обрезка
+           превращала «Оператор 1, Массаподготовка…» в «Оператор 1, М»),
+           роль и два действия, которые человеку реально нужны.
+           Выход раньше был значком-стрелкой без подписи — его искали. -->
       <div class="user-card">
         <div class="user-avatar" style="background:${avatarColor}">${initials}</div>
-        <div>
-          <div class="user-name" title="${(user?.full_name || '').replace(/"/g,'&quot;')}">${user?.full_name || '—'}</div>
-          <div class="user-role">${roleLabel}</div>
+        <div class="user-who">
+          <div class="user-name">${user?.full_name || '—'}</div>
+          <div class="user-role">${roleLabel}${user?.brigade ? ` · бригада ${user.brigade}` : ''}</div>
         </div>
         <button class="theme-btn" onclick="toggleTheme(this)" title="Светлая / тёмная тема">${themeIcon()}</button>
-        <button class="logout-btn" onclick="logout()" title="Выйти">↪</button>
+      </div>
+      <div class="user-actions">
+        <button type="button" class="user-act" onclick="openMyPassword()">${ACAI.icon('key', 15)} Сменить пароль</button>
+        <button type="button" class="user-act" onclick="logout()">${ACAI.icon('logout', 15)} Выйти</button>
       </div>
     </div>
   `;
 }
+
+// ── СВОЙ ПАРОЛЬ ──────────────────────────────────────────
+//
+// Раньше кнопка вела в «Настройки», а они открыты только начальникам:
+// у слесаря, электрика, оператора, технолога и лаборанта она давала
+// «нет доступа». Свой пароль вправе менять каждый, поэтому меняем
+// прямо здесь — ручка /api/auth/change-password открыта всем вошедшим.
+function openMyPassword() {
+  ACAI.showModal(`
+    <h3>Смена пароля</h3>
+    <div class="field"><label>Текущий пароль</label>
+      <input class="input" id="mp-old" type="password" autocomplete="current-password"></div>
+    <div class="field"><label>Новый пароль</label>
+      <input class="input" id="mp-new" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>Повторите новый</label>
+      <input class="input" id="mp-new2" type="password" autocomplete="new-password"></div>
+    <div id="mp-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="saveMyPassword(this)">Сменить</button>
+    </div>`);
+  setTimeout(() => document.getElementById('mp-old')?.focus(), 50);
+}
+
+async function saveMyPassword(button) {
+  const err = document.getElementById('mp-err');
+  const oldPass = document.getElementById('mp-old').value;
+  const newPass = document.getElementById('mp-new').value;
+  const again = document.getElementById('mp-new2').value;
+
+  if (newPass !== again) { err.textContent = 'Новые пароли не совпали'; return; }
+  if (newPass.length < 10) { err.textContent = 'Пароль короче 10 символов'; return; }
+
+  button.disabled = true;
+  try {
+    const r = await fetch('/api/auth/change-password', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: oldPass, new_password: newPass }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!d.success) { err.textContent = d.message || 'Не получилось'; button.disabled = false; return; }
+    ACAI.closeModal();
+    ACAI.toast('Пароль изменён');
+  } catch {
+    err.textContent = 'Нет связи с сервером';
+    button.disabled = false;
+  }
+}
+
+
+// ── СОСТОЯНИЕ ЗАВОДА В ШАПКЕ ─────────────────────────────
+//
+// Кому показывать: тем, кто отвечает за цех или в нём работает.
+// Лаборанту, технологу и аналитику молчание датчиков и число аварий
+// ничего не меняют в их работе — им там пусто, и это честнее, чем
+// надпись «всё хорошо», которую никто не проверял.
+const STATE_ROLES = ['admin', 'director', 'chief_engineer', 'production_chief',
+                     'shift_supervisor', 'chief_mechanic', 'mechanic',
+                     'chief_electrician', 'electrician', 'worker'];
+
+async function renderFactoryState(role) {
+  const box = document.getElementById('factoryState');
+  if (!box) return;
+  if (!STATE_ROLES.includes(role)) { box.remove(); return; }
+
+  let d;
+  try { d = await ACAI.get('/api/status/header'); } catch { box.remove(); return; }
+
+  const row = (item, icon, hint) => `
+    <div class="st-row st-${item.state}" ${hint ? `title="${hint}"` : ''}>
+      ${ACAI.icon(icon, 14)}<span>${item.text}</span>
+    </div>`;
+
+  box.innerHTML = row(d.alarms, d.alarms.state === 'ok' ? 'ok' : 'alert')
+                + row(d.sensors, d.sensors.state === 'ok' ? 'pulse' : 'offline')
+                + row(d.people, 'users', d.people_note || '');
+
+  // Обновляем раз в минуту: цифры живые, но дёргать сервер чаще незачем.
+  clearTimeout(renderFactoryState._timer);
+  renderFactoryState._timer = setTimeout(() => renderFactoryState(role), 60000);
+}
+
 
 // ── ТЕМА ─────────────────────────────────────────────────
 // Сама тема ставится в theme.js в <head>; здесь только кнопка.
@@ -452,17 +543,7 @@ async function initLayout() {
 
   initBell();
 
-  // статус завода
-  if (dashData) {
-    const err = dashData.error_equipment || 0;
-    const warn = dashData.warning_equipment || 0;
-    const el = document.getElementById('factoryStatusSidebar');
-    const txt = document.getElementById('factoryStatusText');
-    if (el && txt) {
-      if (err > 0) { el.style.color='var(--danger)'; el.style.background='rgba(239,68,68,.08)'; txt.textContent=`${err} ошибок`; }
-      else if (warn > 0) { el.style.color='var(--warn)'; el.style.background='rgba(245,158,11,.08)'; txt.textContent='Требует внимания'; }
-    }
-  }
+  renderFactoryState(user?.role);
 
   startClock();
   return { user, dashData };
