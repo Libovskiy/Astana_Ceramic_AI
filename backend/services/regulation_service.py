@@ -77,7 +77,17 @@ CREATE TABLE IF NOT EXISTS regulations (
     activated_at TEXT,
     activated_by TEXT,
 
-    UNIQUE (product_type, version)
+    -- Вид продукции → изделие → версии регламента изделия.
+    --
+    -- Раньше здесь стояло UNIQUE (product_type, version), и версии
+    -- считались по одному виду. Из-за этого два разных изделия с
+    -- одним видом система считала версиями друг друга: «CERABLOCK»
+    -- 2.1NF, 6.9NF и 25-10.7NF легли версиями 1, 2, 3 одного
+    -- регламента, как будто одно заменило другое. Технолог обходил
+    -- это, дописывая точки к виду: «Cerablock.», «Cerablock..».
+    --
+    -- Ключ — пара вид + изделие, версии нумеруются внутри неё.
+    UNIQUE (product_type, name, version)
 );
 
 
@@ -364,7 +374,7 @@ CREATE TABLE IF NOT EXISTS equipment_documents (
 
 
 _BASE_INDEXES = [
-    "CREATE INDEX IF NOT EXISTS idx_reg_product ON regulations(product_type, status)",
+    "CREATE INDEX IF NOT EXISTS idx_reg_product ON regulations(product_type, name, status)",
     "CREATE INDEX IF NOT EXISTS idx_reg_param ON regulation_parameters(regulation_id, stage_id)",
     "CREATE INDEX IF NOT EXISTS idx_reg_param_eq ON regulation_parameters(equipment_id)",
     "CREATE INDEX IF NOT EXISTS idx_meas_param ON measurements(parameter_id, measured_at)",
@@ -704,8 +714,9 @@ def create_regulation(product_type, name, created_by, description=None, photo_pa
     cursor = conn.cursor()
 
     existing = cursor.execute(
-        "SELECT MAX(version) AS v FROM regulations WHERE product_type = ?",
-        (product_type,)
+        "SELECT MAX(version) AS v FROM regulations "
+        "WHERE product_type = ? AND name = ?",
+        (product_type, name)
     ).fetchone()
 
     version = (existing["v"] or 0) + 1
@@ -728,19 +739,35 @@ def create_regulation(product_type, name, created_by, description=None, photo_pa
     return regulation_id
 
 
-def get_active(product_type):
-    """Регламент, по которому работают прямо сейчас."""
+def get_active(product_type, name=None):
+    """
+    Регламент, по которому работают прямо сейчас.
+
+    Без указания изделия отдаёт действующий по виду — так зовут
+    старые места, где изделие одно на вид. С изделием — его
+    собственный действующий регламент.
+    """
 
     conn = get_connection()
 
-    row = conn.execute(
-        """
-        SELECT * FROM regulations
-        WHERE product_type = ? AND status = 'active'
-        ORDER BY version DESC LIMIT 1
-        """,
-        (product_type,)
-    ).fetchone()
+    if name is None:
+        row = conn.execute(
+            """
+            SELECT * FROM regulations
+            WHERE product_type = ? AND status = 'active'
+            ORDER BY version DESC LIMIT 1
+            """,
+            (product_type,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT * FROM regulations
+            WHERE product_type = ? AND name = ? AND status = 'active'
+            ORDER BY version DESC LIMIT 1
+            """,
+            (product_type, name)
+        ).fetchone()
 
     conn.close()
 
@@ -864,7 +891,7 @@ def activate(regulation_id, activated_by):
     cursor = conn.cursor()
 
     row = cursor.execute(
-        "SELECT product_type, version FROM regulations WHERE id = ?",
+        "SELECT product_type, name, version FROM regulations WHERE id = ?",
         (regulation_id,)
     ).fetchone()
 
@@ -872,12 +899,14 @@ def activate(regulation_id, activated_by):
         conn.close()
         raise ValueError("Регламент не найден.")
 
+    # Изделие в ключе: иначе ввод в действие регламента блока
+    # 6,9 НФ убирал бы в архив действующий регламент блока 2,1 НФ.
     previous = cursor.execute(
         """
         SELECT id FROM regulations
-        WHERE product_type = ? AND status = 'active'
+        WHERE product_type = ? AND name = ? AND status = 'active'
         """,
-        (row["product_type"],)
+        (row["product_type"], row["name"])
     ).fetchone()
 
     if previous:
@@ -973,10 +1002,10 @@ def get_working_version(regulation_id, reason, changed_by, changed_role=None):
         active = conn.execute(
             """
             SELECT id, version FROM regulations
-            WHERE product_type = ? AND status = 'active'
+            WHERE product_type = ? AND name = ? AND status = 'active'
             ORDER BY version DESC LIMIT 1
             """,
-            (source["product_type"],)
+            (source["product_type"], source["name"])
         ).fetchone()
 
         if active:
@@ -987,10 +1016,10 @@ def get_working_version(regulation_id, reason, changed_by, changed_role=None):
     existing = conn.execute(
         """
         SELECT id FROM regulations
-        WHERE product_type = ? AND status = 'draft' AND version > ?
+        WHERE product_type = ? AND name = ? AND status = 'draft' AND version > ?
         ORDER BY version DESC LIMIT 1
         """,
-        (source["product_type"], source["version"])
+        (source["product_type"], source["name"], source["version"])
     ).fetchone()
 
     conn.close()
@@ -1027,8 +1056,9 @@ def create_version(regulation_id, reason, changed_by, changed_role=None):
     cursor = conn.cursor()
 
     version = cursor.execute(
-        "SELECT MAX(version) AS v FROM regulations WHERE product_type = ?",
-        (source["product_type"],)
+        "SELECT MAX(version) AS v FROM regulations "
+        "WHERE product_type = ? AND name = ?",
+        (source["product_type"], source["name"])
     ).fetchone()["v"] + 1
 
     cursor.execute(
@@ -1870,8 +1900,8 @@ def update_parameters(regulation_id, updates, reason, changed_by, changed_role=N
     if published:
         cursor.execute(
             "UPDATE regulations SET status = 'archived', replaced_by = ? "
-            "WHERE product_type = ? AND status = 'active' AND id != ?",
-            (new_id, old["product_type"], new_id)
+            "WHERE product_type = ? AND name = ? AND status = 'active' AND id != ?",
+            (new_id, old["product_type"], old["name"], new_id)
         )
 
     conn.commit()
@@ -1892,7 +1922,7 @@ def add_parameter(regulation_id, data, changed_by=None, changed_role=None, reaso
 
     conn = get_connection()
     status_row = conn.execute(
-        "SELECT status, product_type FROM regulations WHERE id = ?", (regulation_id,)
+        "SELECT status, product_type, name FROM regulations WHERE id = ?", (regulation_id,)
     ).fetchone()
     conn.close()
 
@@ -1982,8 +2012,9 @@ def add_parameter(regulation_id, data, changed_by=None, changed_role=None, reaso
         cursor.execute(
             """UPDATE regulations
                SET status = 'archived', replaced_by = ?
-               WHERE product_type = ? AND status = 'active' AND id != ?""",
-            (new_regulation_id, status_row["product_type"], new_regulation_id)
+               WHERE product_type = ? AND name = ? AND status = 'active' AND id != ?""",
+            (new_regulation_id, status_row["product_type"], status_row["name"],
+             new_regulation_id)
         )
         cursor.execute(
             """UPDATE regulations
@@ -2025,8 +2056,9 @@ def add_stage(regulation_id, name, stage_key=None, sort_order=100, description=N
     stage_id = cur.lastrowid
     # If this was a versioned change, make it active immediately.
     if target_id != regulation_id and AUTO_PUBLISH_ON_EDIT:
-        cur.execute("UPDATE regulations SET status='archived', replaced_by=? WHERE product_type=? AND status='active' AND id!=?",
-                    (target_id, source["product_type"], target_id))
+        cur.execute("UPDATE regulations SET status='archived', replaced_by=? "
+                    "WHERE product_type=? AND name=? AND status='active' AND id!=?",
+                    (target_id, source["product_type"], source["name"], target_id))
         cur.execute("UPDATE regulations SET status='active', activated_at=?, activated_by=? WHERE id=?",
                     (now(), changed_by, target_id))
     conn.commit(); conn.close()
@@ -2061,7 +2093,9 @@ def update_stage(regulation_id, stage_id, changes, reason, changed_by, changed_r
         vals.append(target_stage_id); cur.execute(f"UPDATE regulation_stages SET {', '.join(sets)} WHERE id=?",vals)
     if not changes_out: conn.rollback(); conn.close(); raise ValueError("Изменений не обнаружено.")
     if target_id != regulation_id:
-        cur.execute("UPDATE regulations SET status='archived', replaced_by=? WHERE product_type=? AND status='active' AND id!=?",(target_id,source["product_type"],target_id))
+        cur.execute("UPDATE regulations SET status='archived', replaced_by=? "
+                    "WHERE product_type=? AND name=? AND status='active' AND id!=?",
+                    (target_id, source["product_type"], source["name"], target_id))
         _publish_if_allowed(cur, target_id, changed_by)
     conn.commit(); conn.close()
     return {"regulation_id":target_id,"stage_id":target_stage_id,"changes":changes_out,"version_created":target_id!=regulation_id}
@@ -2085,7 +2119,9 @@ def archive_stage(regulation_id, stage_id, reason, changed_by, changed_role=None
     if not target_stage_id: conn.close(); raise ValueError("Этап новой версии не найден.")
     cur.execute("UPDATE regulation_stages SET is_active=0 WHERE id=?",(target_stage_id,))
     if target_id!=regulation_id:
-        cur.execute("UPDATE regulations SET status='archived', replaced_by=? WHERE product_type=? AND status='active' AND id!=?",(target_id,source["product_type"],target_id))
+        cur.execute("UPDATE regulations SET status='archived', replaced_by=? "
+                    "WHERE product_type=? AND name=? AND status='active' AND id!=?",
+                    (target_id, source["product_type"], source["name"], target_id))
         _publish_if_allowed(cur, target_id, changed_by)
     conn.commit(); conn.close()
     return {"regulation_id":target_id,"version_created":target_id!=regulation_id}
@@ -2111,7 +2147,9 @@ def archive_parameter(regulation_id, parameter_id, reason, changed_by, changed_r
     if not target_param_id: conn.close(); raise ValueError("Параметр новой версии не найден.")
     cur.execute("UPDATE regulation_parameters SET is_active=0 WHERE id=?",(target_param_id,))
     if target_id!=regulation_id:
-        cur.execute("UPDATE regulations SET status='archived', replaced_by=? WHERE product_type=? AND status='active' AND id!=?",(target_id,source["product_type"],target_id))
+        cur.execute("UPDATE regulations SET status='archived', replaced_by=? "
+                    "WHERE product_type=? AND name=? AND status='active' AND id!=?",
+                    (target_id, source["product_type"], source["name"], target_id))
         _publish_if_allowed(cur, target_id, changed_by)
     conn.commit(); conn.close()
     return {"regulation_id":target_id,"version_created":target_id!=regulation_id}
@@ -2135,8 +2173,8 @@ def _activate_structural_version(conn, target_id, source):
     conn.execute(
         """UPDATE regulations
            SET status='archived', replaced_by=?
-           WHERE product_type=? AND status='active' AND id!=?""",
-        (target_id, source["product_type"], target_id)
+           WHERE product_type=? AND name=? AND status='active' AND id!=?""",
+        (target_id, source["product_type"], source["name"], target_id)
     )
     conn.execute(
         """UPDATE regulations
@@ -2358,27 +2396,35 @@ def list_regulations(include_drafts=True, user=None):
     if not include_drafts:
         query += " WHERE r.status != 'draft'"
 
-    query += " ORDER BY r.product_type, r.version DESC"
+    query += " ORDER BY r.product_type, r.name, r.version DESC"
 
     conn = get_connection()
     rows = [dict(row) for row in conn.execute(query).fetchall()]
     conn.close()
 
-    # Показываем по одной карточке на вид продукции — действующую,
-    # а если её нет, самую свежую. Иначе после пяти правок список
-    # превратится в пять одинаковых карточек.
+    # Показываем по одной карточке на изделие — действующую, а если
+    # её нет, самую свежую. Иначе после пяти правок список превратится
+    # в пять одинаковых карточек.
+    #
+    # Ключом был один вид продукции, и тогда пять блоков Cerablock
+    # сворачивались в одну карточку: четыре изделия пропадали со
+    # страницы, хотя лежали в базе.
+    # Что показать в карточке: сначала действующая версия, нет её —
+    # черновик, нет и его — самая свежая архивная. Раньше сравнивали
+    # только с «active», и при равенстве побеждала первая по порядку,
+    # то есть архивная версия с бо́льшим номером. У блока 6,9 НФ
+    # архивная v2 закрывала собой черновик v1, и изделие уезжало в
+    # архив на глазах у технолога, хотя работа по нему шла.
+    RANK = {"active": 0, "draft": 1, "archived": 2}
+
     best = {}
 
     for row in rows:
 
-        key = row["product_type"]
+        key = (row["product_type"], row["name"])
         current = best.get(key)
 
-        if current is None:
-            best[key] = row
-            continue
-
-        if row["status"] == "active" and current["status"] != "active":
+        if current is None or RANK.get(row["status"], 3) < RANK.get(current["status"], 3):
             best[key] = row
 
     result = list(best.values())
@@ -2393,13 +2439,19 @@ def list_regulations(include_drafts=True, user=None):
 
     for row in result:
         row["versions"] = sum(
-            1 for item in rows if item["product_type"] == row["product_type"]
+            1 for item in rows
+            if item["product_type"] == row["product_type"]
+            and item["name"] == row["name"]
         )
 
     return result
 
 
-def get_versions(product_type):
+def get_versions(product_type, name=None):
+    """
+    Все версии регламента. Без изделия — по виду целиком (так зовут
+    старые места), с изделием — только его цепочка.
+    """
 
     conn = get_connection()
 
@@ -2413,10 +2465,10 @@ def get_versions(product_type):
                 (SELECT changes FROM regulation_changes c
                   WHERE c.regulation_id = r.id ORDER BY c.id DESC LIMIT 1) AS changes
             FROM regulations r
-            WHERE r.product_type = ?
+            WHERE r.product_type = ? AND (? IS NULL OR r.name = ?)
             ORDER BY r.version DESC
             """,
-            (product_type,)
+            (product_type, name, name)
         ).fetchall()
     ]
 

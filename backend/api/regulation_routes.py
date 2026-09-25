@@ -171,7 +171,10 @@ def detail(regulation_id: int, user: dict = Depends(current_user)):
     return {
         "success": True,
         "regulation": regulation,
-        "versions": service.get_versions(regulation["product_type"]),
+        # История именно этого изделия. По одному виду сюда попадали бы
+        # версии соседних изделий — у блоков это пять чужих цепочек.
+        "versions": service.get_versions(regulation["product_type"],
+                                         regulation["name"]),
         "ack": service.get_ack_status(regulation_id, regulation["version"], user),
         "permissions": permissions_for(user),
     }
