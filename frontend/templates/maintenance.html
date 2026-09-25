@@ -7,7 +7,7 @@
 <title>График ТО — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=57">
+<link rel="stylesheet" href="/static/acai.css?v=59">
 <style>
 .to-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
 .to-table{width:100%;border-collapse:collapse;min-width:900px;}
@@ -46,6 +46,7 @@
 .mo-planned{width:100%;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .15s;}
 .mo-planned:hover{filter:brightness(1.2);}
 .mo-done{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);}
+.mo-waiting{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);}
 .mo-pending{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);}
 .mo-overdue{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);}
 .mo-empty{background:transparent;border:1px dashed transparent;}
@@ -104,6 +105,9 @@
       </div>
 
       <!-- МЕТРИКИ -->
+      <!-- ЖДУТ ПРОВЕРКИ: видит главный инженер и тот, кто его замещает -->
+      <div id="pendingBox" style="display:none;margin-bottom:16px"></div>
+
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="toMetrics">
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
@@ -132,7 +136,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:560px;max-width:95vw"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=57"></script>
+<script src="/static/acai_layout.js?v=59"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
@@ -155,6 +159,7 @@ async function loadSchedule(){
   logs=sr.logs||[];
   allEquipment=er.equipment||er||[];
   await loadReportPlanned();
+  await loadPending();
   renderMetrics();
   renderTable();
 }
@@ -182,16 +187,21 @@ function renderMetrics(){
   const year=parseInt(document.getElementById('yearSelect').value);
   const total=schedule.length;
   const planned=schedule.reduce((s,r)=>{const ms=r.months.split(',').map(Number);return s+ms.length;},0);
-  const done=logs.length;
+  // Выполненной считается только принятая работа. Отметка, которая
+  // ждёт проверки, ещё не выполнение: иначе смысл проверки теряется —
+  // график закроется сам, как только исполнитель нажмёт кнопку.
+  const done=logs.filter(l=>(l.status||'confirmed')==='confirmed').length;
+  const waiting=logs.filter(l=>l.status==='pending').length;
   const overdue=schedule.reduce((s,r)=>{
     const ms=r.months.split(',').map(Number).filter(m=>monthOverdue(year,m));
-    const doneMths=logs.filter(l=>l.schedule_id===r.id).map(l=>l.month);
+    const doneMths=logs.filter(l=>l.schedule_id===r.id
+      &&(l.status||'confirmed')==='confirmed').map(l=>l.month);
     return s+ms.filter(m=>!doneMths.includes(m)).length;
   },0);
   document.getElementById('toMetrics').innerHTML=`
     <div class="metric accent"><div class="metric-label">Видов работ</div><div class="metric-value accent">${total}</div></div>
     <div class="metric accent"><div class="metric-label">Запланировано</div><div class="metric-value accent">${planned}</div><div class="metric-sub">выполнений за год</div></div>
-    <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div></div>
+    <div class="metric ok"><div class="metric-label">Выполнено</div><div class="metric-value ok">${done}</div><div class="metric-sub">${waiting?`ещё ${waiting} ждёт проверки`:'принято инженером'}</div></div>
     <div class="metric ${overdue>0?'danger':'ok'}"><div class="metric-label">Просрочено</div><div class="metric-value ${overdue>0?'danger':'ok'}">${overdue}</div></div>`;
 
   // Тот же счёт, что в «Аналитике» и «Отчётах»: работы, которые должны
@@ -348,18 +358,32 @@ function renderTable(){
       const monthCells=MONTHS.map((_,i)=>{
         const m=i+1;
         const isPlanned=plannedMonths.includes(m);
-        const isDone=doneMonths.includes(m);
-        const isOverdue=isPlanned&&!isDone&&monthOverdue(year,m);
+        // Отметка теперь имеет три состояния: ждёт проверки, принята,
+        // возвращена. Возвращённая — это НЕ выполнено: инженер посмотрел
+        // и не принял, работа снова висит на исполнителе.
+        const mark=doneLogs.find(l=>l.month===m);
+        const state=mark?(mark.status||'confirmed'):null;
+        const isDone=state==='confirmed';
+        const isWaiting=state==='pending';
+        const isBack=state==='rejected';
+        const isOverdue=isPlanned&&!isDone&&!isWaiting&&monthOverdue(year,m);
 
-        if(!isPlanned&&!isDone)return`<td class="month-cell"><div class="mo-planned mo-empty"></div></td>`;
+        if(!isPlanned&&!mark)return`<td class="month-cell"><div class="mo-planned mo-empty"></div></td>`;
 
         let cls='mo-pending';
         if(isDone)cls='mo-done';
-        else if(isOverdue)cls='mo-overdue';
+        else if(isWaiting)cls='mo-waiting';
+        else if(isBack||isOverdue)cls='mo-overdue';
+
+        const hint=isDone?`Принял ${mark.confirmed_by||'—'} — нажмите, чтобы посмотреть`
+                 :isWaiting?`Отметил ${mark.done_by||'—'}, ждёт проверки`
+                 :isBack?`Возвращено: ${mark.review_comment||'без замечания'}`
+                 :'Нажмите, чтобы отметить выполнение';
 
         return`<td class="month-cell">
-          <div class="mo-planned ${cls}" onclick="toggleMonth(${row.id},${row.equipment_id},'${row.work_name}',${m},${year},${isDone})" title="${isDone?'Выполнено — нажмите отменить':'Нажмите отметить выполнено'}">
-            <span class="${typeColor}" style="font-size:13px;${isDone?'color:var(--ok)':''}">${isDone?'✓':typeIcon}</span>
+          <div class="mo-planned ${cls}" onclick="openMark(${row.id},${row.equipment_id},${JSON.stringify(row.work_name).replace(/"/g,'&quot;')},${m},${year})" title="${mEsc(hint)}">
+            <span class="${typeColor}" style="font-size:13px;${isDone?'color:var(--ok)':isWaiting?'color:var(--warn)':''}">${
+              isDone?'✓':isWaiting?'…':isBack?'!':typeIcon}</span>
           </div>
         </td>`;
       }).join('');
@@ -380,17 +404,171 @@ function renderTable(){
   document.getElementById('toBody').innerHTML=html;
 }
 
-async function toggleMonth(schedId,eqId,workName,month,year,isDone){
+function mEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+// ── ЖДУТ ПРОВЕРКИ ──────────────────────────────────────────────────
+//
+// Отметка исполнителя — это заявка, а не закрытие. Здесь главный
+// инженер видит всё, что ему принесли, и принимает или возвращает.
+// Блок показывается только тому, кто действительно может принимать:
+// кнопка, которая приводит к «нет прав», хуже её отсутствия.
+let pendingItems=[];
+
+async function loadPending(){
+  const box=document.getElementById('pendingBox');
+  if(!box) return;
+  const year=document.getElementById('yearSelect').value;
+
+  let data;
+  try{ data=await ACAI.get(`/api/maintenance/pending?year=${year}`); }
+  catch{ box.style.display='none'; return; }
+
+  pendingItems=data.items||[];
+
+  if(!data.can_confirm||!pendingItems.length){
+    box.style.display='none';
+    return;
+  }
+
+  box.style.display='';
+  box.innerHTML=`
+    <div class="card">
+      <div class="card-head">
+        <h2>Ждут вашей проверки <span style="font-size:11px;color:var(--text-dim)">${pendingItems.length}</span></h2>
+        <span style="font-size:11px;color:var(--text-dim)">пока не приняты — работа считается невыполненной</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        ${pendingItems.map(item=>`
+          <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600">${mEsc(item.work_name)}</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
+                ${mEsc(item.equipment_name||'станок не указан')} · ${MONTHS[(item.month||1)-1]} ·
+                ${mEsc(item.done_by||'—')}, ${mEsc((item.done_at||'').slice(0,16))}
+              </div>
+              ${item.note?`<div style="font-size:13px;margin-top:6px;background:var(--surface-2);border-radius:8px;padding:9px 11px">${mEsc(item.note)}</div>`:''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+              <button class="btn ok sm" onclick="reviewWork(${item.id}, true)">Принять</button>
+              <button class="btn secondary sm" onclick="openReject(${item.id})">Вернуть</button>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function reviewWork(logId, approve, comment){
   try{
-    if(isDone){
-      await fetch('/api/maintenance/log',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedule_id:schedId,month,year})});
-      ACAI.toast('Отменено');
-    }else{
-      await ACAI.post('/api/maintenance/log',{schedule_id:schedId,equipment_id:eqId,work_name:workName,month,year});
-      ACAI.toast('Отмечено ✓','ok');
-    }
+    await ACAI.post('/api/maintenance/review',{log_id:logId,approve,comment:comment||null});
+    ACAI.closeModal();
+    ACAI.toast(approve?'Принято':'Возвращено исполнителю','ok');
     await loadSchedule();
-  }catch(e){ACAI.toast(e.message,'danger');}
+  }catch(e){
+    const err=document.getElementById('rj-err');
+    if(err) err.textContent=e.message||'Не удалось';
+    else ACAI.toast(e.message||'Не удалось','danger');
+  }
+}
+
+function openReject(logId){
+  const item=pendingItems.find(x=>x.id===logId)||{};
+  ACAI.showModal(`
+    <h3>Вернуть работу</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      ${mEsc(item.work_name||'')} · ${mEsc(item.done_by||'')}
+    </div>
+    <div class="field">
+      <label>Что не так *</label>
+      <textarea class="input" id="rj-comment" rows="3"
+        placeholder="Например: зазор не замерен, нужна фотография"></textarea>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Исполнитель увидит это замечание в графике. Работа снова
+        считается невыполненной.
+      </div>
+    </div>
+    <div id="rj-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn danger" onclick="submitReject(${logId})">Вернуть</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('rj-comment')?.focus(),50);
+}
+
+function submitReject(logId){
+  const comment=(document.getElementById('rj-comment')?.value||'').trim();
+  if(!comment){ document.getElementById('rj-err').textContent='Напишите, что не так'; return; }
+  reviewWork(logId, false, comment);
+}
+
+// ── ОТМЕТКА ВЫПОЛНЕНИЯ ─────────────────────────────────────────────
+//
+// Раньше клик по клетке сразу закрывал работу, и тем же кликом её
+// можно было открыть обратно. Механик сам закрывал свои работы, и
+// график показывал желаемое: проверить, что сделано на самом деле,
+// было нечем.
+//
+// Теперь отметка — это заявка: исполнитель пишет, ЧТО он сделал, а
+// главный инженер принимает или возвращает с замечанием. Просроченной
+// работа перестаёт быть только после того, как её приняли.
+function openMark(schedId, eqId, workName, month, year){
+  const mark=(logs||[]).find(l=>l.schedule_id===schedId&&l.month===month);
+  const state=mark?(mark.status||'confirmed'):null;
+
+  // Уже принятую работу не переоткрываем кликом: показываем, кто и
+  // когда принял. Переоткрытие — это решение, а не промах мышкой.
+  if(state==='confirmed'){
+    ACAI.showModal(`
+      <h3>${mEsc(workName)}</h3>
+      <div style="font-size:13px;line-height:1.7;margin-bottom:14px">
+        <div>Отметил: <b>${mEsc(mark.done_by||'—')}</b>, ${mEsc((mark.done_at||'').slice(0,16))}</div>
+        <div>Принял: <b>${mEsc(mark.confirmed_by||'—')}</b>, ${mEsc((mark.confirmed_at||'').slice(0,16))}</div>
+        ${mark.note?`<div style="margin-top:8px;background:var(--surface-2);border-radius:8px;padding:10px">${mEsc(mark.note)}</div>`:''}
+      </div>
+      <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`);
+    return;
+  }
+
+  const back = state==='rejected';
+  ACAI.showModal(`
+    <h3>${back?'Работу вернули':'Отметить выполнение'}</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      ${mEsc(workName)} · ${MONTHS[month-1]} ${year}
+    </div>
+    ${back&&mark.review_comment?`
+      <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:13px">
+        <b>Замечание:</b> ${mEsc(mark.review_comment)}
+      </div>`:''}
+    ${state==='pending'?`
+      <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:13px">
+        Уже отмечено (${mEsc(mark.done_by||'—')}) и ждёт проверки главного инженера.
+      </div>`:''}
+    <div class="field">
+      <label>Что сделано *</label>
+      <textarea class="input" id="mk-note" rows="3"
+        placeholder="Например: заменил смазку, проверил зазор — 0,3 мм"></textarea>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Без описания отметка бессмысленна: инженеру нечего проверять,
+        а через месяц никто не вспомнит, что именно делали.
+      </div>
+    </div>
+    <div id="mk-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitMark(${schedId},${month},${year})">Отметить</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('mk-note')?.focus(),50);
+}
+
+async function submitMark(schedId, month, year){
+  const note=(document.getElementById('mk-note')?.value||'').trim();
+  const err=document.getElementById('mk-err');
+  if(!note){ err.textContent='Напишите, что было сделано'; return; }
+  try{
+    await ACAI.post('/api/maintenance/done',{schedule_id:schedId,month,year,note});
+    ACAI.closeModal();
+    ACAI.toast('Отмечено — ждёт проверки инженера','ok');
+    await loadSchedule();
+  }catch(e){ err.textContent=e.message||'Не удалось отметить'; }
 }
 
 async function deleteWork(id){
