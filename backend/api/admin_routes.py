@@ -26,7 +26,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.config import is_owner
-from backend.services.audit_service import log_action
+from backend.services.audit_service import log_action, log_edit
 from backend.services.auth_service import (
     get_user_by_session,
     create_user,
@@ -185,9 +185,32 @@ def reset(user_id: int, user: dict = Depends(admin_user)):
     }
 
 
+
+def _user_snapshot(user_id: int) -> dict:
+    """Поля сотрудника, за изменением которых следит журнал.
+
+    Пароль сюда не попадает — ни в каком виде. Факт его смены пишется
+    отдельным действием, а хеш журналу не нужен."""
+    import sqlite3
+    from backend.config import DB_NAME
+    try:
+        conn = sqlite3.connect(DB_NAME, timeout=10)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT username, full_name, role, brigade, COALESCE(hidden, 0) AS hidden "
+            "FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else {}
+    except Exception:
+        return {}
+
+
 @router.put("/users/{user_id}")
 def rename(user_id: int, request: RenameRequest, user: dict = Depends(admin_user)):
     _guard_target(user, user_id)
+
+    before = _user_snapshot(user_id)
 
     try:
         rename_user(
@@ -199,7 +222,12 @@ def rename(user_id: int, request: RenameRequest, user: dict = Depends(admin_user
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
-    log_action(username=user["username"], role=user["role"], action="user_renamed",
-               target=f"user:{user_id}", details=request.username or request.full_name)
+    after = _user_snapshot(user_id)
+    changes = log_edit(
+        entity_type="user", entity_id=user_id,
+        before=before, after=after, user=user,
+        action="user_renamed",
+        name=after.get("full_name") or after.get("username"),
+    )
 
-    return {"success": True}
+    return {"success": True, "changed": [c["label"] for c in changes]}

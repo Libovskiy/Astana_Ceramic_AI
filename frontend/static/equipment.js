@@ -918,14 +918,21 @@ window.showEquipmentJournal = async function (equipmentId) {
         const title = escapeHtml((data.equipment && data.equipment.name) || (known && known.name) || "станка");
 
         if (!data.events.length) {
-            body.innerHTML = `<div class="empty-state">История пока пуста для «${title}».</div>`;
+            body.innerHTML = `
+                <h3 style="margin-top: 0;">${title}</h3>
+                <div id="cardEditHistory"></div>
+                <div class="empty-state">Событий по станку пока не было.</div>`;
+            loadCardEditHistory(equipmentId);
             return;
         }
 
         body.innerHTML = `
             <h3 style="margin-top: 0;">${title}</h3>
+            <div id="cardEditHistory"></div>
             ${data.events.map(createJournalEventRow).join("")}
         `;
+
+        loadCardEditHistory(equipmentId);
 
     } catch (error) {
 
@@ -995,6 +1002,53 @@ function escapeHtml(value) {
 
     return div.innerHTML;
 
+}
+
+
+// ── КТО И ЧТО МЕНЯЛ В КАРТОЧКЕ ────────────────────────────────────
+//
+// «История оборудования» показывала события завода: поломки, ремонты,
+// отметки ТО. Правок самой карточки там не было, и на вопрос «кто
+// сменил станку службу» ответить было нечем — только перебором общего
+// журнала за месяц. А задают его, стоя у станка.
+async function loadCardEditHistory(equipmentId) {
+
+    const box = document.getElementById("cardEditHistory");
+    if (!box) return;
+
+    let data;
+    try {
+        const response = await fetch(`/api/history/equipment/${equipmentId}`, { credentials: "include" });
+        if (!response.ok) return;           // прав нет или запись не та — просто не показываем блок
+        data = await response.json();
+    } catch (error) {
+        console.warn("[card-history]", error);
+        return;
+    }
+
+    const history = (data && data.history) || [];
+    if (!history.length) return;            // не правили ни разу — и писать не о чем
+
+    box.innerHTML = `
+        <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;
+                    letter-spacing:.06em;margin:4px 0 8px">Правки карточки</div>
+        ${history.map(item => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--border)">
+                <div style="font-size:12px;color:var(--text-dim)">
+                    ${escapeHtml(item.created_at || "")} · ${escapeHtml(item.username || "—")}
+                </div>
+                ${item.changes.length
+                    ? item.changes.map(change => `
+                        <div style="font-size:13px;margin-top:3px">
+                            ${escapeHtml(change.label)}:
+                            <span style="color:var(--text-dim)">${escapeHtml(change.before)}</span>
+                            →
+                            <b>${escapeHtml(change.after)}</b>
+                        </div>`).join("")
+                    : `<div style="font-size:13px;margin-top:3px">${escapeHtml(item.details || item.action)}</div>`}
+                ${item.reason ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">причина: ${escapeHtml(item.reason)}</div>` : ""}
+            </div>`).join("")}
+        <div style="height:14px"></div>`;
 }
 
 })();

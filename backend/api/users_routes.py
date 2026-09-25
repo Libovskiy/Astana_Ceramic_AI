@@ -5,7 +5,7 @@
 """
 
 from fastapi import APIRouter
-from backend.services.audit_service import log_action
+from backend.services.audit_service import log_action, log_edit
 from backend.services.auth_service import (
     VALID_ROLES,
     assign_equipment,
@@ -145,6 +145,26 @@ def update_user_role_route(
             "message": "Нельзя снять с себя роль admin через этот интерфейс."
         }
 
+    # Что было до смены должности: в журнале нужна пара «было → стало»,
+    # иначе строка «Изменена должность · mechanic» не говорит, кем
+    # человек был вчера.
+    import sqlite3
+    from backend.config import DB_NAME
+
+    def snapshot():
+        try:
+            conn = sqlite3.connect(DB_NAME, timeout=10)
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT role, full_name FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            conn.close()
+            return dict(row) if row else {}
+        except Exception:
+            return {}
+
+    before = snapshot()
+
     try:
 
         update_user_role(user_id, request.role)
@@ -156,16 +176,17 @@ def update_user_role_route(
             "message": str(error)
         }
 
-    log_action(
-        username=user["username"],
-        role=user["role"],
+    after = snapshot()
+    changes = log_edit(
+        entity_type="user", entity_id=user_id,
+        before=before, after=after, user=user,
         action="user_role_changed",
-        target=f"user:{user_id}",
-        details=request.role
+        name=after.get("full_name"),
     )
 
     return {
-        "success": True
+        "success": True,
+        "changed": [c["label"] for c in changes],
     }
 
 

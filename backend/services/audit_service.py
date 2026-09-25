@@ -304,6 +304,10 @@ def get_audit_log_by_target(target=None, entity_type: str = None, entity_id: int
 _SKIP_FIELDS = {
     "id", "updated_at", "created_at", "knowledge_indexed_at",
     "knowledge_error", "file_path",
+    # Пароли в журнал не попадают ни в каком виде. Сам факт смены
+    # пароля пишется отдельным действием, а хеш — нет: журнал читают
+    # шесть ролей, и это не то, что им нужно видеть.
+    "password", "password_hash", "hashed_password", "token", "session_token",
 }
 
 _FIELD_LABELS = {
@@ -338,7 +342,61 @@ _FIELD_LABELS = {
     "added_at": "Добавлен",
     "approved_at": "Утверждён",
     "rejected_at": "Отклонён",
+
+    # Оборудование
+    "type": "Тип",
+    "location": "Цех",
+    "discipline": "Служба",
+    "stage": "Этап",
+    "health": "Состояние, %",
+    "readiness": "Готовность, %",
+    "inventory_number": "Инвентарный номер",
+    "parent_id": "Входит в",
+    "maintenance_interval_days": "Межсервисный интервал, дней",
+    "maintenance_interval_hours": "Межсервисный интервал, часов",
+    "next_maintenance_at": "Следующее ТО",
+    "last_maintenance_at": "Последнее ТО",
+
+    # Люди
+    "username": "Логин",
+    "full_name": "Имя",
+    "role": "Должность",
+    "brigade": "Бригада",
+    "phone": "Телефон",
+    "hidden": "Скрыт",
+
+    # Справочники и запчасти
+    "quantity": "Количество",
+    "min_quantity": "Неснижаемый остаток",
+    "part_number": "Артикул",
+    "supplier": "Поставщик",
+    "price": "Цена",
+
+    # Регламенты
+    "product_type": "Вид продукции",
+    "version": "Версия",
+    "param_type": "Тип параметра",
+    "plc_tag": "Регистр панели",
+    "check_interval": "Как часто проверять",
+    "norm_source": "Источник нормы",
+    "fact_source": "Откуда факт",
 }
+
+# Название поля в словаре может совпасть у разных сущностей и значить
+# разное: «Статус» у станка — работает или стоит, у документа — принят
+# или на проверке. Здесь уточнения по типу записи.
+_FIELD_LABELS_BY_TYPE = {
+    "equipment": {"status": "Состояние станка", "name": "Название станка"},
+    "user": {"status": "Доступ", "name": "Имя"},
+    "document": {"status": "Проверка документа", "title": "Название документа"},
+    "part": {"name": "Название запчасти"},
+}
+
+
+def field_label(field: str, entity_type: str = None) -> str:
+    """Человеческое имя поля. С уточнением по типу записи, если есть."""
+    by_type = _FIELD_LABELS_BY_TYPE.get(entity_type or "", {})
+    return by_type.get(field) or _FIELD_LABELS.get(field, field)
 
 # Поля, где 1/0 означают «да/нет», а не число.
 _YESNO_FIELDS = {"is_active", "active", "is_critical", "hidden", "maintenance_required"}
@@ -407,6 +465,95 @@ def diff_change(before_json, after_json) -> list:
             "before": _readable(was, field),
             "after": _readable(now_value, field),
         })
+
+    return changes
+
+
+def changed_fields(before: dict, after: dict, entity_type: str = None) -> list:
+    """
+    Что именно поменялось: [{field, label, before, after}].
+
+    Работает по словарям, а не по JSON, — так им пользуется log_edit
+    до записи, чтобы понять, есть ли вообще о чём писать.
+    """
+
+    before = before or {}
+    after = after or {}
+    changes = []
+
+    for field in sorted(set(before) | set(after)):
+
+        if field in _SKIP_FIELDS:
+            continue
+
+        was, now_value = before.get(field), after.get(field)
+
+        if was == now_value:
+            continue
+
+        # Пустое так и осталось пустым — это не изменение. Ноль и «0»
+        # приходят из базы вперемешку, и без этого журнал полнился бы
+        # строками «Скрыт: нет → нет».
+        if was in (None, "") and now_value in (None, ""):
+            continue
+        if str(was) == str(now_value):
+            continue
+
+        changes.append({
+            "field": field,
+            "label": field_label(field, entity_type),
+            "before": _readable(was, field),
+            "after": _readable(now_value, field),
+        })
+
+    return changes
+
+
+def log_edit(entity_type: str, entity_id, before: dict, after: dict,
+             user: dict = None, action: str = None, name: str = None,
+             reason: str = None) -> list:
+    """
+    Записать ПРАВКУ: только то, что действительно изменилось.
+
+    Зачем отдельно от log_action. Правка станка писала в журнал одну
+    строку «Изменено оборудование» и название — и по ней нельзя было
+    понять, сменили цех, службу или переименовали. Разница «было →
+    стало» в базе уже поддерживалась (before_json/after_json), но
+    почти никто её не заполнял: на боевом из 271 записи поля «было»
+    есть у пятнадцати.
+
+    Здесь считается разница по полям, и:
+
+      • если не изменилось ничего — записи нет вовсе. Нажатое
+        «Сохранить» без правок не должно оставлять след, иначе журнал
+        засоряется и в нём перестают искать;
+      • в журнал попадают ТОЛЬКО изменившиеся поля, а не вся строка.
+        Меньше мусора, и пароль с путями к файлам туда не утекает
+        (см. _SKIP_FIELDS);
+      • имена полей человеческие и зависят от типа записи: «Статус» у
+        станка и у документа — разные вещи.
+
+    Возвращает список изменений — вызывающий код может показать его
+    человеку («изменено 3 поля») или проверить в тесте.
+    """
+
+    changes = changed_fields(before, after, entity_type)
+
+    if not changes:
+        return []
+
+    fields = [c["field"] for c in changes]
+
+    log_action(
+        username=(user or {}).get("username"),
+        role=(user or {}).get("role"),
+        action=action or f"{entity_type}_updated",
+        target=f"{entity_type}:{entity_id}",
+        details=name,
+        before={f: (before or {}).get(f) for f in fields},
+        after={f: (after or {}).get(f) for f in fields},
+        reason=reason,
+    )
 
     return changes
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter
 import re as _re
 import unicodedata as _ud
 from backend.config import DB_NAME
-from backend.services.audit_service import get_audit_log_by_target, log_action
+from backend.services.audit_service import get_audit_log_by_target, log_action, log_edit
 from backend.services.auth_service import get_assigned_equipment_ids
 from backend.services.case_service import get_cases_by_equipment
 from backend.services.downtime_service import (
@@ -295,6 +295,27 @@ def update_equipment_route(
     if not can(user, "structure.edit"):
         raise HTTPException(status_code=403, detail=DENIED_REASON["structure.edit"])
 
+    # Снимок ДО правки: без него в журнале оставалась одна строка
+    # «Изменено оборудование» и название, и понять, сменили цех, службу
+    # или просто переименовали, было нельзя.
+    import sqlite3 as _sqlite3
+    from backend.config import DB_NAME as _DB
+
+    def _snapshot():
+        try:
+            conn = _sqlite3.connect(_DB, timeout=10)
+            conn.row_factory = _sqlite3.Row
+            row = conn.execute(
+                "SELECT name, type, stage, discipline, location "
+                "FROM equipment WHERE id = ?", (equipment_id,)
+            ).fetchone()
+            conn.close()
+            return dict(row) if row else {}
+        except Exception:
+            return {}
+
+    before = _snapshot()
+
     try:
 
         update_equipment_details(
@@ -313,16 +334,21 @@ def update_equipment_route(
             "message": str(error)
         }
 
-    log_action(
-        username=user["username"],
-        role=user["role"],
+    changes = log_edit(
+        entity_type="equipment",
+        entity_id=equipment_id,
+        before=before,
+        after=_snapshot(),
+        user=user,
         action="equipment_updated",
-        target=f"equipment:{equipment_id}",
-        details=request.name
+        name=request.name,
     )
 
     return {
-        "success": True
+        "success": True,
+        # Сколько полей реально изменилось. Ноль — значит нажали
+        # «Сохранить», ничего не поменяв; записи в журнале тоже нет.
+        "changed": [c["label"] for c in changes],
     }
 
 

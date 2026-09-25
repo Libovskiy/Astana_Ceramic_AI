@@ -6,7 +6,7 @@
 <title>Оборудование — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=48">
+<link rel="stylesheet" href="/static/acai.css?v=50">
 <style>
 .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}
 .eq-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,transform .1s;position:relative;overflow:hidden;}
@@ -62,7 +62,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:580px;max-width:95vw;max-height:90vh;overflow-y:auto"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=48"></script>
+<script src="/static/acai_layout.js?v=50"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 let allEquipment=[];let currentUser=null;
@@ -74,6 +74,9 @@ let allEquipment=[];let currentUser=null;
 let activeFilter = new URLSearchParams(location.search).get('zone') || 'all';
 const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
 
+// В правках карточки печатаются имена людей и значения полей из
+// базы — экранируем, а не вставляем как есть.
+function edEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
 function eqClass(s){return s==='Ошибка'?'danger':s==='Внимание'?'warn':s==='Работает'?'ok':'';}
 function healthColor(h){return h>=80?'var(--ok)':h>=50?'var(--warn)':'var(--danger)';}
 
@@ -280,6 +283,29 @@ async function openDetail(id){
   // история
   let journal=[];
   try{const jr=await ACAI.get(`/api/equipment/${id}/journal`);journal=jr.journal||jr||[];}catch{}
+
+  // Правки самой карточки — отдельно от событий завода. «История»
+  // показывает поломки и ремонты, а на вопрос «кто сменил станку
+  // службу» ответить было нечем: только перебором общего журнала за
+  // месяц. А задают его, стоя у станка.
+  let edits=[];
+  try{const er=await ACAI.get(`/api/history/equipment/${id}`);edits=er.history||[];}catch{}
+  const editsHtml = edits.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px">
+      <span data-icon=edit></span> ПРАВКИ КАРТОЧКИ (${edits.length})</div>
+    <div style="max-height:150px;overflow-y:auto;margin-bottom:10px">
+      ${edits.map(item=>`
+        <div style="padding:7px 10px;border-radius:8px;background:var(--surface-2);margin-bottom:4px">
+          <div style="font-size:11px;color:var(--text-dim)">
+            ${edEsc(item.created_at||'')} · ${edEsc(item.username||'—')}
+          </div>
+          ${item.changes.length
+            ? item.changes.map(ch=>`<div style="font-size:12px;margin-top:2px">
+                ${edEsc(ch.label)}: <span style="color:var(--text-dim)">${edEsc(ch.before)}</span> → <b>${edEsc(ch.after)}</b>
+              </div>`).join('')
+            : `<div style="font-size:12px;margin-top:2px">${edEsc(item.details||item.action)}</div>`}
+        </div>`).join('')}
+    </div>` : '';
   const journalHtml=journal.length
     ?journal.slice(0,5).map(j=>`<div style="padding:7px 10px;border-radius:8px;background:var(--surface-2);margin-bottom:4px;border-left:3px solid ${j.type==='case'?'var(--accent)':'var(--ok)'}">
         <div style="display:flex;justify-content:space-between">
@@ -354,6 +380,8 @@ async function openDetail(id){
     <!-- ИСТОРИЯ -->
     <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px"><span data-icon=equipment></span> ИСТОРИЯ (${journal.length})</div>
     <div style="max-height:160px;overflow-y:auto;margin-bottom:10px">${journalHtml}</div>
+
+    ${editsHtml}
 
     <div id="ed-err" style="color:var(--danger);font-size:12px;min-height:14px"></div>
     <div class="modal-foot">

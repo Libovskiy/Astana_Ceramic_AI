@@ -134,6 +134,48 @@ def get_audit_entry_route(
     return {"success": True, "entry": entry}
 
 
+@router.get("/api/history/{entity_type}/{entity_id}")
+def entity_history(entity_type: str, entity_id: int,
+                   limit: int = 20,
+                   user: dict = Depends(get_current_user)):
+    """
+    История правок одной записи — для блока на её карточке.
+
+    Зачем на карточке, а не только в общем журнале. Вопрос «кто
+    поменял цех у этого станка» задают, стоя у этого станка, а не
+    листая журнал за месяц. Раньше ответ можно было найти только
+    перебором общего списка.
+
+    Доступ — как к самой записи: кто видит карточку станка, видит и
+    её историю. Отдельного права нет: скрывать от механика, что
+    начальник сменил станку службу, незачем — он это и так увидит.
+    """
+
+    from backend.services.audit_service import get_audit_log_by_target, diff_change
+
+    allowed = {"equipment", "user", "document", "part", "regulation", "procedure"}
+    if entity_type not in allowed:
+        raise HTTPException(status_code=400, detail="Неизвестный вид записи.")
+
+    rows = get_audit_log_by_target(entity_type=entity_type, entity_id=entity_id)
+
+    out = []
+    for row in rows[:limit]:
+        changes = diff_change(row.get("before_json"), row.get("after_json"))
+        out.append({
+            "id": row["id"],
+            "action": row["action"],
+            "username": row["username"],
+            "role": row["role"],
+            "created_at": row["created_at"],
+            "details": row.get("details"),
+            "reason": row.get("reason"),
+            "changes": changes,
+        })
+
+    return {"success": True, "history": out, "total": len(rows)}
+
+
 @router.get("/api/audit-log")
 def get_audit_log_route(
     action: str | None = None,
