@@ -74,6 +74,18 @@ def warm_knowledge_index():
         except Exception as error:
             print(f"[knowledge] прогрев пропущен: {error}")
 
+        # Тем же заходом — хеши документации. Первый обход docs/ считает
+        # sha256 по 697 МБ: 5,9 секунды на боевом (замерено 25.09.2026).
+        # Дальше берётся из кэша за 0,2 с. Пусть за это платит запуск,
+        # а не человек, открывший «Знания».
+        try:
+            from backend.services.docs_library_service import scan_library
+            library = scan_library()
+            print(f"[docs] документация готова: файлов {library['files_total']}, "
+                  f"разных {library['unique']}")
+        except Exception as error:
+            print(f"[docs] прогрев пропущен: {error}")
+
     threading.Thread(target=warm, daemon=True).start()
 
 
