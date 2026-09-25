@@ -72,13 +72,39 @@ def main():
         "не встаёт в технологическую цепочку на «Производстве»",
         [e["name"] for e in no_stage])
 
-    with_docs = {r["equipment_id"] for r in rows(
+    # Документы у станка приходят ИЗ ДВУХ мест, и считать надо по
+    # обоим. В таблице equipment_documents лежит то, что заводили
+    # руками через карточку станка — семь станков. На диске в docs/
+    # лежит то, что заливали папками мимо системы, и «Документация»
+    # привязывает эти папки к станкам по имени — двадцать три станка.
+    # По одной таблице выходило «42 станка без документов», хотя на
+    # деле их 22: у двадцати документы есть, просто не заведены.
+    from_registry = {r["equipment_id"] for r in rows(
         conn, "SELECT DISTINCT equipment_id FROM equipment_documents "
               "WHERE COALESCE(is_active,1)=1 AND equipment_id IS NOT NULL")}
+
+    try:
+        from backend.services.docs_library_service import scan_library
+        library = scan_library()
+        from_disk = {i["machine_id"] for g in library["groups"]
+                     for i in g["items"] if i["machine_id"] and not i["empty"]}
+    except Exception as error:
+        print(f"[связи] документы с диска не прочитаны: {error}")
+        from_disk = set()
+
+    with_docs = from_registry | from_disk
     no_docs = [e for e in eq if e["id"] not in with_docs]
-    add("Станок", "документы", total_eq, len(no_docs),
-        "ИИ по нему отвечает без руководства, механик читать нечего",
+    add("Станок", "документы (таблица + диск)", total_eq, len(no_docs),
+        "ИИ по нему отвечает без руководства, механику читать нечего",
         [e["name"] for e in no_docs])
+
+    # Отдельно: документы есть на диске, но в системе не заведены.
+    # Это не «нет документов», а «система о них не знает»: в карточке
+    # станка их не видно и на проверку они не выносятся.
+    only_disk = from_disk - from_registry
+    add("Станок", "документы заведены в системе", len(with_docs), len(only_disk),
+        "файлы на диске есть, но в карточке станка их нет — только в «Документации»",
+        [e["name"] for e in eq if e["id"] in only_disk])
 
     with_to = {r["equipment_id"] for r in rows(
         conn, "SELECT DISTINCT equipment_id FROM maintenance_schedule")}
