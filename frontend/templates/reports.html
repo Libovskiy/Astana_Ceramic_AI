@@ -7,7 +7,7 @@
 <title>Отчёты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=36">
+<link rel="stylesheet" href="/static/acai.css?v=37">
 <style>
 .report-card {
   background:var(--surface); border:1px solid var(--border);
@@ -285,7 +285,9 @@ async function showReport(type) {
     const rows = Object.entries(r).filter(([k])=>LABELS[k]);
     const fmtVal = (k,v) => {
       if (k==='моточасы_общие') return v.value;
-      if (k==='авария_флаг') return v.value==='0' ? 'нет' : 'ЕСТЬ';
+      // Сравнивать строкой нельзя: панель шлёт «0», но любое «0.0»
+      // или пробел превратили бы «нет аварии» в «ЕСТЬ». Считаем числом.
+      if (k==='авария_флаг') { const a = parseFloat(v.value); return a > 0 ? 'ЕСТЬ' : 'нет'; }
       const n = parseFloat(v.value);
       if (!isFinite(n)) return v.value;
       return n.toFixed(1) + (k.includes('проц') ? '%' : k.includes('гц') ? ' Гц' : '');

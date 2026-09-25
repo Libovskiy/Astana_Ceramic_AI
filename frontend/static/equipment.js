@@ -400,7 +400,7 @@ function updateSummary(list) {
         const hint = document.getElementById("totalHint");
         if (hint && window.DISCIPLINE_LOCK && Array.isArray(equipmentData)) {
             const all = equipmentData.filter(item => item.is_active !== 0).length;
-            hint.textContent = all > list.length ? `; всего на заводе ${all}` : "";
+            hint.textContent = all > list.length ? ` из ${all} на заводе` : "";
         }
     }
 
