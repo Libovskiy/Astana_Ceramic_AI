@@ -1,19 +1,92 @@
 """
-Параметры технолога: нормы, история изменений.
+Параметры технолога: нормы, история изменений, справочник регистров.
 
-Вынесено из main.py без изменений поведения.
+Вынесено из main.py без изменений поведения; справочник регистров
+добавлен 25.09.2026.
 """
 
-from fastapi import APIRouter
-from backend.config import DB_NAME
-from fastapi import Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
+from backend.config import DB_NAME
 from backend.api.common import (
     get_current_user,
     require_roles,
 )
+from backend.services import sensor_registers_service as registers
+from backend.services.audit_service import log_edit
 
 router = APIRouter()
+
+
+# Регистры правит тот, кто знает панель. Технолог задаёт НОРМЫ, а
+# какой регистр к какому станку относится — это про железо, и
+# отвечает за это главный инженер.
+REGISTER_EDIT_ROLES = ("chief_engineer", "chief_electrician", "admin")
+
+
+class RegisterPatch(BaseModel):
+    title: str | None = None
+    unit: str | None = None
+    equipment_id: int | None = None
+    note: str | None = None
+    # Отдельный признак: «снять станок» и «не трогать станок» через
+    # один и тот же null различить иначе нельзя.
+    clear_equipment: bool = False
+
+
+@router.get("/api/sensor-registers")
+def get_registers(user: dict = Depends(get_current_user)):
+    """
+    Справочник регистров панели.
+
+    Раньше связь «параметр → регистр» была зашита в код страницы
+    (LIVE_MAP в technolog.html, пять пар). Поменять её мог только
+    программист, а знает эти пары главный инженер.
+    """
+
+    registers.sync_from_panel()
+    rows = registers.list_registers()
+
+    return {
+        "success": True,
+        "registers": rows,
+        "can_edit": user["role"] in REGISTER_EDIT_ROLES,
+        "live": sum(1 for r in rows if r["state"] == "live"),
+        "silent": sum(1 for r in rows if r["state"] == "silent"),
+        "unbound": sum(1 for r in rows if not r["equipment_id"]),
+        "unnamed": sum(1 for r in rows if not (r["title"] or "").strip()),
+    }
+
+
+@router.put("/api/sensor-registers/{register_id}")
+def patch_register(register_id: int, patch: RegisterPatch,
+                   user: dict = Depends(require_roles(*REGISTER_EDIT_ROLES))):
+    """Назначить регистру имя, единицу и станок."""
+
+    try:
+        result = registers.update_register(
+            register_id,
+            title=patch.title,
+            unit=patch.unit,
+            equipment_id=(0 if patch.clear_equipment else patch.equipment_id),
+            note=patch.note,
+            changed_by=user["username"],
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    keep = ("title", "unit", "equipment_id", "note")
+    changes = log_edit(
+        entity_type="sensor_register", entity_id=register_id,
+        before={k: result["before"].get(k) for k in keep},
+        after={k: result["after"].get(k) for k in keep},
+        user=user, action="sensor_register_updated",
+        name=result["after"].get("register"),
+    )
+
+    return {"success": True, "register": result["after"],
+            "changed": [c["label"] for c in changes]}
 
 @router.get("/api/technolog/params")
 def get_technolog_params(user: dict = Depends(get_current_user)):

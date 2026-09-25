@@ -7,7 +7,7 @@
 <title>Журнал — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=51">
+<link rel="stylesheet" href="/static/acai.css?v=53">
 <style>
 .log-item {
   display:flex; align-items:flex-start; gap:14px;
@@ -101,7 +101,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=51"></script>
+<script src="/static/acai_layout.js?v=53"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 let allEntries = [];
@@ -163,6 +163,7 @@ const ACTION_META = {
   plc_error_archived:            { icon:ACAI.icon('archive'), bg:'rgba(100,116,139,.1)', label:'Убран код ошибки панели' },
   parts_written_off:             { icon:ACAI.icon('parts'), bg:'rgba(34,197,94,.1)', label:'Списаны запчасти по ремонту' },
   parts_writeoff_skipped:        { icon:ACAI.icon('parts'), bg:'rgba(245,158,11,.1)', label:'Запчасти списать не вышло' },
+  sensor_register_updated:       { icon:ACAI.icon('diagnostics'), bg:'rgba(245,158,11,.1)', label:'Изменён регистр панели' },
   regulation_created:            { icon:ACAI.icon('reports'), bg:'rgba(59,130,246,.1)', label:'Создан регламент' },
   regulation_changed:            { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Регламент изменён' },
 

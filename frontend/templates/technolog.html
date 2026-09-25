@@ -7,7 +7,7 @@
 <title>Технолог — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=51">
+<link rel="stylesheet" href="/static/acai.css?v=53">
 <style>
 .stage-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;}
 .stage-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
@@ -63,6 +63,33 @@
 .sensor-ok{background:rgba(34,197,94,.15);color:var(--ok);}
 .sensor-warn{background:rgba(245,158,11,.15);color:var(--warn);}
 .sensor-danger{background:rgba(239,68,68,.15);color:var(--danger);}
+
+/* Вкладки — те же, что в «Знаниях»: один вид на всю систему. */
+.kn-tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+.kn-tab { padding:8px 14px; border-radius:9px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text-dim); font-size:13px; font-weight:600;
+  cursor:pointer; font-family:var(--sans); display:flex; align-items:center; gap:7px;
+  min-height:40px; }
+.kn-tab:hover { border-color:var(--accent); }
+.kn-tab.on { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+.kn-tab .kn-n { font-size:11px; padding:1px 7px; border-radius:999px;
+  background:var(--surface-2); color:var(--text-dim); }
+.kn-tab.on .kn-n { background:rgba(255,255,255,.22); color:#fff; }
+
+.doc-note { font-size:12px;color:var(--text-dim);line-height:1.5;margin:0 0 10px; }
+
+/* Строка регистра: слева имя как его шлёт панель, дальше — что это
+   значит и чей это станок. Эти два поля и заполняет инженер. */
+.reg-row { display:grid; grid-template-columns:minmax(200px,1fr) minmax(180px,1fr) minmax(200px,1fr);
+  gap:12px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border); }
+.reg-row:last-child { border-bottom:none; }
+.reg-name { font-family:var(--code); font-size:12px; font-weight:600; overflow-wrap:anywhere; }
+.reg-sub { font-size:11px; color:var(--text-dim); margin-top:3px; display:flex;
+  align-items:center; gap:6px; flex-wrap:wrap; }
+.input.sm { padding:6px 9px; font-size:12px; }
+@media (max-width: 760px) {
+  .reg-row { grid-template-columns:1fr; gap:6px; }
+}
 </style>
 </head>
 <body>
@@ -93,8 +120,13 @@
         <div class="metric"><div class="metric-label">Загрузка...</div></div>
       </div>
 
+      <div class="kn-tabs" id="techTabs"></div>
+
       <!-- ЭТАПЫ -->
       <div id="stagesContent"><div class="empty">Загрузка...</div></div>
+
+      <!-- РЕГИСТРЫ ПАНЕЛИ -->
+      <div id="registersContent" style="display:none"></div>
 
     </div>
   </div>
@@ -103,7 +135,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:500px;max-width:95vw"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=51"></script>
+<script src="/static/acai_layout.js?v=53"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 const STAGE_ICONS={
@@ -116,22 +148,59 @@ const STAGE_ICONS={
 const STAGE_ORDER=['Массаподготовка','Формовка','Сушка','Обжиг','Упаковка'];
 
 // живые данные WebHMI
-const LIVE_MAP = {
-  'Загрузка питателя PL024-1': 'pl024_1_загрузка_проц',
-  'Загрузка питателя PL024-2': 'pl024_2_загрузка_проц',
-  'Частота питателя PL024-1': 'pl024_1_гц',
-  'Частота питателя PL024-2': 'pl024_2_гц',
-  'Частота KP-10': 'kp10_гц',
-};
+// Связь «параметр → регистр панели» лежит в базе, а не здесь.
+// Раньше это был словарь на пять пар прямо в шаблоне: поменять мог
+// только программист, а знает эти пары главный инженер. Теперь он
+// правит их на вкладке «Регистры», а страница читает готовое.
+//
+// Значение может быть трёх видов, и путать их нельзя:
+//   есть регистр и он live      → показываем число
+//   есть регистр, но он silent  → «не поступает с панели»
+//   регистра нет вовсе          → «регистр не назначен»
+let LIVE_MAP = {};        // имя параметра → имя регистра
+let REG_STATE = {};       // имя регистра → live | silent | unknown
+let allRegisters = [];
+let regEquipment = [];
+let canEditRegisters = false;
+
+function regOf(paramName){ return LIVE_MAP[paramName] || null; }
+function edEscT(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+function liveValueOf(paramName){
+  const key = regOf(paramName);
+  if (!key) return {kind: 'none'};
+  if (REG_STATE[key] !== 'live') return {kind: 'silent', register: key};
+  const row = liveData[key];
+  if (!row) return {kind: 'silent', register: key};
+  return {kind: 'value', register: key, value: parseFloat(row.value), at: row.updated_at};
+}
 
 let allParams=[];let liveData={};let currentUser=null;
 const collapsed=new Set();
 
 async function load(){
-  const [pr, lr] = await Promise.allSettled([
+  const [pr, lr, rr] = await Promise.allSettled([
     ACAI.get('/api/technolog/params'),
-    ACAI.get('/api/sensors/live')
+    ACAI.get('/api/sensors/live'),
+    ACAI.get('/api/sensor-registers')
   ]);
+
+  if(rr.value?.success){
+    allRegisters = rr.value.registers || [];
+    if(rr.value.can_edit && !regEquipment.length){
+      try{
+        const eq = await ACAI.get('/api/equipment');
+        regEquipment = (eq.equipment || eq || []).filter(e => e.is_active !== 0);
+      }catch{}
+    }
+    canEditRegisters = rr.value.can_edit === true;
+    LIVE_MAP = {};
+    REG_STATE = {};
+    for(const r of allRegisters){
+      REG_STATE[r.register] = r.state;
+      if((r.title || '').trim()) LIVE_MAP[r.title.trim()] = r.register;
+    }
+  }
   if(pr.value?.success){
     allParams=pr.value.params;
     if(!allParams.length){
@@ -143,24 +212,148 @@ async function load(){
   }
   liveData=lr.value||{};
   renderMetrics();
+  renderTabs();
   renderStages();
+  renderRegisters();
+}
+
+// ── ВКЛАДКИ ────────────────────────────────────────────────────────
+let techTab = 'params';
+
+function renderTabs(){
+  const unbound = allRegisters.filter(r => !r.equipment_id).length;
+  document.getElementById('techTabs').innerHTML = `
+    <button class="kn-tab ${techTab==='params'?'on':''}" onclick="switchTech('params')">
+      <span data-icon=technolog></span> Параметры
+      <span class="kn-n">${allParams.length}</span>
+    </button>
+    <button class="kn-tab ${techTab==='registers'?'on':''}" onclick="switchTech('registers')">
+      <span data-icon=diagnostics></span> Регистры панели
+      <span class="kn-n">${allRegisters.length}</span>
+    </button>`;
+  ACAI.paintIcons(document.getElementById('techTabs'));
+}
+
+function switchTech(tab){
+  techTab = tab;
+  document.getElementById('stagesContent').style.display = tab==='params' ? '' : 'none';
+  document.getElementById('registersContent').style.display = tab==='registers' ? '' : 'none';
+  renderTabs();
+}
+
+// ── РЕГИСТРЫ ПАНЕЛИ ────────────────────────────────────────────────
+//
+// Здесь главный инженер проходит все регистры за один раз: что это,
+// в чём измеряется, к какому станку относится. Раньше эти пары были
+// зашиты в код страницы, и поменять их мог только программист.
+//
+// Привязка к станку НЕ УГАДЫВАЕТСЯ. «pl024_1_загрузка_проц» похоже на
+// «PL024», но похоже — не значит «тот самый»: привязать неверно хуже,
+// чем не привязать.
+const REG_STATE_LABEL = {
+  live:    {text: 'приходит',          cls: 'ok'},
+  silent:  {text: 'не поступает',      cls: 'warn'},
+  unknown: {text: 'не разобран',       cls: ''},
+};
+
+function renderRegisters(){
+  const box = document.getElementById('registersContent');
+  if(!box) return;
+
+  if(!allRegisters.length){
+    box.innerHTML = '<div class="empty compact"><span class="empty-text">Панель не присылала ни одного регистра — привязывать нечего.</span></div>';
+    return;
+  }
+
+  const live = allRegisters.filter(r => r.state === 'live').length;
+  const silent = allRegisters.filter(r => r.state === 'silent').length;
+  const unbound = allRegisters.filter(r => !r.equipment_id).length;
+  const unnamed = allRegisters.filter(r => !(r.title||'').trim()).length;
+
+  box.innerHTML = `
+    <div class="doc-note">
+      Регистров ${allRegisters.length}: приходит ${live}, не поступает ${silent}.
+      Без станка ${unbound}, без названия ${unnamed}.
+      ${canEditRegisters ? 'Привязка к станку не угадывается — назначайте сами.'
+                         : 'Править может главный инженер.'}
+    </div>
+    <div class="card"><div class="card-body" style="padding:0">
+      ${allRegisters.map(regRow).join('')}
+    </div></div>`;
+  ACAI.paintIcons(box);
+}
+
+function regRow(r){
+  const state = REG_STATE_LABEL[r.state] || REG_STATE_LABEL.unknown;
+  const seen = r.last_seen_at ? String(r.last_seen_at).slice(0, 16) : 'ни разу';
+
+  return `
+    <div class="reg-row">
+      <div class="reg-main">
+        <div class="reg-name">${edEscT(r.register)}</div>
+        <div class="reg-sub">
+          <span class="badge ${state.cls}" style="font-size:10px">${state.text}</span>
+          последний раз ${edEscT(seen)}${r.unit ? ' · ' + edEscT(r.unit) : ''}
+        </div>
+      </div>
+      <div class="reg-title">${
+        canEditRegisters
+          ? `<input class="input sm" value="${edEscT(r.title||'')}" placeholder="что это значит"
+                    onchange="saveRegister(${r.id}, 'title', this.value)">`
+          : edEscT(r.title || '—')}</div>
+      <div class="reg-eq">${
+        canEditRegisters
+          ? `<select class="input sm" onchange="saveRegister(${r.id}, 'equipment_id', this.value)">
+               <option value="">— станок не назначен —</option>
+               ${regEquipment.map(e => `<option value="${e.id}" ${e.id===r.equipment_id?'selected':''}>${edEscT(e.name)}</option>`).join('')}
+             </select>`
+          : edEscT(r.equipment_name || '— не назначен —')}</div>
+    </div>`;
+}
+
+async function saveRegister(id, field, value){
+  const patch = {};
+  if(field === 'equipment_id'){
+    if(String(value) === '') patch.clear_equipment = true;
+    else patch.equipment_id = parseInt(value, 10);
+  } else {
+    patch[field] = value;
+  }
+
+  try{
+    const r = await fetch(`/api/sensor-registers/${id}`, {
+      method: 'PUT', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(patch),
+    });
+    const data = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(data.detail || 'Не удалось сохранить');
+    ACAI.toast(data.changed?.length ? 'Сохранено' : 'Без изменений', 'ok');
+    await load();
+    switchTech('registers');
+  }catch(e){
+    ACAI.toast(e.message || 'Не удалось сохранить', 'danger');
+  }
 }
 
 function renderMetrics(){
   const total=allParams.length;
-  const withLive=allParams.filter(p=>LIVE_MAP[p.param_name]).length;
-  // проверяем выход за допуски
+  // «С живыми данными» — только те, у кого регистр назначен И приходит.
+  // Раньше сюда попадали и те, чей регистр панель не присылает ни
+  // разу: счётчик показывал пять, а значений было два.
+  const withLive=allParams.filter(p=>liveValueOf(p.param_name).kind==='value').length;
+  const silent=allParams.filter(p=>liveValueOf(p.param_name).kind==='silent').length;
+
   let outOfRange=0;
   for(const p of allParams){
-    const liveKey=LIVE_MAP[p.param_name];
-    if(!liveKey||!liveData[liveKey])continue;
-    const v=parseFloat(liveData[liveKey].value);
-    if(p.min_val!==null&&v<p.min_val)outOfRange++;
-    if(p.max_val!==null&&v>p.max_val)outOfRange++;
+    const live=liveValueOf(p.param_name);
+    if(live.kind!=='value'||!isFinite(live.value))continue;
+    if(p.min_val!==null&&live.value<p.min_val)outOfRange++;
+    if(p.max_val!==null&&live.value>p.max_val)outOfRange++;
   }
   document.getElementById('techMetrics').innerHTML=`
     <div class="metric accent"><div class="metric-label">Параметров контроля</div><div class="metric-value accent">${total}</div></div>
-    <div class="metric accent"><div class="metric-label">С живыми данными</div><div class="metric-value accent">${withLive}</div><div class="metric-sub">WebHMI</div></div>
+    <div class="metric accent"><div class="metric-label">С живыми данными</div><div class="metric-value accent">${withLive}</div><div class="metric-sub">${silent?`${silent} регистр${silent>4?'ов':silent>1?'а':''} не поступает`:'с панели'}</div></div>
     <div class="metric ${outOfRange>0?'danger':'ok'}"><div class="metric-label">Вне допуска</div><div class="metric-value ${outOfRange>0?'danger':'ok'}">${outOfRange}</div></div>
     <div class="metric ok"><div class="metric-label">Этапов</div><div class="metric-value ok">${[...new Set(allParams.map(p=>p.stage))].length}</div></div>`;
 
@@ -179,11 +372,10 @@ function renderTechVerdict(m){
   const rows = [];
   const bad = [];
   for(const p of allParams){
-    const k = LIVE_MAP[p.param_name];
-    if(!k || !liveData[k]) continue;
-    const v = parseFloat(liveData[k].value);
-    if((p.min_val!==null && v<p.min_val) || (p.max_val!==null && v>p.max_val))
-      bad.push(`${p.param_name} — ${liveData[k].value}`);
+    const live = liveValueOf(p.param_name);
+    if(live.kind !== 'value' || !isFinite(live.value)) continue;
+    if((p.min_val!==null && live.value<p.min_val) || (p.max_val!==null && live.value>p.max_val))
+      bad.push(`${p.param_name} — ${live.value}`);
   }
   if(bad.length) rows.push({level:'critical', what:`Вне допуска: ${bad.length}`,
     where:bad.slice(0,3).join(', ')+(bad.length>3?` и ещё ${bad.length-3}`:'')});
@@ -222,15 +414,13 @@ function renderStages(){
   document.getElementById('stagesContent').innerHTML=stages.map(stage=>{
     const params=byStage[stage];
     const isCollapsed=collapsed.has(stage);
-    const liveKey=LIVE_MAP;
 
     // считаем нарушения
     let violations=0;
     for(const p of params){
-      const lk=LIVE_MAP[p.param_name];
-      if(!lk||!liveData[lk])continue;
-      const status=getLiveStatus(p,liveData[lk].value);
-      if(status==='danger')violations++;
+      const live=liveValueOf(p.param_name);
+      if(live.kind!=='value')continue;
+      if(getLiveStatus(p,live.value)==='danger')violations++;
     }
 
     return`<div class="stage-card">
@@ -253,8 +443,9 @@ function renderStages(){
           <div class="col-head"></div>
         </div>
         ${params.map(p=>{
-          const lk=LIVE_MAP[p.param_name];
-          const lv=lk&&liveData[lk]?parseFloat(liveData[lk].value):null;
+          const live=liveValueOf(p.param_name);
+          const lk=live.register||null;
+          const lv=live.kind==='value'?live.value:null;
           const status=lv!==null?getLiveStatus(p,lv):null;
           const statusClass=status?`sensor-${status}`:'';
 
@@ -276,11 +467,10 @@ function renderStages(){
               value="${p.target_val??''}" ${canEdit?`onchange="updateParam(${p.id},'target_val',${p.min_val??'null'},${p.max_val??'null'},this.value)"`:' readonly'}
               title="Целевое значение"></label>
             <div class="live-val ${statusClass?'sensor-badge '+statusClass:''}" style="font-size:${lv!==null?'14':'12'}px">
-              ${lv!==null?`${lv.toFixed(1)} ${p.unit||''}`:
-                lk?(liveData[lk]
-                    ? `<span style="color:var(--text-dim);font-size:11px">нет данных с ${String(liveData[lk].updated_at||'').slice(11,16)}</span>`
-                    : '<span style="color:var(--text-dim);font-size:11px" title="Панель WebHMI на связи, но этот регистр в неё не выведен. Нужен электрик, а не перезапуск.">панель не присылает</span>'):
-                '<span style="color:var(--text-dim);font-size:11px">—</span>'}
+              ${lv!==null ? `${lv.toFixed(1)} ${p.unit||''}`
+                : live.kind==='silent'
+                  ? `<span style="color:var(--text-dim);font-size:11px" title="Регистр ${edEscT(lk)} назначен, но панель его не присылает. Нужен электрик, а не перезапуск страницы.">не поступает с панели</span>`
+                  : '<span style="color:var(--text-dim);font-size:11px" title="Регистр этому параметру не назначен. Назначает главный инженер на вкладке «Регистры».">регистр не назначен</span>'}
             </div>
             <button onclick="showHistory(${p.id},'${p.param_name}')"
               style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px"

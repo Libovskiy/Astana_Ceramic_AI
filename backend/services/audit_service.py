@@ -387,6 +387,7 @@ _FIELD_LABELS = {
 # или на проверке. Здесь уточнения по типу записи.
 _FIELD_LABELS_BY_TYPE = {
     "equipment": {"status": "Состояние станка", "name": "Название станка"},
+    "sensor_register": {"title": "Что это значит", "equipment_id": "Станок", "unit": "Единица"},
     "user": {"status": "Доступ", "name": "Имя"},
     "document": {"status": "Проверка документа", "title": "Название документа"},
     "part": {"name": "Название запчасти"},
