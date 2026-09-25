@@ -100,11 +100,21 @@ ROLES = ("worker", "mechanic", "electrician", "shift_supervisor", "technologist"
          "chief_engineer", "director")
 users = {role: sb.user(role) for role in ROLES}
 
+# Страницы, слитые с другими: адрес живёт, но ведёт на новое место.
+# Для прав это вход, а не отказ, — человек попадает куда шёл.
+MERGED = {"/instructions": "/knowledge"}
+
 wrong = []
 for path, allowed in PAGE_ROLES.items():
     for role, client in users.items():
         should_pass = allowed == "*" or role in allowed
         resp = client.get(path)
+        if path in MERGED:
+            where = resp.headers.get("location", "")
+            if resp.status_code not in (302, 303, 307) or MERGED[path] not in where:
+                wrong.append(f"{role} {path}: должен вести на {MERGED[path]}, "
+                             f"а {resp.status_code} {where}")
+            continue
         if should_pass and resp.status_code != 200:
             wrong.append(f"{role} {path}: должен войти, а {resp.status_code}")
         if not should_pass and resp.status_code != 403:
@@ -336,6 +346,14 @@ Image.new("RGB", (64, 64), (10, 200, 90)).save(buf, "JPEG")
 photo = users["shift_supervisor"].post("/api/checklist/photo", files={"file": ("f.jpg", buf.getvalue(), "image/jpeg")},
                                       data={"equipment_id": sb.equipment_id}).json()["id"]
 
+# Рабочий с 25.09.2026 в VIEW_ROLES — ему открыли «Обращения», и в
+# своём обращении он должен видеть приложенное фото поломки. Но фото
+# ОБХОДА (а здесь именно такое: его загрузил мастер, к обращению оно не
+# привязано) ему по-прежнему закрыто: обход — запись мастера о
+# состоянии цеха, а не сведения о поломке рабочего. Отбор поэтому не
+# по роли, а по обращению — см. get_checklist_photo.
+PHOTO_OF_A_ROUND_CLOSED_TO = {"worker"}
+
 wrong = []
 for role, client in users.items():
     can_view = role in checklist_routes.VIEW_ROLES
@@ -350,6 +368,8 @@ for role, client in users.items():
     }
     for what, code in got.items():
         allowed = can_round if what in ("загрузка", "сдать обход") else can_view
+        if what == "фото" and role in PHOTO_OF_A_ROUND_CLOSED_TO:
+            allowed = False
         if allowed and code == 403:
             wrong.append(f"{role}: {what} — должен, а 403")
         if not allowed and code != 403:

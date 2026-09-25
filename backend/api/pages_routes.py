@@ -166,11 +166,20 @@ def reports_page(request: Request):
 
 @router.get("/instructions")
 def instructions_page(request: Request):
+    """
+    Старый адрес «Инструкций». Раздел слит со «Знаниями»: инструкции
+    там первой вкладкой, решения из обращений второй, документация
+    станков третьей. Раньше «База знаний» целиком повторяла вторую
+    половину этой страницы, а документы не были видны нигде, кроме
+    карточки своего станка.
 
-    return templates.TemplateResponse(
-        request=request,
-        name="instructions.html"
-    )
+    Маршрут оставлен перенаправлением: адрес мог быть в закладках у
+    механика и в ссылках внутри старых обращений.
+    """
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse("/knowledge", status_code=302)
 
 
 @router.get("/knowledge")

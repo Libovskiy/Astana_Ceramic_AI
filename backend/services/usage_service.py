@@ -157,8 +157,8 @@ SECTION_LABELS = {
     "/equipment": "Оборудование", "/mechanics": "Механика", "/electrical": "Электрика",
     "/production": "Производство", "/checklist": "Обход смены", "/maintenance": "График ТО",
     "/analytics": "Аналитика", "/cases": "Журнал обращений", "/events": "События",
-    "/reports": "Отчёты", "/instructions": "Инструкции", "/regulations": "Регламенты",
-    "/my-regulation": "Мой регламент", "/messenger": "Переписка", "/knowledge": "База знаний",
+    "/reports": "Отчёты", "/instructions": "Знания (старый адрес)", "/regulations": "Регламенты",
+    "/my-regulation": "Мой регламент", "/messenger": "Переписка", "/knowledge": "Знания",
     "/lab": "Лаборатория", "/parts": "Запчасти", "/technolog": "Технолог",
     "/audit": "Журнал действий", "/settings": "Настройки", "/usage": "Использование",
 }

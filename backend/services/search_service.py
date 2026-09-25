@@ -17,7 +17,7 @@ from backend.services.equipment_service import (
 )
 
 
-def search(question: str, selected_machine=None, equipment_id=None):
+def search(question: str, selected_machine=None, equipment_id=None, created_by=None):
 
     # =========================================
     # 1. ОПРЕДЕЛЯЕМ ОБОРУДОВАНИЕ
@@ -156,7 +156,8 @@ def search(question: str, selected_machine=None, equipment_id=None):
             machine_name,
             symptom["name"] if symptom else "",
             question,
-            equipment_id=equipment_id
+            equipment_id=equipment_id,
+            created_by=created_by,
         )
 
         new_case = True

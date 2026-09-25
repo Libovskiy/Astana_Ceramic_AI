@@ -271,9 +271,14 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     # это разбор его собственного отчёта.
     "/analytics": ("director", "chief_engineer", "production_chief",
                    "analyst", "chief_mechanic", "chief_electrician"),
+    # worker видит здесь только свои обращения — отбор по created_by в
+    # cases_routes.cases_overview. Раньше единственным его входом была
+    # «Диагностика»: он заводил обращение и терял его из виду, потому
+    # что журнал был ему закрыт, и узнать, взял кто-то поломку или
+    # нет, было негде.
     "/cases": ("director", "chief_engineer", "production_chief", "shift_supervisor",
                "chief_mechanic", "mechanic", "chief_electrician", "electrician",
-                   "analyst"),
+               "analyst", "worker"),
     "/events": ("director", "chief_engineer", "production_chief", "shift_supervisor",
                 "chief_mechanic", "chief_electrician",
                     "analyst"),
@@ -285,8 +290,11 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     # Переписка между людьми открыта всем: договориться о подмене или
     # позвать электрика нужно любому, независимо от должности.
     "/messenger": "*",
-    "/knowledge": ("director", "chief_engineer", "chief_mechanic", "chief_electrician",
-        "analyst"),
+    # Знания открыты всем: инструкция по замене подшипника нужна
+    # механику у станка, а не только руководству. Раньше «Инструкции»
+    # были открыты всем, а «База знаний» — шестерым, хотя показывали
+    # одно и то же.
+    "/knowledge": "*",
     # lab_technician раньше отсутствовал: логин уводил лаборанта на /lab,
     # а ссылки на /lab у него в меню не было.
     "/lab": ("director", "chief_engineer", "analyst", "technologist", "lab_technician"),
@@ -374,7 +382,7 @@ async def page_access_guard(request: Request, call_next):
                 "path": request.url.path,
                 "full_name": user.get("full_name") or user.get("username") or "—",
                 "role_label": ROLE_LABELS.get(role, role),
-                "home": ROLE_HOME_PAGE.get(role, "/instructions"),
+                "home": ROLE_HOME_PAGE.get(role, "/knowledge"),
             },
         )
 

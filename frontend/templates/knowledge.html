@@ -4,11 +4,30 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>База знаний — ACAI</title>
+<title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
 <link rel="stylesheet" href="/static/acai.css?v=39">
 <style>
+/* Раздел «Знания» — три источника ответа «как чинить», сведённые на
+   одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
+   причём вторая целиком повторяла половину первой, а документация
+   станков не была видна нигде, кроме карточки своего станка. */
+.kn-tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+.kn-tab {
+  padding:8px 14px; border-radius:9px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text-dim);
+  font-size:13px; font-weight:600; cursor:pointer; font-family:var(--sans);
+  display:flex; align-items:center; gap:7px;
+}
+.kn-tab:hover { border-color:var(--accent); }
+.kn-tab.on { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+.kn-tab .kn-n {
+  font-size:11px; padding:1px 7px; border-radius:999px;
+  background:var(--surface-2); color:var(--text-dim);
+}
+.kn-tab.on .kn-n { background:rgba(255,255,255,.22); color:#fff; }
+
 .kb-card {
   background:var(--surface); border:1px solid var(--border);
   border-radius:12px; padding:16px; margin-bottom:8px;
@@ -20,21 +39,39 @@
 .kb-machine { font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px; }
 .kb-symptom { font-size:14px;font-weight:600;margin-bottom:6px; }
 .kb-resolution { font-size:13px;color:var(--text-dim);line-height:1.5; }
-.kb-footer { display:flex;align-items:center;gap:10px;margin-top:8px;font-size:11px;color:var(--text-dim); }
+.kb-footer { display:flex;align-items:center;gap:10px;margin-top:8px;font-size:11px;color:var(--text-dim);flex-wrap:wrap; }
 
 .section-head {
   font-size:11px;font-weight:700;color:var(--text-dim);
   text-transform:uppercase;letter-spacing:.06em;
   margin:20px 0 10px;padding-bottom:6px;
   border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
 }
 .section-count { background:var(--surface-2);padding:2px 8px;border-radius:999px;font-weight:400; }
+
+/* Строка документа: название, станок, размер — и ссылка на файл. */
+.doc-row {
+  display:flex; align-items:center; gap:12px;
+  padding:11px 12px; border-bottom:1px solid var(--border);
+  text-decoration:none; color:inherit;
+}
+.doc-row:last-child { border-bottom:none; }
+.doc-row:hover { background:var(--surface-2); }
+.doc-row [data-icon] { color:var(--text-dim); display:flex; flex-shrink:0; }
+.doc-name { font-size:13px; font-weight:600; }
+.doc-where { font-size:11px; color:var(--text-dim); margin-top:2px; }
+.doc-row.gone { cursor:default; opacity:.65; }
+.doc-row.gone:hover { background:none; }
 
 .search-wrap { position:relative;margin-bottom:16px; }
 .search-wrap input { padding-left:36px; }
 .search-wrap [data-icon] { position:absolute;left:10px;top:50%;transform:translateY(-50%);
   color:var(--text-dim);pointer-events:none;display:flex; }
+
+@media (max-width: 560px) {
+  .kn-tab { flex:1; justify-content:center; padding:11px 10px; }
+}
 </style>
 </head>
 <body>
@@ -43,34 +80,33 @@
   <div class="main-content">
     <header class="topbar">
       <div>
-        <div class="topbar-title">База знаний</div>
-        <div class="topbar-sub">Подтверждённые решения реальных проблем</div>
+        <div class="topbar-title">Знания</div>
+        <div class="topbar-sub">Инструкции, решения из обращений, документация станков</div>
       </div>
       <div class="topbar-right">
+        <button class="btn primary sm" id="procAddBtn" style="display:none" onclick="openProcForm()">+ Инструкция</button>
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
     <div class="page">
 
-      <!-- ПОИСК -->
+      <!-- Поиск один на все три вкладки: человек у станка не знает и не
+           должен знать, инструкция это, чужое решение или страница
+           руководства. Он знает слово «подшипник». -->
       <div class="search-wrap">
         <span data-icon=search></span>
-        <input class="input" id="searchKb" placeholder="Поиск по оборудованию или симптому...">
+        <input class="input" id="searchKn" placeholder="Поиск по станку, симптому или названию документа...">
       </div>
 
-      <!-- База знаний — то, из чего ИИ берёт ответы. Вопрос вкладки:
-           хватает ли её, чтобы он не отвечал «не знаю». -->
+      <div class="kn-tabs" id="knTabs"></div>
+
+      <!-- Вывод о состоянии знаний: из них ИИ берёт ответы, и пока
+           брать нечего, он честно зовёт механика. -->
       <div class="verdict calm" id="kbVerdict">
-        <div class="v-title" style="color:var(--text-dim)">Смотрю базу…</div>
+        <div class="v-title" style="color:var(--text-dim)">Смотрю знания…</div>
       </div>
 
-      <!-- СТАТИСТИКА -->
-      <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px" id="kbMetrics">
-        <div class="metric"><div class="metric-label">Загрузка...</div></div>
-      </div>
-
-      <!-- КОНТЕНТ -->
-      <div id="kbContent"><div class="empty">Загрузка...</div></div>
+      <div id="knContent"><div class="empty">Загрузка...</div></div>
 
     </div>
   </div>
@@ -84,59 +120,83 @@
 <script src="/static/acai_layout.js?v=39"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
-let allKnowledge = {};
+// ── Три источника знаний ────────────────────────────────────────────
+let procedures = {};      // инструкции завода, пишут люди
+let resolutions = {};     // решения из закрытых обращений
+let documents = [];       // документация станков, PDF
+let procEquipment = [];
+let knUser = null;
+let tab = 'proc';
 let searchQ = '';
 
-async function load() {
-  const r = await ACAI.get('/api/knowledge');
-  allKnowledge = r.grouped || {};
-  renderMetrics();
+const PROC_WRITE_ROLES = ['chief_engineer','chief_mechanic','chief_electrician','admin'];
+
+const TABS = [
+  {key:'proc', icon:'instructions', label:'Инструкции'},
+  {key:'sol',  icon:'diagnostics',  label:'Решения из обращений'},
+  {key:'doc',  icon:'reports',      label:'Документация'},
+];
+
+function esc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+function has(text){ return String(text||'').toLowerCase().includes(searchQ); }
+
+// ── Сколько в каждой вкладке С УЧЁТОМ поиска ────────────────────────
+// Счётчик по всему разделу при активном поиске врал бы: человек видит
+// «Документация 18», открывает и находит там одну строку.
+function counts(){
+  return {
+    proc: Object.entries(procedures).reduce((n,[m,items]) =>
+      n + items.filter(p => !searchQ || has(m) || has(p.title)).length, 0),
+    sol: Object.entries(resolutions).reduce((n,[m,items]) =>
+      n + items.filter(i => !searchQ || has(m) || has(i.symptom) || has(i.resolution)).length, 0),
+    doc: documents.filter(d => !searchQ || has(d.title) || has(d.equipment_name) || has(d.zone)).length,
+  };
+}
+
+function renderTabs(){
+  const c = counts();
+  document.getElementById('knTabs').innerHTML = TABS.map(t => `
+    <button class="kn-tab ${tab===t.key?'on':''}" onclick="switchTab('${t.key}')">
+      <span data-icon=${t.icon}></span> ${t.label}
+      <span class="kn-n">${c[t.key]}</span>
+    </button>`).join('');
+  ACAI.paintIcons(document.getElementById('knTabs'));
+}
+
+function switchTab(key){
+  tab = key;
+  renderTabs();
   render();
 }
 
-// Из этой базы ИИ берёт решения. Пока она пустая, он честно отвечает
-// «своего описания нет — зову механика», и это видно здесь.
-function renderKbVerdict(m){
-  if(!m.total){
-    ACAI.verdict('kbVerdict', {title:'База знаний пустая',
-      sub:'Решений пока нет — ИИ по таким поломкам зовёт механика. Они появятся здесь, когда специалист закроет обращение с описанием ремонта.'});
+// ── Вывод: хватает ли знаний, чтобы ИИ не отвечал «не знаю» ─────────
+function renderVerdict(){
+  const procTotal = Object.values(procedures).reduce((s,a)=>s+a.length,0);
+  const solTotal = Object.values(resolutions).reduce((s,a)=>s+a.length,0);
+  const docTotal = documents.length;
+  const missing = documents.filter(d => !d.exists).length;
+
+  if(!procTotal && !solTotal && !docTotal){
+    ACAI.verdict('kbVerdict', {title:'Знаний пока нет',
+      sub:'ИИ по любой поломке зовёт механика. Знания появятся, когда заведут первую инструкцию или закроют обращение с описанием ремонта.'});
     return;
   }
-  const unconfirmed = m.total - m.confirmed;
-  if(unconfirmed > 0){
-    ACAI.verdict('kbVerdict', {title:`Решений ${m.total}, не подтверждено ${unconfirmed}`, rows:[{level:'warning',
-      what:`Ждут подтверждения: ${unconfirmed}`,
-      where:'непроверенное решение ИИ выдаёт с оговоркой — подтвердите то, что действительно сработало'}]});
+
+  const rows = [];
+  if(!procTotal) rows.push({level:'warning', what:'Инструкций нет ни одной',
+    where:'ИИ ищет здесь в первую очередь — пока искать нечего'});
+  if(!solTotal) rows.push({level:'warning', what:'Решений из обращений нет',
+    where:'они появляются сами, когда специалист закрывает обращение с описанием ремонта'});
+  if(missing) rows.push({level:'warning', what:`Файлов нет на месте: ${missing}`,
+    where:'документ переложили или удалили мимо системы'});
+
+  const sub = `Инструкций ${procTotal} · решений ${solTotal} · документов ${docTotal}`;
+  if(rows.length){
+    ACAI.verdict('kbVerdict', {title:sub, rows});
     return;
   }
-  ACAI.verdict('kbVerdict', {title:`База знаний: ${m.total} решений`,
-    sub:`Все подтверждены · описано оборудования: ${m.machines}`});
-}
-
-function renderMetrics() {
-  const machines = Object.keys(allKnowledge).length;
-  const total = Object.values(allKnowledge).reduce((s,a)=>s+a.length,0);
-  const confirmed = Object.values(allKnowledge).flat().filter(i=>i.confirmed_by).length;
-
-  renderKbVerdict({machines, total, confirmed});
-
-  document.getElementById('kbMetrics').innerHTML = `
-    <div class="metric accent">
-      <div class="metric-label">Единиц оборудования</div>
-      <div class="metric-value accent">${machines}</div>
-      <div class="metric-sub">с описанными решениями</div>
-    </div>
-    <div class="metric ok">
-      <div class="metric-label">Решений всего</div>
-      <div class="metric-value ok">${total}</div>
-      <div class="metric-sub">в базе знаний</div>
-    </div>
-    <div class="metric ok">
-      <div class="metric-label">Подтверждено</div>
-      <div class="metric-value ok">${confirmed}</div>
-      <div class="metric-sub">специалистами</div>
-    </div>
-  `;
+  ACAI.verdict('kbVerdict', {title:'Знания есть по всем трём источникам', sub});
 }
 
 // В базе симптом хранится вместе с названием станка («Дробилка DTE 117.
@@ -149,60 +209,135 @@ function shortSymptom(text, machine) {
   return value.slice(name.length).replace(/^[\s.,:;—-]+/, '') || value;
 }
 
-function render() {
-  const q = searchQ.toLowerCase();
-  const sections = Object.entries(allKnowledge).filter(([machine, items]) => {
-    if (!q) return true;
-    return machine.toLowerCase().includes(q) ||
-      items.some(i => (i.symptom||'').toLowerCase().includes(q) || (i.resolution||'').toLowerCase().includes(q));
-  });
+// ── Вкладка «Инструкции» ────────────────────────────────────────────
+function renderProcedures(){
+  const canWrite = PROC_WRITE_ROLES.includes(knUser?.role);
+  const groups = Object.entries(procedures)
+    .map(([machine, items]) => [machine, items.filter(p => !searchQ || has(machine) || has(p.title))])
+    .filter(([, items]) => items.length);
 
-  if (!sections.length) {
-    document.getElementById('kbContent').innerHTML = '<div class="empty">Ничего не найдено</div>';
-    return;
+  if(!groups.length){
+    return searchQ
+      ? '<div class="empty compact"><span class="empty-text">По запросу инструкций нет.</span></div>'
+      : `<div class="empty compact"><span class="empty-text">Инструкций пока нет. ИИ ищет здесь в первую очередь — заведите первую, и он начнёт её показывать сразу.</span>${
+          canWrite ? '<button class="btn secondary sm" onclick="openProcForm()">+ Инструкция</button>' : ''}</div>`;
   }
 
-  document.getElementById('kbContent').innerHTML = sections.map(([machine, items]) => {
-    const filtered = q ? items.filter(i =>
-      (i.symptom||'').toLowerCase().includes(q) ||
-      (i.resolution||'').toLowerCase().includes(q)
-    ) : items;
-    if (!filtered.length) return '';
-
-    return `
-      <div class="section-head">
-        <span><span data-icon=diagnostics></span> ${machine}</span>
-        <span class="section-count">${filtered.length} решений</span>
-      </div>
-      ${filtered.map(item => `
-        <div class="kb-card ${item.confirmed_by?'confirmed':''}" onclick="openItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">
-          <div class="kb-machine">${machine}</div>
-          <div class="kb-symptom">${shortSymptom(item.symptom, machine) || 'Общее решение'}</div>
-          <div class="kb-resolution">${(item.resolution||'').slice(0,120)}${(item.resolution||'').length>120?'...':''}</div>
-          <div class="kb-footer">
-            ${item.confirmed_by ? `<span class="badge ok">✓ Подтверждено: ${item.confirmed_by}</span>` : '<span class="badge neutral">Из документации</span>'}
-            ${item.use_count ? `<span>Использовано ${item.use_count} раз</span>` : ''}
-            ${item.created_at ? `<span>${ACAI.shortDate(item.created_at)}</span>` : ''}
+  return groups.map(([machine, items]) => `
+    <div class="section-head">
+      <span><span data-icon=equipment></span> ${esc(machine)}</span>
+      <span class="section-count">${items.length}</span>
+    </div>
+    ${items.map(p => `
+      <div class="top-item" style="align-items:flex-start;cursor:pointer" onclick="openProcView(${p.id})">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${esc(p.title)}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+            ${p.steps_count!=null?p.steps_count+' шагов':''}${p.duration_minutes?' · '+p.duration_minutes+' мин':''}${p.requires_stop?' · нужна остановка':''}
           </div>
-        </div>`).join('')}
-    `;
-  }).join('');
+        </div>
+        ${canWrite?`<button class="btn danger sm" onclick="event.stopPropagation();deleteProc(${p.id})" title="Убрать">✕</button>`:''}
+      </div>`).join('')}
+  `).join('');
 }
 
+// ── Вкладка «Решения из обращений» ──────────────────────────────────
+function renderResolutions(){
+  const groups = Object.entries(resolutions)
+    .map(([machine, items]) => [machine, items.filter(i =>
+      !searchQ || has(machine) || has(i.symptom) || has(i.resolution))])
+    .filter(([, items]) => items.length);
+
+  if(!groups.length){
+    return searchQ
+      ? '<div class="empty compact"><span class="empty-text">По запросу решений нет.</span></div>'
+      : `<div class="empty compact"><span class="empty-text">Решений пока нет — они появляются сами, когда специалист закрывает обращение с описанием ремонта.</span><a class="btn secondary sm" href="/cases">Обращения</a></div>`;
+  }
+
+  return groups.map(([machine, items]) => `
+    <div class="section-head">
+      <span><span data-icon=diagnostics></span> ${esc(machine)}</span>
+      <span class="section-count">${items.length}</span>
+    </div>
+    ${items.map(item => `
+      <div class="kb-card ${item.confirmed_by?'confirmed':''}" onclick="openItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">
+        <div class="kb-machine">${esc(machine)}</div>
+        <div class="kb-symptom">${esc(shortSymptom(item.symptom, machine)) || 'Общее решение'}</div>
+        <div class="kb-resolution">${esc((item.resolution||'').slice(0,120))}${(item.resolution||'').length>120?'…':''}</div>
+        <div class="kb-footer">
+          ${item.confirmed_by ? `<span class="badge ok">Подтвердил ${esc(item.confirmed_by)}</span>` : '<span class="badge neutral">Из документации</span>'}
+          ${item.use_count ? `<span>Использовано ${item.use_count} раз</span>` : ''}
+          ${item.created_at ? `<span>${ACAI.shortDate(item.created_at)}</span>` : ''}
+        </div>
+      </div>`).join('')}
+  `).join('');
+}
+
+// ── Вкладка «Документация» ──────────────────────────────────────────
+function renderDocuments(){
+  const list = documents.filter(d =>
+    !searchQ || has(d.title) || has(d.equipment_name) || has(d.zone));
+
+  if(!list.length){
+    return searchQ
+      ? '<div class="empty compact"><span class="empty-text">По запросу документов нет.</span></div>'
+      : '<div class="empty compact"><span class="empty-text">Документов нет. Руководства прикрепляются в карточке станка.</span><a class="btn secondary sm" href="/equipment">Оборудование</a></div>';
+  }
+
+  // Группируем по станку: человек ищет «руководство по печи», а не
+  // «документ №8».
+  const byMachine = {};
+  list.forEach(d => (byMachine[d.equipment_name || 'Без станка'] ||= []).push(d));
+
+  return Object.entries(byMachine).map(([machine, items]) => `
+    <div class="section-head">
+      <span><span data-icon=equipment></span> ${esc(machine)}</span>
+      <span class="section-count">${items.length}</span>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0">
+      ${items.map(d => d.exists
+        ? `<a class="doc-row" href="${d.url}" target="_blank" rel="noopener">
+             <span data-icon=reports></span>
+             <div style="flex:1;min-width:0">
+               <div class="doc-name">${esc(d.title)}</div>
+               <div class="doc-where">${esc(d.zone||'')}${d.added_at?' · добавлен '+ACAI.shortDate(d.added_at):''}${d.added_by?' · '+esc(d.added_by):''}</div>
+             </div>
+             <span class="badge accent" style="font-size:10px">Открыть</span>
+           </a>`
+        : `<div class="doc-row gone" title="Файл не найден в хранилище — его переложили или удалили мимо системы">
+             <span data-icon=alert></span>
+             <div style="flex:1;min-width:0">
+               <div class="doc-name">${esc(d.title)}</div>
+               <div class="doc-where">файла нет на месте</div>
+             </div>
+           </div>`).join('')}
+    </div></div>
+  `).join('');
+}
+
+function render(){
+  const box = document.getElementById('knContent');
+  box.innerHTML = tab === 'proc' ? renderProcedures()
+                : tab === 'sol'  ? renderResolutions()
+                : renderDocuments();
+  ACAI.paintIcons(box);
+}
+
+// ── Открыть решение ─────────────────────────────────────────────────
 function openItem(item) {
   if (typeof item === 'string') item = JSON.parse(item);
   ACAI.showModal(`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <span style="font-size:24px"><span data-icon=equipment></span></span>
+      <span data-icon=equipment></span>
       <div>
-        <h3 style="margin:0">${shortSymptom(item.symptom, item.machine) || 'Решение'}</h3>
-        <div style="font-size:12px;color:var(--accent);margin-top:2px">${item.machine || '—'}</div>
+        <h3 style="margin:0">${esc(shortSymptom(item.symptom, item.machine)) || 'Решение'}</h3>
+        <div style="font-size:12px;color:var(--accent);margin-top:2px">${esc(item.machine || '—')}</div>
       </div>
-      ${item.confirmed_by ? '<span class="badge ok">✓ Подтверждено</span>' : ''}
+      ${item.confirmed_by ? '<span class="badge ok">Подтверждено</span>' : ''}
     </div>
 
     <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7">
-      ${item.resolution || 'Описание отсутствует'}
+      ${esc(item.resolution || 'Описание отсутствует')}
     </div>
 
     ${item.steps?.length ? `
@@ -210,7 +345,7 @@ function openItem(item) {
       ${item.steps.map((s,i)=>`
         <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
           <div style="width:26px;height:26px;border-radius:50%;background:var(--accent-solid);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${i+1}</div>
-          <div style="font-size:13px">${s.title||s.action||s}</div>
+          <div style="font-size:13px">${esc(s.title||s.action||s)}</div>
         </div>`).join('')}
     ` : ''}
 
@@ -220,14 +355,150 @@ function openItem(item) {
   `);
 }
 
-document.getElementById('searchKb').addEventListener('input', e => {
-  searchQ = e.target.value;
+// ── Инструкции: просмотр, заведение, удаление ───────────────────────
+async function openProcView(id){
+  const r = await ACAI.get(`/api/procedures/${id}`);
+  if(!r.success){ ACAI.toast(r.message||'Не найдено','danger'); return; }
+  const p = r.procedure;
+  ACAI.showModal(`
+    <h3>${esc(p.title)}</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      ${esc(p.equipment_name||'')}${p.duration_minutes?' · '+p.duration_minutes+' мин':''}${p.requires_stop?' · требуется остановка станка':''}
+    </div>
+    <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px">
+      ${(p.steps||[]).map(s=>`<li style="font-size:13px">${esc(s.text)}</li>`).join('')}
+    </ol>
+    <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`);
+}
+
+function openProcForm(){
+  ACAI.showModal(`
+    <h3>Новая инструкция</h3>
+    <div class="field"><label>Оборудование *</label>
+      <select class="input" id="pr-eq">
+        <option value="">— Выберите —</option>
+        ${procEquipment.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>Название *</label>
+      <input class="input" id="pr-title" placeholder="Например: Замена подшипника вала">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Название решает: ИИ найдёт инструкцию по словам из него. «Замена подшипника» сработает на «греется подшипник», «Ремонт №3» — ни на что.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>Сколько занимает, мин</label><input class="input" id="pr-dur" type="number" min="1" placeholder="30"></div>
+      <div class="field"><label>Кто делает</label>
+        <select class="input" id="pr-role">
+          <option value="">— любой —</option>
+          <option value="mechanic">механик</option>
+          <option value="electrician">электрик</option>
+          <option value="worker">оператор</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="pr-stop" style="width:auto"> Требуется остановка станка
+      </label>
+    </div>
+    <div class="field"><label>Шаги *</label>
+      <div id="pr-steps"></div>
+      <button class="btn secondary sm" style="margin-top:6px" onclick="addProcStep()">+ Шаг</button>
+    </div>
+    <div id="pr-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="submitProc()">Сохранить</button>
+    </div>`);
+  addProcStep(); addProcStep(); addProcStep();
+}
+
+function addProcStep(){
+  const box = document.getElementById('pr-steps');
+  const n = box.children.length + 1;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  row.innerHTML = `<span style="font-size:12px;color:var(--text-dim);width:18px">${n}.</span>
+    <input class="input pr-step" placeholder="Что сделать на этом шаге" style="flex:1">
+    <button class="btn secondary sm" onclick="this.parentElement.remove();renumberProcSteps()">✕</button>`;
+  box.appendChild(row);
+}
+
+function renumberProcSteps(){
+  [...document.getElementById('pr-steps').children].forEach((row,i)=>{
+    row.querySelector('span').textContent = (i+1)+'.';
+  });
+}
+
+async function submitProc(){
+  const errEl = document.getElementById('pr-err');
+  const equipment_id = parseInt(document.getElementById('pr-eq').value||0);
+  const title = document.getElementById('pr-title').value.trim();
+  const steps = [...document.querySelectorAll('.pr-step')].map(i=>i.value.trim()).filter(Boolean);
+
+  if(!equipment_id){ errEl.textContent='Выберите оборудование'; return; }
+  if(!title){ errEl.textContent='Введите название'; return; }
+  if(!steps.length){ errEl.textContent='Добавьте хотя бы один шаг'; return; }
+
+  try{
+    const r = await ACAI.post('/api/procedures',{
+      equipment_id, title,
+      duration_minutes: parseInt(document.getElementById('pr-dur').value||0) || null,
+      target_role: document.getElementById('pr-role').value || null,
+      requires_stop: document.getElementById('pr-stop').checked,
+      steps,
+    });
+    if(r.success===false){ errEl.textContent=r.message||'Ошибка'; return; }
+    ACAI.closeModal(); ACAI.toast('Инструкция добавлена','ok'); await loadAll();
+  }catch(e){ errEl.textContent = e.message||'Ошибка'; }
+}
+
+async function deleteProc(id){
+  if(!confirm('Убрать инструкцию?')) return;
+  try{
+    const r = await fetch(`/api/procedures/${id}`,{method:'DELETE',credentials:'include'});
+    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||r.status);
+    ACAI.toast('Убрано','ok'); await loadAll();
+  }catch(e){ ACAI.toast(e.message||'Не удалось','danger'); }
+}
+
+// ── Загрузка ────────────────────────────────────────────────────────
+// Три запроса параллельно: последовательно страница ждала бы три
+// круга до сети, а вкладки нужны сразу — по ним видно, где искать.
+async function loadAll(){
+  const [proc, know, docs] = await Promise.all([
+    ACAI.get('/api/procedures').catch(() => ({})),
+    ACAI.get('/api/knowledge').catch(() => ({})),
+    ACAI.get('/api/knowledge/documents').catch(() => ({})),
+  ]);
+  procedures = proc.grouped || {};
+  resolutions = know.grouped || {};
+  documents = docs.documents || [];
+
+  // Открываем ту вкладку, где что-то есть: раздел с тремя пустыми
+  // вкладками читается как сломанный, даже когда работает.
+  const c = counts();
+  if(!c.proc) tab = c.sol ? 'sol' : (c.doc ? 'doc' : 'proc');
+
+  renderTabs();
+  renderVerdict();
+  render();
+}
+
+document.getElementById('searchKn').addEventListener('input', e => {
+  searchQ = e.target.value.trim().toLowerCase();
+  renderTabs();
   render();
 });
 
 // меню раньше содержимого: от него зависят ссылки в выводе
-initLayout();
-load();
+initLayout().then(async ctx => {
+  knUser = ctx?.user;
+  if(PROC_WRITE_ROLES.includes(knUser?.role)){
+    document.getElementById('procAddBtn').style.display = '';
+    try{ const eq = await ACAI.get('/api/equipment'); procEquipment = eq.equipment||eq||[]; }catch{}
+  }
+  await loadAll();
+});
 </script>
 </body>
 </html>

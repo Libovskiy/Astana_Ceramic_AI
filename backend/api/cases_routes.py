@@ -155,7 +155,15 @@ CASES_OVERVIEW_ROLES = (
     "director", "chief_engineer", "production_chief", "shift_supervisor",
     "chief_mechanic", "mechanic", "chief_electrician", "electrician",
     "analyst",
+    # Рабочий тоже здесь, но видит только свои обращения — ниже по
+    # created_by. Раньше единственным его входом была «Диагностика»:
+    # он заводил обращение и терял его из виду, потому что журнал ему
+    # был закрыт, а узнать, взял кто-то поломку или нет, было негде.
+    "worker",
 )
+
+# Кто видит весь журнал. Остальные — только то, что завели сами.
+CASES_SEE_ALL_ROLES = tuple(r for r in CASES_OVERVIEW_ROLES if r != "worker")
 
 
 @router.get("/api/cases/overview")
@@ -173,12 +181,24 @@ def cases_overview(user: dict = Depends(require_roles(*CASES_OVERVIEW_ROLES))):
     """
 
     data = get_dashboard_data()
+    cases = data.get("recent_cases", [])
+    equipment = data.get("equipment", [])
+
+    # Рабочему — только свои обращения и только свои станки. Чужая
+    # поломка ему не нужна и не его дело, а список из 49 станков в
+    # фильтре он всё равно не проскроллит.
+    if user["role"] not in CASES_SEE_ALL_ROLES:
+        mine = user.get("username")
+        cases = [c for c in cases if c.get("created_by") == mine]
+        allowed = set(get_assigned_equipment_ids(user["id"]))
+        equipment = [e for e in equipment if e.get("id") in allowed]
 
     return {
         "success": True,
-        "recent_cases": data.get("recent_cases", []),
-        "equipment": data.get("equipment", []),
+        "recent_cases": cases,
+        "equipment": equipment,
         "average_resolution_minutes": data.get("average_resolution_minutes"),
+        "sees_all": user["role"] in CASES_SEE_ALL_ROLES,
     }
 
 
@@ -359,7 +379,8 @@ def chat(
 ):
 
     result = search(
-        request.message
+        request.message,
+        created_by=user.get("username"),
     )
 
 
@@ -608,7 +629,8 @@ def diagnose(
     result = search(
         question,
         selected_machine=machine_key,
-        equipment_id=equipment["id"]
+        equipment_id=equipment["id"],
+        created_by=user.get("username"),
     )
 
     if not result["success"]:

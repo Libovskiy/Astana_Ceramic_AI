@@ -46,7 +46,7 @@ var SHORT_LABELS = {
   '/reports': 'Отчёты',
   '/regulations': 'Регламенты',
   '/my-regulation': 'Мой участок',
-  '/instructions': 'Инструкции',
+  '/knowledge': 'Знания',
   '/parts': 'Запчасти',
   '/lab': 'Лаборатория'
 };
@@ -60,7 +60,7 @@ var BY_ROLE = {
   chief_electrician: ['/cases', '/equipment', '/maintenance', '/checklist'],
   production_chief:  ['/production', '/analytics', '/cases', '/equipment'],
   technologist:      ['/technolog', '/lab', '/production', '/regulations'],
-  lab_technician:    ['/lab', '/regulations', '/instructions', '/messenger'],
+  lab_technician:    ['/lab', '/regulations', '/knowledge', '/messenger'],
   chief_engineer:    ['/', '/cases', '/equipment', '/maintenance'],
   director:          ['/', '/cases', '/analytics', '/equipment'],
   analyst:           ['/', '/analytics', '/reports', '/equipment'],

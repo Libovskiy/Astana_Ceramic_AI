@@ -28,6 +28,33 @@
 .filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
 .filter-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;}
 .filter-chip.active{background:var(--accent-solid);color:#fff;border-color:var(--accent);}
+
+/* Выбор станка в новом обращении: цех крупными кнопками, потом
+   станки этого цеха. Всё под палец — форму заполняют стоя у станка. */
+.nc-label { font-size:11px;font-weight:700;color:var(--text-dim);
+  text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px; }
+.nc-recent { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px; }
+.nc-chip { padding:9px 14px;border-radius:999px;border:1px solid var(--accent);
+  background:var(--surface);color:var(--accent);font-size:13px;font-weight:600;
+  cursor:pointer;font-family:var(--sans); }
+.nc-chip:hover { background:var(--accent-solid);border-color:var(--accent-solid);color:#fff; }
+.nc-zones { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+.nc-zone { display:flex;flex-direction:column;gap:3px;align-items:flex-start;
+  padding:14px;border-radius:11px;border:1px solid var(--border);
+  background:var(--surface);cursor:pointer;text-align:left;font-family:var(--sans);
+  min-height:64px; }
+.nc-zone:hover { border-color:var(--accent); }
+.nc-zone-name { font-size:14px;font-weight:700;color:var(--text); }
+.nc-zone-n { font-size:12px;color:var(--text-dim); }
+.nc-machines { display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow-y:auto; }
+.nc-machine { display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:13px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface);cursor:pointer;text-align:left;font-family:var(--sans);
+  font-size:13px;font-weight:600;color:var(--text);min-height:46px; }
+.nc-machine:hover { border-color:var(--accent);background:var(--surface-2); }
+.nc-back { font-size:12px;color:var(--text-dim);cursor:pointer;margin-bottom:12px; }
+.nc-back:hover { color:var(--accent); }
+@media (max-width: 560px) { .nc-zones { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -84,7 +111,7 @@
 <script src="/static/acai_layout.js?v=39"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
-let allCases=[];let currentFilter='';let currentUser=null;
+let allCases=[];let currentFilter='';let currentUser=null;let seesAll=true;
 
 const STATUS_MAP={'Открыто':'open','Требует специалиста':'escalated','Черновик закрытия':'draft','Закрыто':'closed'};
 const STATUS_LABEL={'open':'Открыто','escalated':'Эскалация','draft':'На проверке','closed':'Закрыто'};
@@ -108,6 +135,15 @@ async function load(){
   allCases=d.recent_cases||[];
   const eq=d.equipment||[];
 
+  // Рабочему сервер отдаёт только его обращения. Заголовок должен это
+  // сказать: иначе «Обращения — все инциденты завода» и три строки под
+  // ним читаются как «на заводе три поломки».
+  seesAll = d.sees_all !== false;
+  if(!seesAll){
+    document.querySelector('.topbar-title').textContent='Мои обращения';
+    document.querySelector('.topbar-sub').textContent='Что вы заводили и на какой они стадии';
+  }
+
   const esc=allCases.filter(c=>c.status==='Требует специалиста').length;
   const open=allCases.filter(c=>c.status==='Открыто').length;
   const draft=allCases.filter(c=>c.status==='Черновик закрытия').length;
@@ -119,7 +155,13 @@ async function load(){
   // Ставим «—», чтобы цифра не врала.
   const num = v => allCases.length ? v : '—';
 
-  document.getElementById('caseMetrics').innerHTML=`
+  // Пять карточек с прочерками — это строка экрана, занятая тем, чего
+  // нет. Пока ни одного обращения, считать нечего: прячем всю строку,
+  // вывод сверху и так объясняет, почему пусто.
+  const metricsBox = document.getElementById('caseMetrics');
+  metricsBox.style.display = allCases.length ? '' : 'none';
+
+  metricsBox.innerHTML=`
     <div class="metric ${esc>0?'danger':'ok'}"><div class="metric-label">Эскалация</div><div class="metric-value ${esc>0?'danger':'ok'}">${num(esc)}</div><div class="metric-sub">требует специалиста</div></div>
     <div class="metric ${open>0?'accent':'ok'}"><div class="metric-label">Открытых</div><div class="metric-value accent">${num(open)}</div><div class="metric-sub">в работе</div></div>
     <div class="metric ${draft>0?'warn':'ok'}"><div class="metric-label">На проверке</div><div class="metric-value ${draft>0?'warn':'ok'}">${num(draft)}</div><div class="metric-sub">черновик закрытия</div></div>
@@ -149,8 +191,13 @@ function renderVerdict(m){
   ACAI.verdict('casesVerdict', m.total
     ? {title:'Открытых обращений нет',
        sub:`Все ${m.total} обращения журнала закрыты${m.avgMin!=null?` · среднее время решения ${m.avgTxt}`:''}`}
-    : {title:'Обращений пока не было',
-       sub:'Это не значит, что не было поломок: значит, о них не сообщали через систему. Цех создаёт обращение во вкладке «Обращения».'});
+    // Рабочему это читает он сам про себя — «цех создаёт обращение»
+    // ему ничего не объясняет, кнопка у него прямо над текстом.
+    : seesAll
+      ? {title:'Обращений пока не было',
+         sub:'Это не значит, что не было поломок: значит, о них не сообщали через систему. Цех заводит обращение кнопкой «Новое обращение».'}
+      : {title:'Вы ещё не заводили обращений',
+         sub:'Как увидите неполадку — нажмите «Новое обращение»: выберете цех, станок и опишете, что случилось. Здесь будет видно, кто взял её в работу.'});
 }
 
 function renderCases(){
@@ -336,33 +383,139 @@ async function submitAssign(id){
   }catch(e){document.getElementById('as-err').textContent=e.message;}
 }
 
+// ── НОВОЕ ОБРАЩЕНИЕ: цех → станок → проблема ──────────────────────
+//
+// Раньше здесь был один список на 49 станков: человек у станка искал
+// свой в выпадающем списке, прокручивая его большим пальцем. Теперь
+// сначала цех пятью крупными кнопками (как в «Диагностике»), потом
+// станки только этого цеха, и поиск поверх них. Сверху — станки, по
+// которым он уже обращался: в цеху один и тот же станок ломается
+// снова и снова, и чаще всего нужен именно он.
+
+const NC_ZONES = ['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
+let ncEquipment = [];
+let ncZone = null;
+let ncPicked = null;
+
+function ncZoneOf(e){ return e.location || e.stage || 'Другое'; }
+
+// По каким станкам уже заводили обращения, свежие первыми.
+//
+// Сначала свои: в цеху один и тот же станок ломается снова и снова, и
+// чаще всего нужен именно он. Своих нет — показываем недавние по цеху
+// и честно подписываем их иначе, а не выдаём чужие за свои.
+function ncRecent(){
+  const me = currentUser?.username;
+  const pick = list => {
+    const seen = [];
+    for (const c of list) {
+      if (!c.equipment_id || seen.includes(c.equipment_id)) continue;
+      seen.push(c.equipment_id);
+      if (seen.length >= 4) break;
+    }
+    return seen.map(id => ncEquipment.find(e => e.id === id)).filter(Boolean);
+  };
+  const cases = allCases || [];
+  const mine = me ? pick(cases.filter(c => c.created_by === me)) : [];
+  if (mine.length) return {items: mine, label: 'Вы уже обращались'};
+  const any = pick(cases);
+  return {items: any, label: 'Недавно обращались в цеху'};
+}
+
 function openNewCase(){
   ACAI.get('/api/equipment').then(r=>{
-    const eq=r.equipment||r||[];
-    ACAI.showModal(`
-      <h3>Новое обращение</h3>
-      <div class="field"><label>Оборудование *</label>
-        <select class="input" id="nc-eq" onchange="clearNcError()">
-          <option value="">— Выберите —</option>
-          ${eq.map(e=>`<option value="${e.id}">${e.name} · ${e.location||e.stage||'—'}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field"><label>Проблема</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-          ${['Не запускается','Сильный шум','Вибрация','Перегрев','Утечка','Остановился','Другое'].map(s=>
-            `<button onclick="setNcSymptom(this,'${s}')" style="padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:12px;cursor:pointer">${s}</button>`
-          ).join('')}
-        </div>
-        <textarea class="input" id="nc-symptom" rows="2" placeholder="Опишите подробно..."></textarea>
-      </div>
-      <div id="nc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
-      <div class="modal-foot">
-        <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
-        <a href="/diagnostics" class="btn secondary"><span data-icon=bot></span> ИИ диагностика</a>
-        <button class="btn primary" onclick="submitNewCase()">Зафиксировать</button>
-      </div>
-    `);
+    ncEquipment = r.equipment || r || [];
+    ncZone = null; ncPicked = null;
+    ACAI.showModal('<h3>Новое обращение</h3><div id="nc-body"></div>');
+    ncRenderZones();
   });
+}
+
+function ncRenderZones(){
+  const byZone = {};
+  ncEquipment.forEach(e => { byZone[ncZoneOf(e)] = (byZone[ncZoneOf(e)] || 0) + 1; });
+  const zones = [...NC_ZONES.filter(z => byZone[z]),
+                 ...Object.keys(byZone).filter(z => !NC_ZONES.includes(z))];
+  const recent = ncRecent();
+
+  document.getElementById('nc-body').innerHTML = `
+    ${recent.items.length ? `
+      <div class="nc-label">${recent.label}</div>
+      <div class="nc-recent">
+        ${recent.items.map(e => `<button class="nc-chip" onclick="ncPick(${e.id})">${ncEsc(e.name)}</button>`).join('')}
+      </div>` : ''}
+
+    <div class="nc-label">В каком цехе</div>
+    <div class="nc-zones">
+      ${zones.map(z => `
+        <button class="nc-zone" onclick="ncOpenZone(${JSON.stringify(z).replace(/"/g,'&quot;')})">
+          <span class="nc-zone-name">${ncEsc(z)}</span>
+          <span class="nc-zone-n">${byZone[z]} ${ncPlural(byZone[z],'станок','станка','станков')}</span>
+        </button>`).join('')}
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+    </div>`;
+}
+
+function ncOpenZone(zone){
+  ncZone = zone;
+  ncRenderMachines('');
+}
+
+function ncRenderMachines(query){
+  const q = String(query || '').trim().toLowerCase();
+  const items = ncEquipment
+    .filter(e => ncZoneOf(e) === ncZone)
+    .filter(e => !q || String(e.name || '').toLowerCase().includes(q));
+
+  document.getElementById('nc-body').innerHTML = `
+    <div class="nc-back" onclick="ncRenderZones()">← Цехи · ${ncEsc(ncZone)}</div>
+    <div class="field" style="margin-bottom:10px">
+      <input class="input" id="nc-find" placeholder="Найти станок по названию..." oninput="ncRenderMachines(this.value)" value="${ncEsc(query||'')}">
+    </div>
+    <div class="nc-machines">
+      ${items.length
+        ? items.map(e => `
+            <button class="nc-machine" onclick="ncPick(${e.id})">
+              <span>${ncEsc(e.name)}</span>
+              ${e.status && e.status !== 'Работает'
+                ? `<span class="badge warn" style="font-size:10px">${ncEsc(e.status)}</span>` : ''}
+            </button>`).join('')
+        : '<div class="empty compact"><span class="empty-text">В этом цехе такого станка нет.</span></div>'}
+    </div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ncRenderZones()">Назад</button>
+    </div>`;
+  const find = document.getElementById('nc-find');
+  if (find && q) { find.focus(); find.setSelectionRange(q.length, q.length); }
+}
+
+function ncPick(id){
+  ncPicked = ncEquipment.find(e => e.id === id);
+  if (!ncPicked) return;
+  document.getElementById('nc-body').innerHTML = `
+    <div class="nc-back" onclick="ncZone ? ncRenderMachines('') : ncRenderZones()">← ${ncEsc(ncPicked.name)}</div>
+    <div class="field"><label>Что случилось</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+        ${['Не запускается','Сильный шум','Вибрация','Перегрев','Утечка','Остановился','Другое'].map(s=>
+          `<button onclick="setNcSymptom(this,'${s}')" style="padding:7px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:12px;cursor:pointer">${s}</button>`
+        ).join('')}
+      </div>
+      <textarea class="input" id="nc-symptom" rows="3" placeholder="Опишите подробно: что слышно, что видно, когда началось"></textarea>
+    </div>
+    <div id="nc-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ncRenderZones()">Другой станок</button>
+      <button class="btn primary" onclick="submitNewCase()">Зафиксировать</button>
+    </div>`;
+}
+
+function ncEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+function ncPlural(n,one,few,many){
+  const a=Math.abs(n)%100, b=a%10;
+  return a>10&&a<20?many:b>1&&b<5?few:b===1?one:many;
 }
 // Сообщение об ошибке висело до следующей отправки: человек выбирал
 // оборудование, а красное «Выберите оборудование» оставалось на экране
@@ -378,13 +531,12 @@ function setNcSymptom(btn,s){
   btn.style.background='var(--accent)';btn.style.color='#fff';
 }
 async function submitNewCase(){
-  const eqId=document.getElementById('nc-eq')?.value;
   const symptom=document.getElementById('nc-symptom')?.value.trim();
   const errEl=document.getElementById('nc-err');
-  if(!eqId){errEl.textContent='Выберите оборудование';return;}
+  if(!ncPicked){errEl.textContent='Выберите станок';return;}
   if(!symptom){errEl.textContent='Опишите проблему';return;}
   try{
-    await ACAI.post('/diagnose',{equipment_id:parseInt(eqId),question:symptom});
+    await ACAI.post('/diagnose',{equipment_id:ncPicked.id,question:symptom});
     ACAI.toast('Обращение создано','ok');ACAI.closeModal();await load();
   }catch(e){errEl.textContent=e.message;}
 }

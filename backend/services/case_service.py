@@ -11,7 +11,8 @@ STATUS_ESCALATED = "Требует специалиста"
 STATUS_IN_PROGRESS = "В работе"
 
 
-def create_case(machine, symptom, worker_question, equipment_id=None):
+def create_case(machine, symptom, worker_question, equipment_id=None,
+                created_by=None):
 
     # Чья это смена. Берём из графика: обращение заводит тот, кто
     # сейчас у станка, а сейчас у станка работает бригада по табелю.
@@ -45,9 +46,10 @@ def create_case(machine, symptom, worker_question, equipment_id=None):
             draft_closed_at,
             equipment_id,
             brigade,
-            shift
+            shift,
+            created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         machine,
         symptom,
@@ -62,7 +64,8 @@ def create_case(machine, symptom, worker_question, equipment_id=None):
         None,
         equipment_id,
         brigade,
-        shift
+        shift,
+        created_by
     ))
 
     case_id = cursor.lastrowid
@@ -703,6 +706,10 @@ def init_cases_tables():
         ("brigade", "TEXT"),
         ("shift", "TEXT"),
         ("required_discipline", "TEXT"),
+        # Кто завёл обращение. Не хранилось вовсе: были бригада и смена,
+        # но не человек. Из-за этого рабочий не мог посмотреть «мои
+        # обращения» — система не знала, какие из них его.
+        ("created_by", "TEXT"),
         # проверочное обращение: видно в журнале с пометкой, но в сводку,
         # топ неисправностей и колокольчик не идёт
         ("is_test", "INTEGER NOT NULL DEFAULT 0"),

@@ -29,6 +29,7 @@ def get_dashboard_data():
             cases.draft_resolution_comment,
             cases.draft_closed_at,
             cases.equipment_id,
+            cases.created_by,
             equipment.name AS equipment_name
         FROM cases
         LEFT JOIN equipment ON equipment.id = cases.equipment_id

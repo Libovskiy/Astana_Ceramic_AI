@@ -55,7 +55,11 @@ ROUND_ROLES = ("director", "chief_engineer", "production_chief", "shift_supervis
 # Аналитику открыто всё, кроме «Настроек» (владелец, 23.09.2026):
 # обходы и фото он СМОТРИТ, но не проводит — для него страница
 # показывает историю, а не форму.
-VIEW_ROLES = ROUND_ROLES + ("mechanic", "electrician", "analyst")
+# Рабочий добавлен 25.09.2026 вместе с открытием ему «Обращений»:
+# в своём обращении он видит фото поломки, которое сам же и приложил,
+# и фото с обхода по этому станку. Без этого карточка обращения
+# показывала бы ему пустые рамки вместо снимков.
+VIEW_ROLES = ROUND_ROLES + ("mechanic", "electrician", "analyst", "worker")
 
 
 def round_user(user: dict = Depends(current_user)):
@@ -212,8 +216,24 @@ async def upload_checklist_photo(
 def get_checklist_photo(photo_id: int, user: dict = Depends(viewer)):
     conn = _db()
     row = conn.execute(
-        "SELECT rel_path, mime FROM checklist_photos WHERE id = ?", (photo_id,)
+        "SELECT rel_path, mime, case_id FROM checklist_photos WHERE id = ?", (photo_id,)
     ).fetchone()
+
+    # Рабочий смотрит только снимки своих обращений. Фото обхода —
+    # запись мастера о состоянии цеха, и открывать её рабочему не за
+    # чем; а вот снимок поломки в своём обращении он должен видеть,
+    # иначе в карточке у него пустые рамки. Проверка по обращению, а
+    # не по станку: станок у него тот же, что у мастера на обходе.
+    if row and user["role"] == "worker":
+        mine = conn.execute(
+            "SELECT 1 FROM cases WHERE id = ? AND created_by = ?",
+            (row["case_id"], user.get("username"))
+        ).fetchone() if row["case_id"] else None
+        if not mine:
+            conn.close()
+            raise HTTPException(status_code=403,
+                                detail="Это фото не из вашего обращения.")
+
     conn.close()
 
     if not row:
