@@ -272,7 +272,7 @@ const NAV_ITEMS = [
   // worker тут не случайно: сменный отчёт упаковки заполняют бригады
   // А/Б/В/Г, а у них роль worker. Без этой ссылки они не могли дойти
   // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
-  { icon: 'production', label: 'Производство',  href: '/production',   roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
+  { icon: 'production', label: 'Производство',  href: '/production',   labelFor: {worker: 'Сменный отчёт'}, roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
   { icon: 'checklist', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
   { icon: 'maintenance', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Аналитика' },
@@ -321,9 +321,15 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
     } else if (item.href === '/messenger' && unreadMessages > 0) {
       badge = `<span class="ni-badge">${unreadMessages}</span>`;
     }
+    // Одна страница может называться по-разному для разных людей:
+    // «Производство» у начальника — это вся цепочка, а у рабочего на
+    // ней только его сменный отчёт, и называть её «Производством»
+    // значит обещать ему то, чего он там не увидит.
+    const label = (item.labelFor && item.labelFor[role]) || item.label;
+
     return `<a href="${item.href}" class="nav-item ${active}">
       <span class="ni-icon">${ACAI.icon(item.icon, 18)}</span>
-      ${item.label}${badge}
+      ${label}${badge}
     </a>`;
   }).join('');
 

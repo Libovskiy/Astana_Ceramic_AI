@@ -193,6 +193,14 @@ function srRender() {
   `;
 
   srRenderActions(report);
+
+  // Страница может подписаться на состояние отчёта. Нужно рабочему:
+  // у него на «Производстве» только этот блок, и вывод сверху должен
+  // говорить про его смену, а не про файл начальника производства.
+  if (typeof window.onShiftReportRendered === "function") {
+    try { window.onShiftReportRendered(report, _srMeta); }
+    catch (e) { console.warn("onShiftReportRendered:", e); }
+  }
 }
 
 function srCarRow(c, editable) {
