@@ -149,14 +149,24 @@ def scan_library() -> dict:
 
         rel = path.relative_to(root)
         key = f"{rel}|{stat.st_size}|{int(stat.st_mtime)}"
-        digest = cache.get(key)
-        if not digest:
-            try:
-                digest = _sha256(path)
-            except OSError:
-                continue
-            changed = True
-        fresh[key] = digest
+
+        # Пустые файлы. В руководстве по вальцам УСМ 40 две страницы
+        # лежат нулевого размера — при выгрузке они не докопировались.
+        # Схлопывать их по хешу нельзя: у всех пустых файлов sha256
+        # одинаковый, и две потерянные страницы стали бы одной строкой.
+        # Показываем каждую и честно говорим, что файл пустой.
+        if stat.st_size == 0:
+            fresh[key] = f"empty:{rel}"
+            digest = fresh[key]
+        else:
+            digest = cache.get(key)
+            if not digest:
+                try:
+                    digest = _sha256(path)
+                except OSError:
+                    continue
+                changed = True
+            fresh[key] = digest
 
         # Станок ищем по самой глубокой папке, которая совпала: у
         # «МАССАПОДГОТОВКА/Дробилка DTE 117» станок — дробилка, а не цех.
@@ -183,7 +193,10 @@ def scan_library() -> dict:
             "kind": SUFFIX_LABEL.get(path.suffix.lower(), path.suffix.lstrip(".").upper()),
             "url": f"/docs-files/{rel.as_posix()}",
             "preview_url": (f"/docs-preview/{rel.as_posix()}"
-                            if path.suffix.lower() in NEEDS_PREVIEW else None),
+                            if path.suffix.lower() in NEEDS_PREVIEW
+                            and stat.st_size else None),
+            # Файл на месте, но в нём ничего нет — открывать нечего.
+            "empty": stat.st_size == 0,
             "machine_id": machine["id"] if machine else None,
             "machine_name": machine["name"] if machine else None,
             "zone": (machine or {}).get("location") or rel.parts[0],
@@ -236,6 +249,7 @@ def scan_library() -> dict:
         "unique": len(by_hash),
         "duplicates": len(fresh) - len(by_hash),
         "unlinked": sum(len(g["items"]) for g in ordered if not g["linked"]),
+        "empty": sum(1 for item in by_hash.values() if item["empty"]),
     }
 
 

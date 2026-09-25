@@ -7,7 +7,7 @@
 <title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=41">
+<link rel="stylesheet" href="/static/acai.css?v=42">
 <style>
 /* Раздел «Знания» — три источника ответа «как чинить», сведённые на
    одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
@@ -131,7 +131,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=41"></script>
+<script src="/static/acai_layout.js?v=42"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
 // ── Три источника знаний ────────────────────────────────────────────
@@ -207,6 +207,8 @@ function renderVerdict(){
     where:'они появляются сами, когда специалист закрывает обращение с описанием ремонта'});
   if(missing) rows.push({level:'warning', what:`Записей без файла: ${missing}`,
     where:'документ заводили, но файла по этому пути нет — надо перезалить'});
+  if(docStats.empty) rows.push({level:'warning', what:`Пустых файлов: ${docStats.empty}`,
+    where:'файл на диске есть, но в нём ноль байт — страница не докопировалась'});
   if(docStats.unlinked) rows.push({level:'info', what:`Не привязано к станку: ${docStats.unlinked}`,
     where:'папка не совпала ни с одним названием станка — лежат в конце списка'});
 
@@ -386,7 +388,14 @@ function renderDocuments(){
              ${many && !shown.length ? '<span class="doc-part-hint">показать</span>' : ''}</div>` : ''}
         ${!shown.length ? '' : `
         <div class="card" style="margin-bottom:8px"><div class="card-body" style="padding:0">
-          ${shown.map(d => `
+          ${shown.map(d => d.empty ? `
+            <div class="doc-row gone" title="Файл на месте, но в нём ноль байт — страница не докопировалась при выгрузке">
+              <span data-icon=alert></span>
+              <div style="flex:1;min-width:0">
+                <div class="doc-name">${esc(d.title)}</div>
+                <div class="doc-where">файл пустой — страница потерялась при выгрузке</div>
+              </div>
+            </div>` : `
             <a class="doc-row" href="${d.preview_url || d.url}" target="_blank" rel="noopener">
               <span data-icon=reports></span>
               <div style="flex:1;min-width:0">
@@ -575,7 +584,8 @@ async function loadAll(){
   docGroups = docs.groups || [];
   docOrphans = docs.orphans || [];
   docStats = {files_total: docs.files_total || 0, unique: docs.unique || 0,
-              duplicates: docs.duplicates || 0, unlinked: docs.unlinked || 0};
+              duplicates: docs.duplicates || 0, unlinked: docs.unlinked || 0,
+              empty: docs.empty || 0};
 
   // Открываем ту вкладку, где что-то есть: раздел с тремя пустыми
   // вкладками читается как сломанный, даже когда работает.
