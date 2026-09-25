@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from backend.config import DOCS_PATH, STATIC_UPLOADS_DIR, is_owner
 from backend.services.auth_service import get_user_by_session, get_assigned_equipment_ids
-from backend.services.audit_service import log_action, log_change, log_change
+from backend.services.audit_service import log_action, log_change, log_edit
 from backend.services.regulation_rbac import can, why_denied, permissions_for
 from backend.services import structure_service as structure
 from backend.services import regulation_service as regulations
@@ -1124,6 +1124,21 @@ def document_status(
             detail="Можно установить approved, rejected или archived."
         )
 
+    # Снимок ДО решения. Раньше в журнал писали только «после», и
+    # запись «Документ принят» не говорила, откуда он пришёл — с
+    # проверки или из отклонённых. before=None было прямо в вызове.
+    def document_row():
+        conn = structure.get_connection()
+        row = conn.execute(
+            "SELECT title, status, approved_by, rejected_by, knowledge_status "
+            "FROM equipment_documents WHERE id = ?",
+            (document_id,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else {}
+
+    before_row = document_row()
+
     try:
         regulations.update_document_status(
             document_id,
@@ -1133,22 +1148,17 @@ def document_status(
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
 
-    conn = structure.get_connection()
-    after_row = conn.execute(
-        "SELECT * FROM equipment_documents WHERE id = ?",
-        (document_id,)
-    ).fetchone()
-    conn.close()
+    after_row = document_row()
 
-    log_change(
-        username=user["username"],
-        role=user["role"],
+    log_edit(
+        entity_type="document",
+        entity_id=document_id,
+        before=before_row,
+        after=after_row,
+        user=user,
         action=f"document_{request.status}",
-        target=f"document:{document_id}",
-        before=None,
-        after=dict(after_row) if after_row else None,
-        reason=f"Статус документа: {request.status}",
-        details=f"document_id={document_id}"
+        name=after_row.get("title"),
+        reason=request.reason if hasattr(request, "reason") else None,
     )
 
     if request.status == "approved":

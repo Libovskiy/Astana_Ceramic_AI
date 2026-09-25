@@ -161,7 +161,7 @@ def entity_history(entity_type: str, entity_id: int,
 
     out = []
     for row in rows[:limit]:
-        changes = diff_change(row.get("before_json"), row.get("after_json"))
+        changes = diff_change(row.get("before_json"), row.get("after_json"), entity_type)
         out.append({
             "id": row["id"],
             "action": row["action"],

@@ -9,6 +9,7 @@ API сменного отчёта упаковки (вагонетки → сл�
     director/analyst  — только смотрят
 """
 
+from backend.services.audit_service import log_action
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -98,15 +99,40 @@ def defect_reasons(user: dict = Depends(current_user)):
 def add_defect_reason(payload: ReasonPayload, user: dict = Depends(current_user)):
     _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
     try:
-        return {"success": True, "reason": svc.create_defect_reason(payload.name, user["username"])}
+        reason = svc.create_defect_reason(payload.name, user["username"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    # Справочник причин брака решает, из чего оператор выбирает в конце
+    # смены. Появилась причина или исчезла — это меняет то, как завод
+    # объясняет свой брак, и должно быть видно в журнале.
+    log_action(
+        username=user["username"], role=user["role"],
+        action="defect_reason_added",
+        target=f"defect_reason:{(reason or {}).get('id')}",
+        details=payload.name,
+        after={"name": payload.name},
+    )
+
+    return {"success": True, "reason": reason}
 
 
 @router.delete("/defect-reasons/{reason_id}")
 def remove_defect_reason(reason_id: int, user: dict = Depends(current_user)):
     _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
+
+    was = next((r for r in svc.list_defect_reasons() if r["id"] == reason_id), None)
     svc.archive_defect_reason(reason_id)
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="defect_reason_archived",
+        target=f"defect_reason:{reason_id}",
+        details=(was or {}).get("name"),
+        before={"name": (was or {}).get("name"), "is_active": 1},
+        after={"name": (was or {}).get("name"), "is_active": 0},
+    )
+
     return {"success": True}
 
 

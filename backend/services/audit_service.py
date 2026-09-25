@@ -401,6 +401,102 @@ def field_label(field: str, entity_type: str = None) -> str:
 # Поля, где 1/0 означают «да/нет», а не число.
 _YESNO_FIELDS = {"is_active", "active", "is_critical", "hidden", "maintenance_required"}
 
+# Кодовые значения по-русски. Без этого в журнале стояло
+# «Служба: both → electrical» — читать это начальнику цеха незачем, он
+# такими словами не думает. Значения собраны по боевой базе, чтобы
+# перевести ровно то, что там действительно лежит.
+_VALUE_BY_FIELD = {
+    "discipline": {
+        "mechanical": "механика",
+        "electrical": "электрика",
+        "both": "механика и электрика",
+    },
+    "stage": {
+        "mass": "массоподготовка",
+        "sostav-i-dozirovka-shihty": "состав и дозировка шихты",
+        "forming": "формовка",
+        "drying": "сушка",
+        "uglesushka": "углесушка",
+        "kiln": "обжиг",
+        "packaging": "упаковка",
+    },
+    "stage_key": {
+        "mass": "массоподготовка",
+        "mass_prep": "массоподготовка",
+        "forming": "формовка",
+        "drying": "сушка",
+        "firing": "обжиг",
+        "kiln": "обжиг",
+        "packaging": "упаковка",
+    },
+    "role": {
+        "admin": "администратор", "director": "директор",
+        "chief_engineer": "гл. инженер", "production_chief": "нач. производства",
+        "shift_supervisor": "мастер смены", "chief_mechanic": "гл. механик",
+        "mechanic": "механик", "chief_electrician": "гл. энергетик",
+        "electrician": "электрик", "worker": "рабочий",
+        "technologist": "технолог", "lab_technician": "лаборант",
+        "analyst": "аналитик",
+    },
+    # «status» намеренно НЕ здесь: у станка это «Работает», у
+    # регламента «draft», у документа «approved» — одно имя поля, три
+    # разных словаря. Они ниже, по видам записей.
+    "knowledge_status": {
+        "indexed": "в базе знаний",
+        "pending": "ждёт разбора",
+        "blocked": "разобрать не вышло",
+    },
+    "doc_type": {
+        "manual": "руководство", "scheme": "схема", "passport": "паспорт",
+        "instruction": "инструкция", "certificate": "сертификат",
+    },
+    "param_type": {
+        "range": "диапазон", "text": "текст", "number": "число",
+        "target": "целевое значение",
+    },
+    "target_role": {
+        "mechanic": "механик", "electrician": "электрик", "worker": "оператор",
+    },
+    "shift": {"День": "день", "Ночь": "ночь"},
+}
+
+
+# Значения, которые зависят от вида записи. Статус станка — это
+# «Работает» или «Ошибка», статус регламента — черновик или действует,
+# статус документа — стадия проверки. Переводить их одним словарём
+# значит рано или поздно написать станку «черновик».
+_VALUE_BY_TYPE = {
+    "regulation": {
+        "status": {"draft": "черновик", "active": "действует", "archived": "в архиве"},
+    },
+    "document": {
+        "status": {"approved": "принят", "pending": "на проверке",
+                   "rejected": "отклонён"},
+    },
+    "procedure": {
+        "status": {"draft": "черновик", "active": "действует"},
+    },
+}
+
+
+def value_label(value, field=None, entity_type=None):
+    """Кодовое значение по-русски. Незнакомое отдаём как есть."""
+
+    if value is None or not field:
+        return None
+
+    key = str(value)
+
+    by_type = _VALUE_BY_TYPE.get(entity_type or "", {}).get(field)
+    if by_type and key in by_type:
+        return by_type[key]
+
+    by_field = _VALUE_BY_FIELD.get(field)
+    if by_field and key in by_field:
+        return by_field[key]
+
+    return None
+
 _VALUE_LABELS = {
     True: "да", False: "нет",
     None: "—", "": "—",
@@ -408,11 +504,15 @@ _VALUE_LABELS = {
 }
 
 
-def _readable(value, field=None):
+def _readable(value, field=None, entity_type=None):
     if value is None or value == "":
         return "—"
     if isinstance(value, bool):
         return "да" if value else "нет"
+    # Кодовое значение — по-русски: «электрика», а не «electrical».
+    translated = value_label(value, field, entity_type)
+    if translated is not None:
+        return translated
     # В базе «активен» лежит числом — человеку нужно да/нет.
     if field in _YESNO_FIELDS and value in (0, 1, "0", "1"):
         return "да" if str(value) == "1" else "нет"
@@ -421,7 +521,7 @@ def _readable(value, field=None):
     return str(value)
 
 
-def diff_change(before_json, after_json) -> list:
+def diff_change(before_json, after_json, entity_type: str = None) -> list:
     """
     Список изменившихся полей: [{field, label, before, after}].
 
@@ -461,9 +561,9 @@ def diff_change(before_json, after_json) -> list:
 
         changes.append({
             "field": field,
-            "label": _FIELD_LABELS.get(field, field),
-            "before": _readable(was, field),
-            "after": _readable(now_value, field),
+            "label": field_label(field, entity_type),
+            "before": _readable(was, field, entity_type),
+            "after": _readable(now_value, field, entity_type),
         })
 
     return changes
@@ -502,8 +602,8 @@ def changed_fields(before: dict, after: dict, entity_type: str = None) -> list:
         changes.append({
             "field": field,
             "label": field_label(field, entity_type),
-            "before": _readable(was, field),
-            "after": _readable(now_value, field),
+            "before": _readable(was, field, entity_type),
+            "after": _readable(now_value, field, entity_type),
         })
 
     return changes
@@ -573,7 +673,8 @@ def get_audit_entry(entry_id: int):
         _name_targets(conn, [entry])
         conn.close()
 
-        entry["changes"] = diff_change(entry.get("before_json"), entry.get("after_json"))
+        entry["changes"] = diff_change(entry.get("before_json"), entry.get("after_json"),
+                                       entry.get("entity_type"))
         # Сырой JSON наружу не отдаём: в нём пути к файлам и внутренние
         # идентификаторы, а пользы для чтения никакой.
         entry.pop("before_json", None)

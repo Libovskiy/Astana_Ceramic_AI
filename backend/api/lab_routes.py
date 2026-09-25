@@ -346,7 +346,8 @@ def add_product(request: ProductRequest, user: dict = Depends(lab_user)):
     log_action(
         username=user["username"], role=user["role"],
         action="lab_product_added", target=f"product:{product_id}",
-        details=request.name
+        details=request.name,
+        after={"name": request.name},
     )
 
     return {"success": True, "products": get_product_types()}
@@ -363,12 +364,20 @@ def remove_product(product_id: int, user: dict = Depends(lab_user)):
     if user["role"] not in LAB_DELETE_ROLES:
         raise HTTPException(status_code=403, detail="Убирать виды продукции вам нельзя.")
 
+    # Имя снимаем ДО архивирования: после него вид пропадает из
+    # списка, и в журнале осталась бы строка без названия — «убран вид
+    # продукции №3» никому ничего не скажет.
+    was = next((p for p in get_product_types() if p.get("id") == product_id), None)
+
     if not archive_product_type(product_id):
         raise HTTPException(status_code=404, detail="Вид не найден.")
 
     log_action(
         username=user["username"], role=user["role"],
-        action="lab_product_archived", target=f"product:{product_id}"
+        action="lab_product_archived", target=f"product:{product_id}",
+        details=(was or {}).get("name"),
+        before={"name": (was or {}).get("name"), "is_active": 1},
+        after={"name": (was or {}).get("name"), "is_active": 0},
     )
 
     return {"success": True, "products": get_product_types()}

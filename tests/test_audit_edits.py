@@ -78,8 +78,8 @@ after = dict(same, discipline="electrical")
 changes = audit.log_edit("equipment", 5, same, after, USER, name=same["name"])
 check(len(changes) == 1, "изменилось одно поле", changes)
 check(changes[0]["label"] == "Служба", "имя поля человеческое", changes[0])
-check(changes[0]["before"] == "both" and changes[0]["after"] == "electrical",
-      "видно, что было и что стало", changes[0])
+check(changes[0]["before"] == "механика и электрика" and changes[0]["after"] == "электрика",
+      "кодовое значение переведено: «both» читать начальнику цеха незачем", changes[0])
 
 rows = entries()
 check(len(rows) == 1, "запись ровно одна", len(rows))
@@ -110,6 +110,29 @@ check(audit.changed_fields({"note": None}, {"note": ""}) == [],
       "пустое осталось пустым — не изменение")
 check(audit.changed_fields({"health": 80}, {"health": 90}) != [],
       "настоящее изменение числа видно")
+
+# ── Значения тоже переводятся, и тоже по виду записи ────────────────
+# «status» у станка — это «Работает», у регламента — «draft», у
+# документа — «approved». Один словарь на всех рано или поздно написал
+# бы станку «черновик».
+eq_status = audit.changed_fields({"status": "Работает"}, {"status": "Ошибка"}, "equipment")
+check(eq_status[0]["after"] == "Ошибка",
+      "статус станка и так по-русски — не трогаем", eq_status)
+
+reg_status = audit.changed_fields({"status": "draft"}, {"status": "active"}, "regulation")
+check(reg_status[0]["before"] == "черновик" and reg_status[0]["after"] == "действует",
+      "статус регламента переведён", reg_status)
+
+doc_status = audit.changed_fields({"status": "pending"}, {"status": "approved"}, "document")
+check(doc_status[0]["before"] == "на проверке" and doc_status[0]["after"] == "принят",
+      "статус документа переведён по-своему", doc_status)
+
+roles = audit.changed_fields({"role": "worker"}, {"role": "chief_mechanic"}, "user")
+check(roles[0]["after"] == "гл. механик", "должность переведена", roles)
+
+unknown = audit.changed_fields({"discipline": "чтототакое"}, {"discipline": "идругое"})
+check(unknown[0]["after"] == "идругое",
+      "незнакомое значение показывается как есть, а не прячется", unknown)
 
 # ── Имя поля зависит от вида записи ─────────────────────────────────
 check(audit.field_label("status", "equipment") == "Состояние станка",
