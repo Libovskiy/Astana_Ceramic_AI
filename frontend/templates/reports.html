@@ -7,7 +7,7 @@
 <title>Отчёты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=54">
+<link rel="stylesheet" href="/static/acai.css?v=56">
 <style>
 .report-card {
   background:var(--surface); border:1px solid var(--border);
@@ -73,7 +73,7 @@
             <button class="btn secondary sm rc-btn">Сформировать</button>
           </div>
           <div class="report-card" onclick="showReport('downtime')">
-            <div class="rc-icon">⏸️</div>
+            <div class="rc-icon"><span data-icon=alert></span></div>
             <div class="rc-title">Простои</div>
             <div class="rc-desc">По оборудованию и цехам</div>
             <button class="btn secondary sm rc-btn">Сформировать</button>
@@ -114,7 +114,8 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=54"></script>
+<script src="/static/sensor-names.js?v=1"></script>
+<script src="/static/acai_layout.js?v=56"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 const PERIOD_LABELS = {today:'Сегодня',week:'7 дней',month:'30 дней'};
@@ -278,11 +279,16 @@ async function showReport(type) {
     `);
   } else if (type==='sensors') {
     const r = await ACAI.get('/api/sensors/latest');
-    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Сигнал панели (1658)','моточасы_общие':'Моточасы',
-      'питатель_1_гц':'Питатель №1','питатель_2_гц':'Питатель №2','конвейер_1_гц':'Конвейер №1','конвейер_2_гц':'Конвейер №2','конвейер_3_гц':'Конвейер №3','конвейер_4_гц':'Конвейер №4','конвейер_5_гц':'Конвейер №5','конвейер_6_гц':'Конвейер №6','конвейер_7_гц':'Конвейер №7'};
-    // Только то, что панель сейчас отдаёт: старые регистры (сторона_1,
-    // конвейер_глины) остались в истории с 10.09 и выглядели бы как текущие.
-    const rows = Object.entries(r).filter(([k])=>LABELS[k]);
+    // Имена и список — из справочника регистров. Раньше словарь стоял
+    // здесь, и в нём «Питатель №2» было подписано сразу у ДВУХ разных
+    // регистров — частоты и загрузки: в таблице выходили две
+    // одинаково названные строки с разными числами.
+    await ACAISensors.load();
+    const LABELS = Object.fromEntries(ACAISensors.all().map(x => [x.register, x.title]));
+
+    // Только то, что панель отдаёт сейчас: старые регистры остались в
+    // истории и выглядели бы как текущие.
+    const rows = Object.entries(r).filter(([k]) => ACAISensors.isLive(k));
     const fmtVal = (k,v) => {
       if (k==='моточасы_общие') return v.value;
       // Сравнивать строкой нельзя: панель шлёт «0», но любое «0.0»

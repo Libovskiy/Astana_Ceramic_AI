@@ -7,7 +7,7 @@
 <title>Журнал — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=54">
+<link rel="stylesheet" href="/static/acai.css?v=56">
 <style>
 .log-item {
   display:flex; align-items:flex-start; gap:14px;
@@ -101,7 +101,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=54"></script>
+<script src="/static/acai_layout.js?v=56"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 let allEntries = [];
@@ -124,8 +124,8 @@ const ACTION_META = {
   maintenance_completed: { icon:ACAI.icon('diagnostics'), bg:'rgba(34,197,94,.1)', label:'ТО выполнено' },
   // ремонт
   repair_completed:   { icon:ACAI.icon('tools'), bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
-  downtime_started:   { icon:'⏸️', bg:'rgba(239,68,68,.1)', label:'Простой начат' },
-  downtime_ended:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой завершён' },
+  downtime_started:   { icon:ACAI.icon('pulse'), bg:'rgba(239,68,68,.1)', label:'Простой начат' },
+  downtime_ended:     { icon:ACAI.icon('play'), bg:'rgba(34,197,94,.1)', label:'Простой завершён' },
 
   // Подписей было 13 на 70 с лишним действий, и журнал наполовину
   // состоял из сырых «regulation_stage_updated». Понять по нему, что
@@ -137,13 +137,13 @@ const ACTION_META = {
   // регламенты
   regulation_parameter_added:    { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлен параметр' },
   regulation_parameter_archived: { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Параметр убран' },
-  regulation_parameters_reordered:{ icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок параметров' },
+  regulation_parameters_reordered:{ icon:ACAI.icon('arrow'), bg:'rgba(100,116,139,.1)', label:'Порядок параметров' },
   regulation_stage_equipment_changed:{ icon:ACAI.icon('link'), bg:'rgba(99,102,241,.1)', label:'Оборудование этапа' },
   regulation_stage_archived:     { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Этап убран' },
   regulation_stage_updated:      { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
   regulation_stage_changed:      { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
   regulation_stage_added:        { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлен этап' },
-  regulation_stages_reordered:   { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
+  regulation_stages_reordered:   { icon:ACAI.icon('arrow'), bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
   regulation_acknowledged:       { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Ознакомлен с регламентом' },
   regulation_activated:          { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Регламент введён в действие' },
   regulation_photo_uploaded:     { icon:ACAI.icon('image'), bg:'rgba(99,102,241,.1)', label:'Фото регламента' },
@@ -196,9 +196,9 @@ const ACTION_META = {
   equipment_photo_updated:       { icon:ACAI.icon('image'), bg:'rgba(99,102,241,.1)', label:'Фото оборудования' },
   equipment_created:             { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлено оборудование' },
   equipment_updated:             { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Оборудование изменено' },
-  equipment_moved:               { icon:'↔️', bg:'rgba(99,102,241,.1)', label:'Перемещено' },
+  equipment_moved:               { icon:ACAI.icon('right'), bg:'rgba(99,102,241,.1)', label:'Перемещено' },
   worker_equipment_assigned:     { icon:ACAI.icon('link'), bg:'rgba(99,102,241,.1)', label:'Закреплено за рабочим' },
-  stages_reordered:              { icon:'↕️', bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
+  stages_reordered:              { icon:ACAI.icon('arrow'), bg:'rgba(100,116,139,.1)', label:'Порядок этапов' },
   stage_archived:                { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Этап убран' },
   stage_created:                 { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Создан этап' },
   stage_updated:                 { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Этап изменён' },
@@ -208,8 +208,8 @@ const ACTION_META = {
   task_created:                  { icon:ACAI.icon('events'), bg:'rgba(59,130,246,.1)', label:'Создана задача' },
   case_complete_repair:          { icon:ACAI.icon('tools'), bg:'rgba(34,197,94,.1)', label:'Ремонт завершён' },
   case_escalated:                { icon:ACAI.icon('siren'), bg:'rgba(239,68,68,.1)', label:'Передано специалисту' },
-  case_take:                     { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
-  downtime_closed_by_status:     { icon:'▶️', bg:'rgba(34,197,94,.1)', label:'Простой закрыт по статусу' },
+  case_take:                     { icon:ACAI.icon('play'), bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
+  downtime_closed_by_status:     { icon:ACAI.icon('play'), bg:'rgba(34,197,94,.1)', label:'Простой закрыт по статусу' },
   part_archived:                 { icon:ACAI.icon('archive'), bg:'rgba(239,68,68,.1)', label:'Запчасть убрана' },
   part_created:                  { icon:ACAI.icon('plus'), bg:'rgba(34,197,94,.1)', label:'Добавлена запчасть' },
   part_updated:                  { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Запчасть изменена' },

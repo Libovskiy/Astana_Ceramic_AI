@@ -48,6 +48,53 @@ LEGACY_MAP = {
     "Частота KP-10": "kp10_гц",
 }
 
+# Имена, которыми регистры подписаны на страницах. Каждая страница
+# держала свой словарь, и они уже разошлись: на «Главной» «Питатель 1»
+# и «Конв. 1», в «Отчётах» «Питатель №1» и «Конвейер №1». Хуже: в
+# «Отчётах» «Питатель №2» стояло у ДВУХ разных регистров сразу —
+# питатель_2_гц и питатель_2_загрузка_проц, — и в таблице выходили две
+# одинаково названные строки с разными числами.
+#
+# Переносим сюда как есть: имена настоящие, их придумали не зря. После
+# переноса словари со страниц убираются, и имя становится одно на всю
+# систему — то, которое задаст главный инженер.
+PAGE_TITLES = {
+    "pl024_1_загрузка_проц":    ("Загрузка PL024 №1", "PL024 №1"),
+    "pl024_2_загрузка_проц":    ("Загрузка PL024 №2", "PL024 №2"),
+    "питатель_2_загрузка_проц": ("Загрузка питателя №2", "Питатель №2"),
+    "kp10_загрузка_проц":       ("Загрузка KP-10", "KP-10"),
+    "авария_флаг":              ("Сигнал панели (регистр 1658)", "Сигнал панели"),
+    "моточасы_общие":           ("Моточасы общие", "Моточасы"),
+    "питатель_1_гц":            ("Частота питателя №1", "Питатель 1"),
+    "питатель_2_гц":            ("Частота питателя №2", "Питатель 2"),
+    "конвейер_1_гц":            ("Частота конвейера №1", "Конв. 1"),
+    "конвейер_2_гц":            ("Частота конвейера №2", "Конв. 2"),
+    "конвейер_3_гц":            ("Частота конвейера №3", "Конв. 3"),
+    "конвейер_4_гц":            ("Частота конвейера №4", "Конв. 4"),
+    "конвейер_5_гц":            ("Частота конвейера №5", "Конв. 5"),
+    "конвейер_6_гц":            ("Частота конвейера №6", "Конв. 6"),
+    "конвейер_7_гц":            ("Частота конвейера №7", "Конв. 7"),
+}
+
+# Регистры, которых не производит НИКТО: ни коллектор (REGISTER_MAP в
+# webhmi_collector), ни расширение браузера (ALL_REGISTERS в
+# tools/webhmi-extension/content.js). Эти имена придумали прямо в коде
+# страницы «Технолог», и приходить им неоткуда — сколько ни жди.
+#
+# Запись не удаляем: на неё ссылается параметр технолога, и молча
+# оборвать связь значит спрятать вопрос. Помечаем, чтобы главный
+# инженер увидел его на экране и сказал, каким регистром это мерить.
+NOT_PRODUCED = {
+    "pl024_1_гц": "Такого регистра панель не присылает — имя придумано в коде страницы. "
+                  "Похоже, речь про «питатель_1_гц» (регистр 1636), но это должен "
+                  "подтвердить человек.",
+    "pl024_2_гц": "Такого регистра панель не присылает — имя придумано в коде страницы. "
+                  "Похоже, речь про «питатель_2_гц» (регистр 1637), но это должен "
+                  "подтвердить человек.",
+    "kp10_гц":    "Такого регистра панель не присылает — имя придумано в коде страницы. "
+                  "Загрузка KP-10 приходит (регистр 1646), частота — нет.",
+}
+
 # Единица измерения читается из самого имени регистра — панель
 # называет их одинаково. Это не догадка о смысле, а разбор суффикса.
 UNIT_BY_SUFFIX = {"_проц": "%", "_гц": "Гц", "_флаг": "", "часы": "ч"}
@@ -61,6 +108,11 @@ CREATE TABLE IF NOT EXISTS sensor_registers (
 
     -- Что это значит по-человечески. Заполняет главный инженер.
     title TEXT,
+
+    -- Короткое имя для тесных мест: полоска датчиков на «Главной»,
+    -- где семь конвейеров в один ряд. Пусто — берётся title.
+    short_title TEXT,
+
     unit TEXT,
 
     -- К какому станку относится. NULL — ещё не привязан, и это
@@ -86,6 +138,16 @@ def _conn():
     conn = sqlite3.connect(DB_NAME, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+
+    # Колонки, добавленные после первой версии. CREATE TABLE IF NOT
+    # EXISTS их не добавит: таблица уже есть, и он просто ничего не
+    # делает. На боевом справочник завели раньше short_title.
+    have = {r[1] for r in conn.execute("PRAGMA table_info(sensor_registers)")}
+    for column, kind in (("short_title", "TEXT"),):
+        if column not in have:
+            conn.execute(f"ALTER TABLE sensor_registers ADD COLUMN {column} {kind}")
+    conn.commit()
+
     return conn
 
 
@@ -140,7 +202,17 @@ def sync_from_panel() -> dict:
         )
         added += 1
 
-    # Пары из кода страницы — переносим один раз, по названию параметра.
+    # Пары из кода страницы — переносим ПЕРВЫМИ, и вот почему.
+    #
+    # Название регистра в справочнике — это ещё и ключ, по которому
+    # страница «Технолог» находит живое значение для своего параметра
+    # (map_by_param_name сравнивает title с param_name). Если поверх
+    # лечь подписи из «Главной» — «Загрузка PL024 №1» вместо «Загрузка
+    # питателя PL024-1», — связь оборвётся, и параметр останется без
+    # значения при живом регистре. Поймано тестом.
+    #
+    # Поэтому сначала имена, которые ЧТО-ТО СВЯЗЫВАЮТ, и только потом
+    # подписи со страниц — на то, что осталось без имени.
     for title, register in LEGACY_MAP.items():
         row = conn.execute(
             "SELECT id, title FROM sensor_registers WHERE register = ?", (register,)
@@ -158,6 +230,29 @@ def sync_from_panel() -> dict:
                 "updated_at = datetime('now','localtime') WHERE id = ?",
                 (title, row["id"]),
             )
+
+    # Имена со страниц — переносим один раз, не затирая то, что уже
+    # поправил человек.
+    for register, (title, short) in PAGE_TITLES.items():
+        row = conn.execute(
+            "SELECT id, title, short_title FROM sensor_registers WHERE register = ?",
+            (register,)).fetchone()
+        if row is None:
+            continue
+        if not (row["title"] or "").strip():
+            conn.execute(
+                "UPDATE sensor_registers SET title = ?, updated_by = 'перенос со страниц', "
+                "updated_at = datetime('now','localtime') WHERE id = ?", (title, row["id"]))
+        if not (row["short_title"] or "").strip():
+            conn.execute("UPDATE sensor_registers SET short_title = ? WHERE id = ?",
+                         (short, row["id"]))
+
+    # Регистры, которых не производит никто. Помечаем один раз, чтобы
+    # вопрос был виден на экране, а не терялся.
+    for register, note in NOT_PRODUCED.items():
+        conn.execute(
+            "UPDATE sensor_registers SET note = COALESCE(NULLIF(note,''), ?) "
+            "WHERE register = ?", (note, register))
 
     # Состояние — по факту прихода.
     live = silent = 0
@@ -200,7 +295,7 @@ def list_registers() -> list:
 
 
 def update_register(register_id: int, title=None, unit=None, equipment_id=None,
-                    note=None, changed_by=None) -> dict:
+                    note=None, short_title=None, changed_by=None) -> dict:
     """
     Правка регистра. Состояние здесь не меняется: оно считается по
     факту прихода, и разрешить ставить его руками значит разрешить
@@ -230,13 +325,14 @@ def update_register(register_id: int, title=None, unit=None, equipment_id=None,
         """
         UPDATE sensor_registers
            SET title = COALESCE(?, title),
+               short_title = COALESCE(?, short_title),
                unit = COALESCE(?, unit),
                equipment_id = CASE WHEN ? = 1 THEN ? ELSE equipment_id END,
                note = COALESCE(?, note),
                updated_by = ?, updated_at = datetime('now','localtime')
          WHERE id = ?
         """,
-        (title, unit,
+        (title, short_title, unit,
          1 if equipment_id is not None else 0,
          (equipment_id or None),
          note, changed_by, register_id),
@@ -247,6 +343,41 @@ def update_register(register_id: int, title=None, unit=None, equipment_id=None,
     conn.close()
 
     return {"before": before, "after": after}
+
+
+def names_for_pages() -> dict:
+    """
+    Имена регистров для всех страниц разом — замена трёх словарей,
+    которые каждая страница держала своими.
+
+    Отдаётся всё, что нужно для показа: длинное имя, короткое для
+    тесных мест, единица, состояние и станок. Страница больше не
+    решает, как называется регистр, и не хранит список — новый регистр
+    появляется на ней сам.
+    """
+    conn = _conn()
+    rows = [dict(r) for r in conn.execute(
+        """
+        SELECT s.register, s.title, s.short_title, s.unit, s.state,
+               s.equipment_id, s.note, e.name AS equipment_name
+        FROM sensor_registers s
+        LEFT JOIN equipment e ON e.id = s.equipment_id
+        """)]
+    conn.close()
+
+    out = {}
+    for r in rows:
+        title = (r["title"] or "").strip() or r["register"]
+        out[r["register"]] = {
+            "title": title,
+            "short": (r["short_title"] or "").strip() or title,
+            "unit": r["unit"] or "",
+            "state": r["state"],
+            "equipment_id": r["equipment_id"],
+            "equipment_name": r["equipment_name"],
+            "note": r["note"] or "",
+        }
+    return out
 
 
 def map_by_param_name() -> dict:

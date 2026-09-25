@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=54">
+<link rel="stylesheet" href="/static/acai.css?v=56">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -76,7 +76,7 @@
       <!-- ГРАФИКИ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
         <div class="card">
-          <div class="card-head"><h2>Загрузка WebHMI — 24ч</h2></div>
+          <div class="card-head"><h2>Загрузка за 24 часа <span id="loadRegName" style="font-size:11px;color:var(--text-dim);font-weight:400"></span></h2></div>
           <div class="card-body" style="padding:10px 14px">
             <div class="chart-wrap" id="sensorChart">
               <div class="empty">Загрузка...</div>
@@ -167,7 +167,8 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=54"></script>
+<script src="/static/sensor-names.js?v=1"></script>
+<script src="/static/acai_layout.js?v=56"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script src="/static/xls-report.js?v=2"></script>
 <script>
@@ -227,6 +228,9 @@ async function loadAnalytics(){
     ACAI.get(`/api/reports/summary?period=${currentPeriod}`),
     ACAI.get('/dashboard'),
     ACAI.get('/api/sensors/live'),
+    // Справочник регистров: из него имена и список. Ждём его вместе с
+    // остальным, чтобы подписи не менялись на глазах.
+    ACAISensors.load(),
   ]);
   const s=summary.value;const d=dash.value;const lv=live.value||{};
   if(s?.success)renderMetrics(s);
@@ -559,10 +563,18 @@ function renderDowntimeList(dt){
 async function loadSensorHistory(){
   const box=document.getElementById('sensorChart');
   try{
-    const r=await ACAI.get('/api/sensors/history?sensor_name=pl024_1_загрузка_проц&hours=24');
+    // Какой регистр показывать на графике, решает справочник: берём
+    // первый живой с загрузкой в процентах. Раньше имя стояло прямо
+    // здесь, и если бы панель перестала слать именно его, график
+    // молчал бы при живых соседних регистрах.
+    const loadReg=(ACAISensors.all().find(x=>x.state==='live'&&x.register.includes('загрузка_проц'))||{}).register;
+    if(!loadReg){box.innerHTML=noDataNote('Ни один регистр загрузки не приходит с панели — график строится по ним.');return;}
+    const r=await ACAI.get(`/api/sensors/history?sensor_name=${encodeURIComponent(loadReg)}&hours=24`);
     if(!r||!r.length){box.innerHTML=noDataNote('Панель WebHMI не присылала показаний — график загрузки строится по ним.');return;}
     const pts=r.map(d=>({v:parseFloat(d.value),ms:new Date(String(d.recorded_at).replace(' ','T')).getTime()}))
       .filter(d=>isFinite(d.v)&&isFinite(d.ms)).sort((a,b)=>a.ms-b.ms);
+    const nameBox=document.getElementById('loadRegName');
+    if(nameBox) nameBox.textContent='· ' + ACAISensors.title(loadReg);
     box.innerHTML=timeChart(pts,'#22c55e');
   }catch{box.innerHTML='<div class="empty">Нет данных</div>';}
 }
@@ -632,9 +644,12 @@ async function loadDowntimeChart(){
 }
 
 function renderSensorsNow(lv){
-  const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц','kp10_загрузка_проц','авария_флаг'];
-  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Сигнал панели'};
-  const available=KEYS.filter(k=>lv[k]);
+  // Список и имена — из справочника регистров. Раньше и то и другое
+  // было зашито здесь: новый регистр с панели не появлялся на
+  // странице, пока программист не впишет его в этот массив, а имена
+  // расходились с «Главной» и «Отчётами».
+  const available=ACAISensors.withValues(lv).map(r=>r.register);
+  const LABELS=Object.fromEntries(available.map(k=>[k, ACAISensors.short(k)]));
   if(!available.length){document.getElementById('sensorNow').innerHTML='<div class="empty">Откройте вкладку WebHMI для данных</div>';return;}
   // самое свежее время: частоты панель присылает только при изменении,
   // и первое попавшееся значение бывает старым

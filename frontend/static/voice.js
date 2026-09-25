@@ -144,7 +144,9 @@
       button.title = "Нажмите, чтобы закончить";
       var tick = function () {
         var sec = Math.round((Date.now() - state.started) / 1000);
-        button.textContent = "⏹ " + fmt(sec);
+        // Значок «стоп» эмодзи выглядел по-разному на Android и iPhone и
+  // на кнопке записи читался как помеха. Оставляем таймер.
+  button.textContent = fmt(sec);
         if (sec >= maxSec) stop();
       };
       tick();

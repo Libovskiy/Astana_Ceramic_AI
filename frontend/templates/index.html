@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=54">
+<link rel="stylesheet" href="/static/acai.css?v=56">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -214,7 +214,8 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=54"></script>
+<script src="/static/sensor-names.js?v=1"></script>
+<script src="/static/acai_layout.js?v=56"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -409,10 +410,17 @@ function renderProdMap(equipment, liveData){
 
     // Живая загрузка с панели важнее доли исправного оборудования:
     // если она есть и достоверна (0–100), по ней и показываем.
+    // Какой регистр показывает загрузку этой зоны, решает справочник:
+    // берём живой регистр загрузки, привязанный к станку этого цеха.
+    // Имя регистра здесь больше не зашито — после привязки инженером
+    // зона подхватит свой датчик сама.
     let liveLabel='';
-    if(zone==='Массаподготовка'&&liveData['pl024_1_загрузка_проц']){
-      const v=parseFloat(liveData['pl024_1_загрузка_проц'].value);
-      if(isFinite(v)&&v>=0&&v<=100){ pct=Math.round(v); liveLabel='PL024 №1'; }
+    const zoneReg=ACAISensors.all().find(x =>
+      x.state==='live' && x.register.includes('загрузка_проц') &&
+      x.zone===zone && liveData[x.register]);
+    if(zoneReg){
+      const v=parseFloat(liveData[zoneReg.register].value);
+      if(isFinite(v)&&v>=0&&v<=100){ pct=Math.round(v); liveLabel=ACAISensors.short(zoneReg.register); }
     }
 
     // Цвет — по показанному проценту, а не по тому, есть ли где-то
@@ -465,6 +473,9 @@ function renderProdMap(equipment, liveData){
 // ── СЕНСОРЫ ───────────────────────────────────────────────
 let _live={};
 async function fetchLive(){
+  // Имена регистров — из справочника. Ждём его до отрисовки: иначе
+  // в первую секунду подписи будут системными именами.
+  try{ await ACAISensors.load(); }catch{}
   try{_live=await ACAI.get('/api/sensors/live');}catch{}
   renderSensors(_live);
 }
@@ -479,16 +490,24 @@ function renderSensors(lv){
   // значения вне 0-100% (видели и -189%, и +105%), и место на первой
   // строке он занимал зря. В «Отчётах» и «Аналитике» показание
   // осталось — там оно с пометкой о недостоверности.
-  const BUNKERS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц'];
-  const FEEDERS=['питатель_1_гц','питатель_2_гц'];
-  const BELTS=['конвейер_1_гц','конвейер_2_гц','конвейер_3_гц','конвейер_4_гц',
-               'конвейер_5_гц','конвейер_6_гц','конвейер_7_гц'];
-  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2',
-                'авария_флаг':'Сигнал панели',
-                'питатель_1_гц':'Питатель 1','питатель_2_гц':'Питатель 2',
-                'конвейер_1_гц':'Конв. 1','конвейер_2_гц':'Конв. 2','конвейер_3_гц':'Конв. 3',
-                'конвейер_4_гц':'Конв. 4','конвейер_5_гц':'Конв. 5','конвейер_6_гц':'Конв. 6',
-                'конвейер_7_гц':'Конв. 7'};
+  // Список и имена — из справочника регистров, а не отсюда. Раньше
+  // тут стояли три зашитых массива и словарь подписей: новый регистр
+  // с панели не появлялся на странице, пока его не впишет программист,
+  // а имена расходились с «Аналитикой» и «Отчётами».
+  //
+  // Группы по смыслу оставляем, но собираем их по имени регистра:
+  // загрузка в процентах — бункеры, частота питателя — питатели,
+  // частота конвейера — ленты. Новый конвейер встанет в свой ряд сам.
+  // Отбор сохраняет два решения владельца, принятые раньше: KP-10 с
+  // «Главной» убран (его датчик даёт значения вне 0-100%), проценты
+  // загрузки питателей тоже — панель отдаёт их только по одному, и
+  // рядом с частотами они путали. Поэтому бункеры — именно PL024, а
+  // не «всё, что в процентах».
+  const known = Object.keys(lv || {});
+  const BUNKERS = known.filter(k => k.startsWith('pl024') && k.endsWith('загрузка_проц'));
+  const FEEDERS = known.filter(k => k.startsWith('питатель_') && k.endsWith('_гц'));
+  const BELTS   = known.filter(k => k.startsWith('конвейер_') && k.endsWith('_гц'));
+  const LABELS  = Object.fromEntries(known.map(k => [k, ACAISensors.short(k)]));
   const item=k=>{
     const v=parseFloat(lv[k].value);
     const a=k==='авария_флаг';

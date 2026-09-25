@@ -7,7 +7,7 @@
 <title>Обращения — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=54">
+<link rel="stylesheet" href="/static/acai.css?v=56">
 <style>
 .case-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;border-left:4px solid var(--border);transition:border-color .15s;}
 .case-card:hover{border-color:var(--accent);}
@@ -108,7 +108,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:520px;max-width:95vw"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=54"></script>
+<script src="/static/acai_layout.js?v=56"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 let allCases=[];let currentFilter='';let currentUser=null;let seesAll=true;
@@ -244,7 +244,7 @@ function renderCases(){
       <div class="case-body">${c.symptom||c.worker_question||'—'}</div>
       ${casePhotos(c.id)}
       <div class="case-meta">
-        <span>⏱ Открыто: <span class="reaction-time ${rClass}">${rLabel} назад</span></span>
+        <span>Открыто: <span class="reaction-time ${rClass}">${rLabel} назад</span></span>
         ${c.assigned_to?`<span><span data-icon=user></span> ${c.assigned_to}</span>`:'<span style="color:var(--warn)"><span data-icon=user></span> Не назначен</span>'}
         ${dur?`<span>✓ Решено за ${dur}</span>`:''}
         ${c.id?`<span style="font-family:var(--mono)">#${c.id}</span>`:''}
