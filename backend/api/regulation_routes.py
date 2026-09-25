@@ -781,7 +781,11 @@ def attach_document(equipment_id: int, request: DocumentRequest, user: dict = De
 # поиск при следующей пересборке, и это правильно: паспорт станка
 # полезен ИИ не меньше, чем человеку.
 
-DOC_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "doc", "docx", "xls", "xlsx"}
+# tif/tiff добавлены 25.09.2026: заводские руководства сканировали
+# именно в них — 61 страница, — и без них главный инженер не мог
+# перезалить недостающую страницу взамен пустой. Показываем мы их
+# через /docs-preview копией в PNG, принимать обязаны тоже.
+DOC_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "doc", "docx", "xls", "xlsx", "tif", "tiff"}
 
 MAX_DOC_BYTES = 25 * 1024 * 1024
 

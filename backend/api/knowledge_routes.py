@@ -86,6 +86,7 @@ def all_documents(user: dict = Depends(get_current_user)):
         "duplicates": library["duplicates"],
         "unlinked": library["unlinked"],
         "empty": library["empty"],
+        "replaced": library["replaced"],
         # Записи системы, потерявшие файл. Перезалить их должен человек.
         "orphans": registry_orphans(),
     }

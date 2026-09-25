@@ -7,7 +7,7 @@
 <title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=45">
+<link rel="stylesheet" href="/static/acai.css?v=46">
 <style>
 /* Раздел «Знания» — три источника ответа «как чинить», сведённые на
    одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
@@ -135,7 +135,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=45"></script>
+<script src="/static/acai_layout.js?v=46"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 // ── Три источника знаний ────────────────────────────────────────────
@@ -212,7 +212,9 @@ function renderVerdict(){
   if(missing) rows.push({level:'warning', what:`Записей без файла: ${missing}`,
     where:'документ заводили, но файла по этому пути нет — надо перезалить'});
   if(docStats.empty) rows.push({level:'warning', what:`Пустых файлов: ${docStats.empty}`,
-    where:'файл на диске есть, но в нём ноль байт — страница не докопировалась'});
+    where:'файл на диске есть, но в нём ноль байт — страницу надо загрузить заново в карточке станка'});
+  if(docStats.replaced) rows.push({level:'info', what:`Перезалито страниц: ${docStats.replaced}`,
+    where:'пустые заменены — из списка убраны, в группе станка осталась живая страница'});
   if(docStats.unlinked) rows.push({level:'info', what:`Не привязано к станку: ${docStats.unlinked}`,
     where:'папка не совпала ни с одним названием станка — лежат в конце списка'});
 
@@ -589,7 +591,7 @@ async function loadAll(){
   docOrphans = docs.orphans || [];
   docStats = {files_total: docs.files_total || 0, unique: docs.unique || 0,
               duplicates: docs.duplicates || 0, unlinked: docs.unlinked || 0,
-              empty: docs.empty || 0};
+              empty: docs.empty || 0, replaced: docs.replaced || 0};
 
   // Открываем ту вкладку, где что-то есть: раздел с тремя пустыми
   // вкладками читается как сломанный, даже когда работает.
