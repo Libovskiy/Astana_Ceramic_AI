@@ -31,7 +31,7 @@ var BREAKPOINT = 768;
 // подпись не обрезалась. Полное имя остаётся в подсказке.
 var SHORT_LABELS = {
   '/': 'Главная',
-  '/chat': 'Обращения',
+  '/chat': 'Разбор',
   '/messenger': 'Переписка',
   '/diagnostics': 'Диагностика',
   '/equipment': 'Станки',
@@ -41,7 +41,7 @@ var SHORT_LABELS = {
   '/checklist': 'Обход',
   '/maintenance': 'График ТО',
   '/analytics': 'Аналитика',
-  '/cases': 'Журнал',
+  '/cases': 'Обращения',
   '/events': 'События',
   '/reports': 'Отчёты',
   '/regulations': 'Регламенты',
@@ -51,20 +51,31 @@ var SHORT_LABELS = {
   '/lab': 'Лаборатория'
 };
 
+// Четыре кнопки внизу телефона — первые четыре пункта того же меню,
+// что и слева на компьютере. Раньше рабочего вели в «Обход смены» и
+// «Диагностику»: обход он не проводит, а «Диагностика» с 25.09.2026
+// из меню убрана — выбор цеха переехал в создание обращения.
+// Короткое имя, своё для роли. «Производство» у начальника — это
+// выпуск завода, у рабочего — его сменный отчёт; на кнопку в 74 px
+// влезает только одно слово, и слово должно быть правильное.
+var SHORT_BY_ROLE = {
+  worker: { '/production': 'Отчёт' }
+};
+
 var BY_ROLE = {
-  worker:            ['/checklist', '/diagnostics', '/my-regulation', '/cases'],
-  mechanic:          ['/cases', '/checklist', '/diagnostics', '/equipment'],
-  electrician:       ['/cases', '/checklist', '/diagnostics', '/equipment'],
-  shift_supervisor:  ['/checklist', '/cases', '/equipment', '/events'],
-  chief_mechanic:    ['/cases', '/equipment', '/maintenance', '/checklist'],
-  chief_electrician: ['/cases', '/equipment', '/maintenance', '/checklist'],
+  worker:            ['/production', '/cases', '/chat', '/knowledge'],
+  mechanic:          ['/cases', '/mechanics', '/parts', '/chat'],
+  electrician:       ['/cases', '/electrical', '/parts', '/chat'],
+  shift_supervisor:  ['/production', '/checklist', '/cases', '/chat'],
+  chief_mechanic:    ['/cases', '/mechanics', '/equipment', '/maintenance'],
+  chief_electrician: ['/cases', '/electrical', '/equipment', '/maintenance'],
   production_chief:  ['/production', '/analytics', '/cases', '/equipment'],
   technologist:      ['/technolog', '/lab', '/production', '/regulations'],
   lab_technician:    ['/lab', '/regulations', '/knowledge', '/messenger'],
   chief_engineer:    ['/', '/cases', '/equipment', '/maintenance'],
   director:          ['/', '/cases', '/analytics', '/equipment'],
   analyst:           ['/', '/analytics', '/reports', '/equipment'],
-  admin:             ['/', '/checklist', '/cases', '/equipment']
+  admin:             ['/', '/cases', '/equipment', '/settings']
 };
 
 var FALLBACK = ['/', '/checklist', '/cases', '/equipment'];
@@ -151,10 +162,12 @@ function createBottomNav(sidebar) {
     // значок рядом и так говорит, о чём речь.
     var full = copy.textContent.replace(/\s+/g, ' ').trim();
 
+    var byRole = SHORT_BY_ROLE[(document.body.dataset.role || '').trim()] || {};
+
     available[href] = {
       href: href,
       icon: icon ? icon.innerHTML.trim() : '',
-      label: SHORT_LABELS[href] || full,
+      label: byRole[href] || SHORT_LABELS[href] || full,
       title: full
     };
   });

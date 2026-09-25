@@ -258,14 +258,16 @@ const ACAI = {
 const NAV_ITEMS = [
   { section: 'Главное' },
   { icon: 'home', label: 'Главная',       href: '/',   roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','analyst','technologist','chief_mechanic','chief_electrician'] },
-  // Обращения — вторым пунктом: это переписка с ИИ по поломке, самое
-  // частое, зачем сюда заходят с цеха. Ведёт на /chat (мессенджер), а не
-  // на /cases: /cases — управленческий список, он ниже, в Аналитике.
-  { icon: 'cases', label: 'Обращения',     href: '/chat',         roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  // «Разбор поломки» — переписка с ИИ и механиком по конкретной
+  // поломке, самое частое, зачем заходят с цеха. Назывался
+  // «Обращениями», пока список обращений был закрыт от рабочего. С
+  // 25.09.2026 список открыт ему тоже, и два пункта с почти одинаковым
+  // именем стояли рядом. Теперь по делу: здесь разбирают поломку,
+  // в «Обращениях» — список и его состояние.
+  { icon: 'cases', label: 'Разбор поломки', href: '/chat',        roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
   // Переписка между людьми — отдельно от «Обращений»: там разговор о
   // поломке со статусом и станком, здесь просто общение.
   { icon: 'messenger', label: 'Переписка',     href: '/messenger',    roles: '*' },
-  { icon: 'diagnostics', label: 'Диагностика',   href: '/diagnostics',  roles: ['admin','worker','shift_supervisor','chief_engineer','director','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
   { icon: 'equipment', label: 'Оборудование',  href: '/equipment',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
   { icon: 'mechanics', label: 'Механика',      href: '/mechanics',    roles: ['admin','director','chief_engineer','chief_mechanic','mechanic','analyst'] },
   { icon: 'electrical', label: 'Электрика',     href: '/electrical',   roles: ['admin','director','chief_engineer','chief_electrician','electrician','analyst'] },
@@ -277,7 +279,7 @@ const NAV_ITEMS = [
   { icon: 'maintenance', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Аналитика' },
   { icon: 'analytics', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
-  { icon: 'journal', label: 'Журнал обращений', href: '/cases',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst','worker'] },
+  { icon: 'journal', label: 'Обращения',     href: '/cases',        roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst','worker'] },
   { icon: 'events', label: 'События',       href: '/events',       roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
   { icon: 'reports', label: 'Отчёты',        href: '/reports',      roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
   { section: 'Нормы и знания' },
@@ -288,29 +290,105 @@ const NAV_ITEMS = [
   { icon: 'parts', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','analyst'] },
   { icon: 'technolog', label: 'Технолог',      href: '/technolog',    roles: ['admin','director','chief_engineer','technologist','analyst'] },
   { section: 'Система' },
-  { icon: 'usage', label: 'Использование', href: '/usage',        roles: ['admin','director','chief_engineer','analyst'] },
-  { icon: 'observe', label: 'Наблюдение',    href: '/observe',      roles: ['admin','director','chief_engineer','analyst'] },
+  // Только админ и директор (владелец, 25.09.2026): это наблюдение
+  // за людьми и учёт их заходов, а не работа цеха.
+  { icon: 'usage', label: 'Использование', href: '/usage',        roles: ['admin','director'] },
+  { icon: 'observe', label: 'Наблюдение',    href: '/observe',      roles: ['admin','director'] },
   { icon: 'audit', label: 'Журнал',        href: '/audit',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','analyst'] },
   { icon: 'settings', label: 'Настройки',     href: '/settings',     roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician'] },
 ];
+
+// ── ПОРЯДОК ПУНКТОВ ПО РОЛЯМ ────────────────────────────────────────
+//
+// Меню было одно на всех и шло по разделам системы, а не по работе
+// человека. Механик первым пунктом видел «Главную», которой у него
+// нет, а «Запчасти» — предпоследними, хотя ходит он туда каждый день.
+//
+// Здесь для каждой роли перечислено, в каком порядке она читает свои
+// пункты. Что не перечислено — встаёт после, в исходном порядке.
+const NAV_ORDER_BY_ROLE = {
+  worker:            ['/cases', '/production', '/chat', '/messenger', '/knowledge', '/regulations'],
+  mechanic:          ['/cases', '/mechanics', '/parts', '/chat', '/messenger', '/knowledge', '/regulations'],
+  electrician:       ['/cases', '/electrical', '/parts', '/chat', '/messenger', '/knowledge', '/regulations'],
+  lab_technician:    ['/lab', '/regulations', '/knowledge', '/messenger'],
+  technologist:      ['/technolog', '/lab', '/production', '/', '/regulations', '/knowledge', '/messenger'],
+  shift_supervisor:  ['/production', '/checklist', '/cases', '/chat', '/equipment', '/',
+                      '/events', '/messenger', '/knowledge', '/regulations', '/settings'],
+  production_chief:  ['/production', '/', '/analytics', '/cases', '/checklist', '/maintenance',
+                      '/equipment', '/reports', '/chat', '/events', '/messenger',
+                      '/knowledge', '/regulations', '/settings'],
+  chief_mechanic:    ['/', '/cases', '/mechanics', '/equipment', '/maintenance', '/parts',
+                      '/checklist', '/analytics', '/production', '/chat', '/reports',
+                      '/events', '/messenger', '/knowledge', '/regulations', '/audit', '/settings'],
+  chief_electrician: ['/', '/cases', '/electrical', '/equipment', '/maintenance', '/parts',
+                      '/checklist', '/analytics', '/production', '/chat', '/reports',
+                      '/events', '/messenger', '/knowledge', '/regulations', '/audit', '/settings'],
+};
+
+// Пункты, которые открывают раз в неделю. У кого меню длинное, они
+// уезжают под «Ещё»: на виду остаётся то, куда ходят каждый день.
+const SECONDARY = ['/events', '/reports', '/usage', '/observe', '/audit'];
+
+// Со скольких пунктов меню перестаёт помещаться в голову. До этого
+// числа заголовки разделов только мешают: у механика пять пунктов
+// разбивались на четыре раздела, заголовков было почти столько же,
+// сколько ссылок.
+const MENU_FLAT_UPTO = 7;
+const MENU_FOLD_FROM = 10;
+
+function toggleNavMore(btn){
+  const box = btn.nextElementSibling;
+  const open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  btn.classList.toggle('open', !open);
+  btn.querySelector('.nav-more-caret').textContent = open ? '▸' : '▾';
+}
 
 function renderSidebar(user, openCases = 0, unreadMessages = 0) {
   const role = user?.role || '';
   const current = window.location.pathname;
 
+  const allowed = NAV_ITEMS.filter(item =>
+    !item.section && (item.roles === '*' || item.roles.includes(role)));
+
+  const order = NAV_ORDER_BY_ROLE[role];
+  const rank = href => {
+    const i = order ? order.indexOf(href) : -1;
+    return i === -1 ? 500 + allowed.findIndex(x => x.href === href) : i;
+  };
+
+  const flat = allowed.length <= MENU_FLAT_UPTO;
+  const folded = allowed.length >= MENU_FOLD_FROM;
+
+  let main = allowed, extra = [];
+  if (folded) {
+    main = allowed.filter(item => !SECONDARY.includes(item.href));
+    extra = allowed.filter(item => SECONDARY.includes(item.href));
+  }
+  if (order) {
+    main = [...main].sort((a, b) => rank(a.href) - rank(b.href));
+    extra = [...extra].sort((a, b) => rank(a.href) - rank(b.href));
+  }
+
   // Заголовок раздела показываем, только если под ним есть хоть один
   // доступный пункт. Иначе у рабочего висели пустые «Аналитика»,
   // «База знаний» и «Система» — выглядело как сломанное меню.
-  const visible = NAV_ITEMS.filter(item => {
-    if (item.section) return true;
-    return item.roles === '*' || item.roles.includes(role);
-  }).filter((item, index, arr) => {
-    if (!item.section) return true;
-    const next = arr[index + 1];
-    return next && !next.section;
-  });
+  //
+  // При своём порядке и в коротком меню заголовков нет вовсе: они
+  // делят список по устройству системы, а человек читает его по своей
+  // работе, и два порядка сразу не читаются.
+  const visible = (flat || order)
+    ? main
+    : NAV_ITEMS.filter(item => {
+        if (item.section) return true;
+        return item.roles === '*' || item.roles.includes(role);
+      }).filter((item, index, arr) => {
+        if (!item.section) return true;
+        const next = arr[index + 1];
+        return next && !next.section;
+      }).filter(item => item.section || main.includes(item));
 
-  const items = visible.map(item => {
+  const draw = item => {
     if (item.section) {
       return `<div class="sidebar-section">${item.section}</div>`;
     }
@@ -331,7 +409,24 @@ function renderSidebar(user, openCases = 0, unreadMessages = 0) {
       <span class="ni-icon">${ACAI.icon(item.icon, 18)}</span>
       ${label}${badge}
     </a>`;
-  }).join('');
+  };
+
+  let items = visible.map(draw).join('');
+
+  // «Ещё» открыто, если человек сейчас внутри него: иначе он стоит на
+  // странице, которой не видит в меню, и не понимает, где находится.
+  if (extra.length) {
+    const inside = extra.some(item => current === item.href || current.startsWith(item.href + '/'));
+    items += `
+      <button class="nav-item nav-more ${inside ? 'open' : ''}" onclick="toggleNavMore(this)">
+        <span class="ni-icon">${ACAI.icon('more', 18)}</span>
+        Ещё
+        <span class="nav-more-caret">${inside ? '▾' : '▸'}</span>
+      </button>
+      <div class="nav-more-box" style="display:${inside ? 'block' : 'none'}">
+        ${extra.map(draw).join('')}
+      </div>`;
+  }
 
   const avatarColor = ACAI.avatarColor(user?.full_name || '');
   const initials = ACAI.initials(user?.full_name || '');

@@ -115,6 +115,10 @@ html, body {
 
 /* ── LAYOUT ── */
 .app { display: flex; min-height: 100vh; }
+/* У лаборанта одна страница. Меню из одного пункта — не меню, а
+   полоска, занимающая пятую часть экрана. */
+.sidebar.sidebar-hidden { display: none; }
+body.no-sidebar .main-content { margin-left: 0; }
 
 /* ── САЙДБАР ── */
 .sidebar {
@@ -267,6 +271,15 @@ html, body {
 /* Отметка «данные на HH:MM» вместо прежних часов. */
 .topbar-clock { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
 .topbar-clock.stale { color: var(--warn); font-weight: 600; }
+
+/* «Ещё» в меню: то, что открывают раз в неделю, не должно занимать
+   место рядом с ежедневным. */
+.nav-more {
+  width: 100%; background: none; border: none; text-align: left;
+  font-family: var(--sans); cursor: pointer;
+}
+.nav-more-caret { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.nav-more-box .nav-item { padding-left: 30px; }
 
 /* ── КОНТЕНТ ── */
 .page { padding: 14px 18px; flex: 1; }

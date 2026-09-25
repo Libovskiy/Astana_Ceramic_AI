@@ -7,7 +7,7 @@
 <title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=43">
+<link rel="stylesheet" href="/static/acai.css?v=45">
 <style>
 /* Раздел «Знания» — три источника ответа «как чинить», сведённые на
    одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
@@ -59,7 +59,10 @@
 .doc-row:last-child { border-bottom:none; }
 .doc-row:hover { background:var(--surface-2); }
 .doc-row [data-icon] { color:var(--text-dim); display:flex; flex-shrink:0; }
-.doc-name { font-size:13px; font-weight:600; }
+.doc-name { font-size:13px; font-weight:600;
+  /* Имена вроде «GERIM_-______________» длиннее строки. Переносим
+     по знакам, а не обрезаем: обрезанное имя не опознать. */
+  overflow-wrap:anywhere; }
 .doc-where { font-size:11px; color:var(--text-dim); margin-top:2px; }
 .doc-row.gone { cursor:default; opacity:.65; }
 .doc-row.gone:hover { background:none; }
@@ -84,7 +87,8 @@
   color:var(--text-dim);pointer-events:none;display:flex; }
 
 @media (max-width: 560px) {
-  .kn-tab { flex:1; justify-content:center; padding:11px 10px; }
+  /* Под палец: 44 px — минимум, ниже промахиваются. */
+  .kn-tab { flex:1; justify-content:center; padding:12px 10px; min-height:44px; }
 }
 </style>
 </head>
@@ -131,8 +135,8 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=43"></script>
-<script src="/static/mobile_nav_v2.js?v=5"></script>
+<script src="/static/acai_layout.js?v=45"></script>
+<script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 // ── Три источника знаний ────────────────────────────────────────────
 let procedures = {};      // инструкции завода, пишут люди
