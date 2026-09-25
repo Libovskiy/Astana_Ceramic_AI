@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -601,8 +601,12 @@ async function renderVerdict(d, working, total){
   if(!urgent.length){
     box.className='verdict calm';
     const open=d.open_cases||0;
-    box.innerHTML=`<div class="v-title">Завод работает</div>
-      <div class="v-sub">Ничего не требует решения · ${working} из ${total} единиц оборудования в работе${open?` · обращений в работе: ${open}`:''}</div>`;
+    // «Завод работает» — вывод по тому, что система знает: по
+    // уведомлениям и статусам станков. Сами станки о себе не
+    // сообщают, статус ставит человек, поэтому в подписи названо,
+    // откуда вывод, — иначе это обещание, которого мы не давали.
+    box.innerHTML=`<div class="v-title">Ничего не требует решения</div>
+      <div class="v-sub">По уведомлениям и статусам оборудования · ${working} из ${total} единиц в работе${open?` · обращений в работе: ${open}`:''}</div>`;
     return;
   }
 

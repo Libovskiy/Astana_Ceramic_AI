@@ -7,7 +7,7 @@
 <title>Наблюдение — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .ob { max-width: 640px; margin: 0 auto; }
 .ob-step { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
@@ -69,7 +69,8 @@ details.ob-step ul { margin: 10px 0 0; padding-left: 20px; font-size: 15px; line
 <script>
 initLayout();   // меню, часы, колокольчик — без этого вызова боковое меню пустое
 const SITE_HTTP = `http://${location.hostname}:8000`;
-const SITE_HTTPS = `https://${location.hostname}:8443`;
+// Защищённый адрес — тот же хост без порта: сертификат настоящий с переезда на сервер.
+const SITE_HTTPS = `https://${location.host.split(":")[0]}`;
 let obsId = null, candidates = [], state = null, pollTimer = null, notesTimer = null, notesDirty = false;
 // страница перерисовывается каждые 3 с — галочки, раскрытые блоки и выбор «сменить» держим здесь
 let checks = {}, lookOpen = false, pickerOpen = false;
@@ -91,7 +92,7 @@ function renderStart(pushOk) {
   document.getElementById('ob').innerHTML = `
     <div class="ob-step">
       <h2>Перед началом</h2>
-      <div class="ob-hint">Порядок: <b>сначала механик</b>— сертификат и уведомления, проверить, что приходят. Потом оператор: иначе он создаст обращение, а механик о нём не узнает.</div>
+      <div class="ob-hint">Порядок: <b>сначала механик</b> — включить уведомления и проверить, что они приходят. Потом оператор: иначе он создаст обращение, а механик о нём не узнает.</div>
       <div class="ob-hint">Если оператор застрянет на первом шаге — это не провал, а результат. Запишите, где именно.</div>
       ${pushOk ? '' : '<div class="ob-status bad">Уведомления на сервере не настроены — сообщите администратору.</div>'}
       <button class="ob-big ob-primary" onclick="startObservation()">Начать наблюдение</button>
@@ -144,7 +145,7 @@ function render() {
 
   if (m) {
     html += `
-      <label class="ob-check"><input type="checkbox" data-check="c1" ${checks.c1?'checked':''}> <span>Открыть сайт на его телефоне и войти — сертификат ставить не нужно, он настоящий.</span></label>
+      <label class="ob-check"><input type="checkbox" data-check="c1" ${checks.c1?'checked':''}> <span>Открыть сайт на его телефоне и войти — ничего устанавливать не нужно.</span></label>
       <label class="ob-check"><input type="checkbox" data-check="c2" ${checks.c2?'checked':''}> <span>Войти по защищённому адресу <code>${SITE_HTTPS}</code> под учёткой <b>${esc(m.username)}</b>. На iPhone — добавить «На экран Домой» и открыть со значка.</span></label>
       <label class="ob-check"><input type="checkbox" data-check="c3" ${checks.c3?'checked':''}> <span>Колокольчик <span data-icon=bell></span> → «Уведомления на телефон» → «Включить» → «Разрешить».</span></label>
       <div class="ob-status ${mechReady ? '' : 'warn'}">${mechReady

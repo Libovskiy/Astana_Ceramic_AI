@@ -5,8 +5,8 @@
  * сайт закрыт. Один раз нажать «Включить» и разрешить уведомления.
  *
  * Условия браузера, которые не обойти:
- *  - только https с доверенным сертификатом — поэтому заводской адрес
- *    https://<сервер>:8443 и один раз установленный сертификат (/cert);
+ *  - только https — у заводского адреса сертификат настоящий, ставить
+ *    на телефон ничего не нужно;
  *  - iPhone: iOS 16.4+ и сайт добавлен «На экран Домой».
  *
  * Подключается на любой странице: <script src="/static/push.js"></script>.
@@ -15,10 +15,13 @@
 (function () {
   "use strict";
 
-  var HTTPS_PORT = 8443;
-
+  /* Раньше завод жил на Маке в цеху: сайт отдавался по самоподписанному
+     сертификату на порту 8443, и его один раз ставили на каждый телефон
+     через страницу /cert. С переезда на сервер (22.09.2026) адрес обычный,
+     сертификат настоящий, порт 443 — ставить на телефон больше нечего.
+     Защищённый адрес поэтому строим от текущего хоста без порта. */
   function httpsUrl(path) {
-    return "https://" + location.hostname + ":" + HTTPS_PORT + (path || location.pathname + location.search);
+    return "https://" + location.host.split(":")[0] + (path || location.pathname + location.search);
   }
 
   function isIOS() {
@@ -63,7 +66,6 @@
   }
 
   async function registration() {
-    // Ошибка здесь на https почти всегда значит «сертификат не установлен»
     return navigator.serviceWorker.register("/sw.js", { scope: "/" });
   }
 
@@ -200,7 +202,7 @@
     if (st.blocker === "insecure") {
       html +=
         '<div class="ap-text">Уведомления работают только через защищённый адрес сайта.</div>' +
-        '<div class="ap-dim">Если на этом телефоне ещё не установлен заводской сертификат — сначала установите его (один раз, 2 минуты).</div>' +
+        '<div class="ap-dim">Сейчас сайт открыт по незащищённому адресу. Перейдите по защищённому — он тот же, ставить на телефон ничего не нужно.</div>' +
         '<div class="ap-btns">' +
         '<a class="ap-btn ap-primary" href="' + httpsUrl() + '">Открыть защищённый адрес</a>' +
         '<button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
@@ -257,8 +259,8 @@
           var msg = e.message;
           if (msg === "cert") {
             box.querySelector(".ap-box").innerHTML =
-              "<h3><span data-icon=bell></span> Нужен заводской сертификат</h3>" +
-              '<div class="ap-text">Телефон не доверяет адресу сайта, и уведомления не включаются.</div>' +
+              "<h3><span data-icon=bell></span> Телефон не доверяет адресу</h3>" +
+              '<div class="ap-text">Браузер не принял адрес сайта, и уведомления не включились. Сообщите администратору.</div>' +
               '<div class="ap-btns">' +
               '<button class="ap-btn ap-plain" data-close>Закрыть</button></div>';
             bind(box);

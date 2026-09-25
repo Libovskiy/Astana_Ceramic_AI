@@ -199,7 +199,7 @@ function renderPlcErrors() {
       <tbody>
         ${filtered.map(e => `
           <tr>
-            <td class="mono" style="color:var(--warn);font-weight:700">${escapePlcHtml(e.code)}</td>
+            <td class="code" style="color:var(--warn);font-weight:700">${escapePlcHtml(e.code)}</td>
             <td>${escapePlcHtml(e.title)}</td>
             <td style="color:var(--text-dim)">${e.solution ? escapePlcHtml(e.solution) : '<span style="color:var(--text-dim);font-style:italic">решение ещё не вписано</span>'}</td>
             ${canEdit ? `

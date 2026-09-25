@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -243,10 +243,16 @@ async function loadAnalytics(){
 let SOURCES={};
 const PERIOD_WORD={today:'сегодня',week:'за неделю',month:'за месяц'};
 function src(key){return SOURCES[key]||{period:0,total:0,last:null};}
-function noDataNote(text){
-  return `<div class="empty" style="line-height:1.5">
-    <div style="font-size:13px;font-weight:600;color:var(--text)">Данных нет</div>
-    <div style="font-size:12px;margin-top:4px">${text}</div></div>`;
+// Пустой блок — не заглушка на пол-экрана. Пять таких на «Аналитике»
+// занимали 817 px из 2957: четверть страницы уходила на сообщения о
+// том, чего нет. Строка объясняет причину, кнопка ведёт туда, где это
+// заводят, — иначе человек прочитал «данных нет» и не знает, что делать.
+function noDataNote(text, action){
+  const go = action
+    ? `<a class="btn secondary sm" href="${action.href}">${action.label}</a>`
+    : '';
+  return `<div class="empty compact">
+    <span class="empty-text">${text}</span>${go}</div>`;
 }
 function lastSeen(key){
   const s=src(key);
@@ -339,6 +345,19 @@ function renderMetrics(s){
     renderStaleDowntime(dt.stale || []);
   renderMaintenance(s.maintenance);
   renderChecklist(s.checklist);
+
+  // Когда за период нет ни выпуска, ни обращений, все четыре карточки
+  // показывают прочерк и по очереди повторяют то, что уже сказано в
+  // выводах сверху. Четыре пустые плитки на всю ширину — это не отчёт,
+  // а место, занятое отсутствием данных. Ставим одну строку.
+  if(noProduction && noDowntimeData && !loss.total_minutes){
+    document.getElementById('keyMetrics').innerHTML=noDataNote(
+      `${pw[0].toUpperCase()+pw.slice(1)} не внесли ни выпуска, ни обращений — считать нечего.`,
+      {href:'/production', label:'Внести выпуск'});
+    document.getElementById('keyMetrics').style.display='block';
+    return;
+  }
+  document.getElementById('keyMetrics').style.display='';
   document.getElementById('keyMetrics').innerHTML=`
     <div class="metric ${!noProduction&&pp!=null?(pp>=90?'ok':pp>=70?'warn':'danger'):''}">
       <div class="metric-label">Выполнение плана</div>
@@ -348,7 +367,7 @@ function renderMetrics(s){
     <div class="metric ${noDowntimeData?'':(tm>0?'warn':'')}">
       <div class="metric-label">Суммарный простой</div>
       <div class="metric-value ${noDowntimeData?'':(tm>0?'warn':'')}" style="${noDowntimeData?'color:var(--text-dim)':''}">${noDowntimeData?'—':(tc||'0м')}</div>
-      <div class="metric-sub">${noDowntimeData?`${pw} ни одного обращения — простои не фиксировались`:dtNote}</div>
+      <div class="metric-sub">${noDowntimeData?'обращений не было — простои не фиксировались':dtNote}</div>
     </div>
     <div class="metric ${loss.total_minutes>0?'warn':''}">
       <div class="metric-label">Макс. простой</div>
@@ -382,7 +401,8 @@ function renderTopProblems(d){
         <div class="top-bar"><div class="top-fill" style="width:${Math.round(p.count/max*100)}%;background:${colors[i]||'var(--accent)'}"></div></div>
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);width:24px;text-align:right">${p.count}</span>
       </div>`).join('')
-    :noDataNote(`Обращений о поломках не было — ${lastSeen('cases')}.`);
+    :noDataNote(`Обращений о поломках не было — ${lastSeen('cases')}.`,
+            {href:'/cases', label:'Обращения'});
 }
 
 // Простои, которые идут дольше смены. Не прячем и не обрезаем их:
@@ -425,9 +445,9 @@ function renderMaintenance(m){
   // Ни одной отметки ТО в системе — 0% значило бы «механики ничего не
   // делали», а на деле «никто не отмечал». Показываем это прямо.
   if(!src('maintenance').total){
-    box.innerHTML = noDataNote(`По графику на этот месяц ${m.due} работ, но отметок о выполнении ТО
-      в системе ещё не было ни одной. Процент появится с первой отметкой — сейчас он значил бы
-      «не отмечали», а не «не делали».`);
+    box.innerHTML = noDataNote(`По графику на месяц ${m.due} работ, отметок о выполнении нет ни одной.
+      Процент появится с первой отметкой: сейчас он значил бы «не отмечали», а не «не делали».`,
+      {href:'/maintenance', label:'График ТО'});
     return;
   }
 
@@ -531,7 +551,8 @@ function renderDowntimeList(dt){
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--warn)">${item.total_minutes>=60?Math.floor(item.total_minutes/60)+'ч '+item.total_minutes%60+'м':item.total_minutes+'м'}</span>
       </div>`).join('')
     :(!src('downtime').period && !src('cases').period
-        ? noDataNote(`Ни одного обращения — простои не фиксировались, это не значит, что их не было.`)
+        ? noDataNote(`Ни одного обращения — простои не фиксировались, это не значит, что их не было.`,
+            {href:'/cases', label:'Обращения'})
         : '<div class="empty">Простоев не было ✓</div>');
 }
 
@@ -539,7 +560,7 @@ async function loadSensorHistory(){
   const box=document.getElementById('sensorChart');
   try{
     const r=await ACAI.get('/api/sensors/history?sensor_name=pl024_1_загрузка_проц&hours=24');
-    if(!r||!r.length){box.innerHTML='<div class="empty">Нет данных — откройте WebHMI</div>';return;}
+    if(!r||!r.length){box.innerHTML=noDataNote('Панель WebHMI не присылала показаний — график загрузки строится по ним.');return;}
     const pts=r.map(d=>({v:parseFloat(d.value),ms:new Date(String(d.recorded_at).replace(' ','T')).getTime()}))
       .filter(d=>isFinite(d.v)&&isFinite(d.ms)).sort((a,b)=>a.ms-b.ms);
     box.innerHTML=timeChart(pts,'#22c55e');
@@ -598,7 +619,8 @@ async function loadDowntimeChart(){
   try{
     const r=await ACAI.get('/api/production/history');
     const rows=(r.rows||r.history||[]).slice(0,7).reverse();
-    if(!rows.length){document.getElementById('downtimeChart').innerHTML=noDataNote(`График строится по сменному учёту выпуска — его ещё не вносили.`);return;}
+    if(!rows.length){document.getElementById('downtimeChart').innerHTML=noDataNote(`График строится по сменному учёту выпуска — его ещё не вносили.`,
+      {href:'/production', label:'Внести выпуск'});return;}
     const data=rows.map(row=>({
       v:row.total_downtime_minutes||0,
       t:row.log_date?row.log_date.slice(5):'—'
@@ -689,7 +711,8 @@ async function loadShiftAnalytics(){
     document.getElementById('saTotals').innerHTML='';
     document.getElementById('saBreakdown').innerHTML='';
     document.getElementById('saReasons').innerHTML=noDataNote(
-      `За этот период ни одного сменного отчёта упаковки с вагонетками — выпуск и брак неизвестны.`);
+      `За этот период ни одного сменного отчёта упаковки с вагонетками — выпуск и брак неизвестны.`,
+      {href:'/production', label:'Внести выпуск'});
     return;
   }
 

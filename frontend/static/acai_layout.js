@@ -88,6 +88,10 @@ const ACAI = {
     const r = await fetch(path, { credentials: 'include' });
     if (r.status === 401) { window.location.href = '/login'; throw new Error('401'); }
     if (!r.ok) throw new Error(r.status);
+    // Каждый удавшийся запрос — момент, на который верны числа на
+    // экране. Отметку ставим здесь, а не на каждой странице: иначе
+    // её забудут обновить ровно там, где данные устарели.
+    markFresh();
     return r.json();
   },
 
@@ -492,15 +496,39 @@ async function logout() {
   window.location.href = '/login';
 }
 
-// ── ЧАСЫ ─────────────────────────────────────────────────
-function startClock(id = 'topbarClock') {
-  function tick() {
-    const el = document.getElementById(id);
-    if (el) el.textContent = new Date().toLocaleTimeString('ru-RU', {
-      hour:'2-digit', minute:'2-digit', second:'2-digit'
-    });
-  }
-  tick(); setInterval(tick, 1000);
+// ── НА КАКОЙ МОМЕНТ ДАННЫЕ ───────────────────────────────
+// Раньше здесь тикали часы. Время и так есть на телефоне и в углу
+// монитора, а место в шапке — самое заметное на странице. Теперь в нём
+// написано то, чего больше нигде нет: на какой момент верны числа,
+// которые человек сейчас читает. Если вкладку открыли утром и забыли,
+// отметка это покажет — а часы показывали бы текущее время и врали бы
+// тем, что всё свежее.
+let FRESH_AT = null;
+
+function markFresh(when) {
+  FRESH_AT = when instanceof Date ? when : new Date();
+  paintFresh();
+}
+
+function paintFresh() {
+  const el = document.getElementById('topbarClock');
+  if (!el) return;
+  if (!FRESH_AT) { el.textContent = ''; return; }
+  const age = Math.floor((Date.now() - FRESH_AT.getTime()) / 1000);
+  const hhmm = FRESH_AT.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  // Пока данные свежие — только время. Стареют — говорим об этом
+  // словами и цветом, чтобы решение не приняли по вчерашнему экрану.
+  el.textContent = age < 300 ? `данные на ${hhmm}`
+                 : age < 3600 ? `данные на ${hhmm} · ${Math.floor(age / 60)} мин назад`
+                 : `данные на ${hhmm} — обновите страницу`;
+  el.classList.toggle('stale', age >= 3600);
+  el.title = 'Момент, на который верны числа на этой странице';
+}
+
+// Имя оставлено прежним: его зовут из двух десятков шаблонов.
+function startClock() {
+  paintFresh();
+  setInterval(paintFresh, 15000);
 }
 
 // ── ИНИЦИАЛИЗАЦИЯ LAYOUT ──────────────────────────────────

@@ -7,12 +7,27 @@
 <title>Настройки — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
 .u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
 .u-name{font-size:13px;font-weight:600;}
-.u-login{font-size:11px;color:var(--text-dim);font-family:var(--mono);}
+.u-acts{display:flex;gap:6px;align-items:center;}
+.u-more{position:relative;}
+.u-more-btn{min-width:38px;font-size:16px;line-height:1;}
+.u-menu{
+  display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:30;
+  min-width:190px;padding:4px;border-radius:10px;
+  background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);
+}
+.u-menu.open{display:block;}
+.u-menu button{
+  display:block;width:100%;text-align:left;padding:9px 10px;border:none;border-radius:7px;
+  background:none;color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer;
+}
+.u-menu button:hover{background:var(--surface-2);}
+.u-menu button.u-danger{color:var(--danger);}
+.u-login{font-size:11px;color:var(--text-dim);font-family:var(--code);}
 
 /* «Удалить навсегда» стоит рядом с «Закрыть доступ», и обе красные —
    промахнуться пальцем слишком легко, а цена разная: одну отменяют
@@ -134,10 +149,6 @@
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
             <div><div style="font-size:13px;font-weight:500">WebHMI коллектор</div><div style="font-size:11px;color:var(--text-dim)" id="collectorStatus">Проверка...</div></div>
             <span class="badge" id="collectorBadge">—</span>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
-            <div><div style="font-size:13px;font-weight:500">Сертификат для устройств</div>
-              <div style="font-size:11px;color:var(--text-dim)">Один раз на телефон, ноутбук и компьютер цеха — иначе не работают уведомления и диктофон</div></div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:8px">
             <div><div style="font-size:13px;font-weight:500">GitHub репозиторий</div><div style="font-size:11px;color:var(--text-dim)">Исходный код проекта</div></div>
@@ -273,6 +284,18 @@ async function load(){
   }catch{}
 }
 
+// Меню строки: открыто одно за раз, закрывается щелчком мимо.
+function toggleRowMenu(button, event){
+  event.stopPropagation();
+  const menu = button.nextElementSibling;
+  const open = menu.classList.contains('open');
+  document.querySelectorAll('.u-menu.open').forEach(m => m.classList.remove('open'));
+  if (!open) menu.classList.add('open');
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.u-menu.open').forEach(m => m.classList.remove('open'));
+});
+
 function renderUsers(){
   const q=(document.getElementById('userSearch')?.value||'').toLowerCase();
   const users=allUsers.filter(u=>!q||(u.full_name||'').toLowerCase().includes(q)||(u.username||'').toLowerCase().includes(q));
@@ -289,18 +312,27 @@ function renderUsers(){
         <div class="u-login">@${u.username}</div>
       </div>
       <span style="font-size:11px;font-weight:600;color:${ROLE_COLORS[u.role]||'var(--text-dim)'};flex-shrink:0">${ROLE_LABELS[u.role]||u.role}</span>
-      <div style="display:flex;gap:6px">
+      <!-- На виду — только то, что делают каждый день. Закрытие
+           доступа и удаление убраны в «⋯»: рядом с обычными кнопками
+           по ним промахиваются, а отменить их нельзя. -->
+      <div class="u-acts">
         ${fullAccess ? `<button class="btn secondary sm" onclick="openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">Изменить</button>` : ''}
         <button class="btn secondary sm" onclick="openChangeUserPassword(${u.id},'${u.full_name||u.username}')"><span data-icon=key></span> Пароль</button>
-        <button class="btn secondary sm" onclick="revokeUser(${u.id},'${u.full_name}')">Сессии</button>
-        ${!fullAccess ? '' : off
-          ? `<button class="btn primary sm" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`
-          : `<button class="btn danger sm" onclick="setUserActive(${u.id},false,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Закрыть доступ</button>`}
-        ${!fullAccess ? '' : u.can_delete
-          ? `<button class="btn secondary sm" title="Учётка пустая — ни одной записи в системе"
-               onclick="deleteEmptyUser(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Удалить пустую</button>`
-          : `<button class="btn danger sm btn-forever" title="Стереть учётную запись без возврата"
-               onclick="deleteUserForever(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}','${u.username}')">Удалить навсегда</button>`}
+        <div class="u-more">
+          <button class="btn secondary sm u-more-btn" title="Ещё действия"
+                  onclick="toggleRowMenu(this, event)">⋯</button>
+          <div class="u-menu">
+            <button type="button" onclick="revokeUser(${u.id},'${u.full_name}')">Завершить сессии</button>
+            ${!fullAccess ? '' : off
+              ? `<button type="button" onclick="setUserActive(${u.id},true,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Вернуть доступ</button>`
+              : `<button type="button" class="u-danger" onclick="setUserActive(${u.id},false,'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Закрыть доступ</button>`}
+            ${!fullAccess ? '' : u.can_delete
+              ? `<button type="button" class="u-danger" title="Учётка пустая — ни одной записи в системе"
+                   onclick="deleteEmptyUser(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}')">Удалить пустую</button>`
+              : `<button type="button" class="u-danger" title="Стереть учётную запись без возврата"
+                   onclick="deleteUserForever(${u.id},'${(u.full_name||u.username).replace(/'/g,"\\'")}','${u.username}')">Удалить навсегда</button>`}
+          </div>
+        </div>
       </div>
     </div>`;}).join('')||'<div class="empty">Нет пользователей</div>';
 }

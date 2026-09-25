@@ -7,7 +7,7 @@
 <title>Использование — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .us-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
 .us-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
@@ -187,7 +187,7 @@ function render() {
     const last = (up.gaps || [])[0];
     uptimeNote = `Сервер был недоступен ${up.gaps_count} ${times(up.gaps_count)}, всего ${forHuman(up.minutes_down)}`
       + (last ? ` — последний раз ${when(last.from)}, ${forHuman(last.minutes)}` : '')
-      + '. В это время сайт не открывался ни у кого: ноутбук уснул, сел или пропала сеть.';
+      + '. В это время сайт был недоступен — заходы за эти часы не записывались.';
   } else if (up.known) {
     uptimeNote = `Сервер был на месте всё время наблюдения (с ${dayLabel(up.since.slice(0, 10))}).`;
   }

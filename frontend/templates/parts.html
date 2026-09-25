@@ -7,7 +7,7 @@
 <title>Запчасти — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
 .part-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;transition:border-color .15s;}
@@ -264,7 +264,7 @@ function renderParts(){
     return`<div class="part-card ${isLow?'low':'ok'}">
       <div class="part-name">${p.name}</div>
       <div class="part-eq">${p.equipment_name||'Общее'} · ${CAT_LABELS[p.category]||p.category||'—'}</div>
-      ${p.part_number?`<div style="font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-bottom:6px">${p.part_number}</div>`:''}
+      ${p.part_number?`<div style="font-size:10px;color:var(--text-dim);font-family:var(--code);margin-bottom:6px">${p.part_number}</div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <div>
           <div style="font-size:10px;color:var(--text-dim)">В наличии</div>

@@ -393,6 +393,15 @@ function updateSummary(list) {
 
     if (total) {
         total.textContent = list.length;
+
+        // На «Механике» и «Электрике» показан не весь завод, а только
+        // своя дисциплина плюс общее оборудование. Без этой подписи
+        // число расходилось с «Оборудованием» и выглядело ошибкой.
+        const hint = document.getElementById("totalHint");
+        if (hint && window.DISCIPLINE_LOCK && Array.isArray(equipmentData)) {
+            const all = equipmentData.filter(item => item.is_active !== 0).length;
+            hint.textContent = all > list.length ? `; всего на заводе ${all}` : "";
+        }
     }
 
     if (working) {

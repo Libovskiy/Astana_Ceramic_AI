@@ -7,7 +7,7 @@
 <title>База знаний — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .kb-card {
   background:var(--surface); border:1px solid var(--border);
@@ -33,7 +33,8 @@
 
 .search-wrap { position:relative;margin-bottom:16px; }
 .search-wrap input { padding-left:36px; }
-.search-wrap::before { content:'<span data-icon=search></span>';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px; }
+.search-wrap [data-icon] { position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  color:var(--text-dim);pointer-events:none;display:flex; }
 </style>
 </head>
 <body>
@@ -53,6 +54,7 @@
 
       <!-- ПОИСК -->
       <div class="search-wrap">
+        <span data-icon=search></span>
         <input class="input" id="searchKb" placeholder="Поиск по оборудованию или симптому...">
       </div>
 

@@ -10,13 +10,12 @@
  * Нажал — пошла запись (на кнопке таймер), нажал ещё раз — готово.
  * Не «держать пальцем»: в перчатках удерживать кнопку неудобно.
  *
- * Микрофон браузер даёт только на https или localhost. С телефона по
- * http://192.168… кнопка объясняет это и предлагает защищённый адрес.
+ * Микрофон браузер даёт только на https или localhost. Если сайт открыли
+ * по http, кнопка объясняет это и предлагает защищённый адрес.
  */
 (function () {
   "use strict";
 
-  var HTTPS_PORT = 8443;
   var DICTATE_MAX_SEC = 120;
   var MESSAGE_MAX_SEC = 300;
 
@@ -59,12 +58,12 @@
   }
 
   function explainInsecure() {
-    var secure = "https://" + location.hostname + ":" + HTTPS_PORT + location.pathname + location.search;
+    // Тот же хост, но по https: сертификат у заводского адреса настоящий.
+    var secure = "https://" + location.host.split(":")[0] + location.pathname + location.search;
     var go = window.confirm(
       "Микрофон работает только через защищённый адрес.\n\n" +
       "Открыть " + secure + " ?\n\n" +
-      "При первом входе телефон предупредит, что сертификат не проверен: " +
-      "нажмите «Подробнее» → «Перейти на сайт». Это наш заводской сервер."
+      "Это тот же сайт, просто защищённый адрес."
     );
     if (go) location.href = secure;
   }

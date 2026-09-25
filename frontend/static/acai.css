@@ -30,8 +30,18 @@
      заливки нужен тон темнее; сам --accent остаётся ярким, потому что
      им набраны ссылки на тёмном фоне. Та же пара, что у --ok/--ok-solid. */
   --accent-solid: #1d4ed8;
-  --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  /* Числа раньше набирались моноширинным Plex Mono — от этого сводки
+     выглядели как вывод программы, а не как отчёт. В Plex Sans цифры и
+     так все одной ширины (проверено в браузере: «111111» и «000000»
+     занимают ровно 144 px), поэтому в столбцах они не разъезжаются.
+     --mono теперь значит «цифры основным шрифтом», и правка одна на всю
+     систему, а не в девяноста местах. */
+  --mono: var(--sans);
+  /* Настоящий моноширинный оставлен там, где знак читают по одному:
+     логин, артикул запчасти, код ошибки ПЛК. Там разница I/l/1 важнее
+     красоты. */
+  --code: 'IBM Plex Mono', ui-monospace, monospace;
   --radius: 12px;
   --nav-w: 220px;
 
@@ -93,6 +103,9 @@
 
 html, body {
   font-family: var(--sans);
+  /* Страховка на случай другого шрифта у клиента: цифры выравниваются
+     по столбцам, а не по ширине каждой. */
+  font-variant-numeric: tabular-nums;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -251,7 +264,9 @@ html, body {
 .topbar-title { font-size: 15px; font-weight: 600; }
 .topbar-sub   { font-size: 12px; color: var(--text-dim); }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.topbar-clock { font-family: var(--mono); font-size: 13px; color: var(--text-dim); }
+/* Отметка «данные на HH:MM» вместо прежних часов. */
+.topbar-clock { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.topbar-clock.stale { color: var(--warn); font-weight: 600; }
 
 /* ── КОНТЕНТ ── */
 .page { padding: 14px 18px; flex: 1; }
@@ -311,6 +326,8 @@ html, body {
   font-family: var(--sans); transition: filter .15s, opacity .15s;
 }
 .btn:hover { filter: brightness(1.1); }
+/* Кнопкой бывает и ссылка — у неё иначе подчёркивание и цвет. */
+a.btn { text-decoration: none; }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.primary  { background: var(--accent-solid); color: #fff; }
 .btn.secondary{ background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
@@ -368,9 +385,23 @@ html, body {
 
 /* ── УТИЛИТЫ ── */
 .hidden  { display: none !important; }
-.empty   { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
+.empty   { color: var(--text-dim); font-size: 13px; padding: 12px 0; text-align: center; }
+/* Пустое состояние в одну строку: объяснение слева, кнопка справа.
+   Прежний вид — заголовок «Данных нет» и текст под ним по центру —
+   занимал 82 px в каждом блоке, а на «Аналитике» таких пять. */
+.empty.compact {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; text-align: left; line-height: 1.45;
+}
+.empty.compact .empty-text { flex: 1; min-width: 0; }
+.empty.compact .btn { flex-shrink: 0; }
+@media (max-width: 560px) {
+  .empty.compact { flex-direction: column; align-items: stretch; }
+  .empty.compact .btn { width: 100%; }
+}
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
-.mono    { font-family: var(--mono); }
+.mono    { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.code    { font-family: var(--code); font-size: .92em; }
 
 /* ── АДАПТИВ ──
    С телефона систему смотрят не только рабочие: директор открывает её

@@ -7,7 +7,7 @@
 <title>Журнал — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=34">
+<link rel="stylesheet" href="/static/acai.css?v=36">
 <style>
 .log-item {
   display:flex; align-items:flex-start; gap:14px;
@@ -23,7 +23,7 @@
 .log-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:3px; }
 .log-who { font-size:13px; font-weight:600; }
 .log-what { font-size:13px; color:var(--text-dim); }
-.log-target { font-size:12px; color:var(--accent); font-family:var(--mono); }
+.log-target { font-size:12px; color:var(--accent); font-family:var(--code); }
 .log-changes { margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
 .chg-row { display:flex; align-items:baseline; gap:8px; font-size:12px; padding:3px 0; flex-wrap:wrap; }
 .chg-field { min-width:130px; color:var(--text-dim); }
@@ -107,7 +107,7 @@ const ACTION_META = {
   login_failed:       { icon:ACAI.icon('alert'), bg:'rgba(239,68,68,.1)', label:'Неудачный вход' },
   // обращения
   case_created:       { icon:ACAI.icon('equipment'), bg:'rgba(59,130,246,.1)', label:'Создано обращение' },
-  case_taken:         { icon:'▶️', bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
+  case_taken:         { icon:ACAI.icon('play'), bg:'rgba(99,102,241,.1)', label:'Взято в работу' },
   case_draft_close:   { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Черновик закрытия' },
   case_approve_close: { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'Закрыто' },
   // оборудование
@@ -204,6 +204,12 @@ const ACTION_META = {
   user_disabled:                 { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Доступ закрыт' },
   password_changed:              { icon:ACAI.icon('key'), bg:'rgba(245,158,11,.1)', label:'Пароль изменён' },
   login_disabled:                { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Вход при закрытом доступе' },
+  // Человеческие названия вместо сырых: в журнале было
+  // «production_report_imported», и читать это должен был человек.
+  production_report_imported:        { icon:ACAI.icon('production'), bg:'rgba(100,116,139,.1)', label:'Загружен сменный отчёт из Экселя' },
+  downtime_rate_set:                 { icon:ACAI.icon('gear'), bg:'rgba(100,116,139,.1)', label:'Задана стоимость часа простоя' },
+  passwords_reset:                   { icon:ACAI.icon('key'), bg:'rgba(100,116,139,.1)', label:'Пароли заданы заново' },
+  cleanup_before_launch:             { icon:ACAI.icon('trash'), bg:'rgba(100,116,139,.1)', label:'Очистка данных перед запуском' },
   login_blocked:                 { icon:ACAI.icon('ban'), bg:'rgba(239,68,68,.1)', label:'Вход заблокирован (перебор)' },
 };
 
