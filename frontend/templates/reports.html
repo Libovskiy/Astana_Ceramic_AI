@@ -7,7 +7,7 @@
 <title>Отчёты — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=37">
+<link rel="stylesheet" href="/static/acai.css?v=38">
 <style>
 .report-card {
   background:var(--surface); border:1px solid var(--border);
@@ -114,7 +114,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=37"></script>
+<script src="/static/acai_layout.js?v=38"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
 const PERIOD_LABELS = {today:'Сегодня',week:'7 дней',month:'30 дней'};
@@ -278,7 +278,7 @@ async function showReport(type) {
     `);
   } else if (type==='sensors') {
     const r = await ACAI.get('/api/sensors/latest');
-    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария','моточасы_общие':'Моточасы',
+    const LABELS = {'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Сигнал панели (1658)','моточасы_общие':'Моточасы',
       'питатель_1_гц':'Питатель №1','питатель_2_гц':'Питатель №2','конвейер_1_гц':'Конвейер №1','конвейер_2_гц':'Конвейер №2','конвейер_3_гц':'Конвейер №3','конвейер_4_гц':'Конвейер №4','конвейер_5_гц':'Конвейер №5','конвейер_6_гц':'Конвейер №6','конвейер_7_гц':'Конвейер №7'};
     // Только то, что панель сейчас отдаёт: старые регистры (сторона_1,
     // конвейер_глины) остались в истории с 10.09 и выглядели бы как текущие.
@@ -286,8 +286,9 @@ async function showReport(type) {
     const fmtVal = (k,v) => {
       if (k==='моточасы_общие') return v.value;
       // Сравнивать строкой нельзя: панель шлёт «0», но любое «0.0»
-      // или пробел превратили бы «нет аварии» в «ЕСТЬ». Считаем числом.
-      if (k==='авария_флаг') { const a = parseFloat(v.value); return a > 0 ? 'ЕСТЬ' : 'нет'; }
+      // или пробел превратили бы «нет сигнала» в «есть». Считаем числом.
+      // Слово нейтральное: что означает регистр 1658, не подтверждено.
+      if (k==='авария_флаг') { const a = parseFloat(v.value); return a > 0 ? 'есть' : 'нет'; }
       const n = parseFloat(v.value);
       if (!isFinite(n)) return v.value;
       return n.toFixed(1) + (k.includes('проц') ? '%' : k.includes('гц') ? ' Гц' : '');

@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=37">
+<link rel="stylesheet" href="/static/acai.css?v=38">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -167,7 +167,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=37"></script>
+<script src="/static/acai_layout.js?v=38"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script src="/static/xls-report.js?v=2"></script>
 <script>
@@ -633,7 +633,7 @@ async function loadDowntimeChart(){
 
 function renderSensorsNow(lv){
   const KEYS=['pl024_1_загрузка_проц','pl024_2_загрузка_проц','питатель_2_загрузка_проц','kp10_загрузка_проц','авария_флаг'];
-  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Авария'};
+  const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2','питатель_2_загрузка_проц':'Питатель №2','kp10_загрузка_проц':'KP-10','авария_флаг':'Сигнал панели'};
   const available=KEYS.filter(k=>lv[k]);
   if(!available.length){document.getElementById('sensorNow').innerHTML='<div class="empty">Откройте вкладку WebHMI для данных</div>';return;}
   // самое свежее время: частоты панель присылает только при изменении,
@@ -652,17 +652,20 @@ function renderSensorsNow(lv){
       const isPct=k.includes('проц')&&!isAlarm;
       const bogus=isPct&&(!isFinite(v)||v<0||v>100);
 
+      // Нейтрально, пока не подтверждено, что означает регистр 1658:
+      // красная плашка заставляет реагировать на сигнал, о котором мы
+      // сами не знаем, авария это или рабочий такт.
       const color=bogus?'var(--text-dim)'
-                 :isAlarm?(v>0?'var(--danger)':'var(--ok)')
+                 :isAlarm?'var(--text)'
                  :v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
       const pct=(isPct&&!bogus)?Math.min(v,100):0;
 
-      const shown=isAlarm?(v>0?'<span data-icon=alert></span> АВАРИЯ':'✓ Норма')
+      const shown=isAlarm?(v>0?'есть':'нет')
                  :bogus?v.toFixed(1)+'% <span data-icon=alert></span>'
                  :v.toFixed(1)+'%';
 
       return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px"
-             ${bogus?'title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно. В расчёты не берётся."':''}>
+             ${bogus?'title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно. В расчёты не берётся."':(isAlarm?'title="Регистр 1658 панели WebHMI. Что он означает — не подтверждено: за сутки поднят 785 раз из 2807, для аварии это слишком часто. Уточняется у главного инженера. Ни на какие расчёты и на «Аварии» в меню не влияет."':'')}>
         <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">${LABELS[k]}</div>
         <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${shown}</div>
         ${bogus?`<div style="font-size:10px;color:var(--warn);margin-top:4px">датчик врёт</div>`:''}

@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=37">
+<link rel="stylesheet" href="/static/acai.css?v=38">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -214,7 +214,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=37"></script>
+<script src="/static/acai_layout.js?v=38"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -484,7 +484,7 @@ function renderSensors(lv){
   const BELTS=['конвейер_1_гц','конвейер_2_гц','конвейер_3_гц','конвейер_4_гц',
                'конвейер_5_гц','конвейер_6_гц','конвейер_7_гц'];
   const LABELS={'pl024_1_загрузка_проц':'PL024 №1','pl024_2_загрузка_проц':'PL024 №2',
-                'авария_флаг':'Авария',
+                'авария_флаг':'Сигнал панели',
                 'питатель_1_гц':'Питатель 1','питатель_2_гц':'Питатель 2',
                 'конвейер_1_гц':'Конв. 1','конвейер_2_гц':'Конв. 2','конвейер_3_гц':'Конв. 3',
                 'конвейер_4_гц':'Конв. 4','конвейер_5_гц':'Конв. 5','конвейер_6_гц':'Конв. 6',
@@ -503,18 +503,22 @@ function renderSensors(lv){
 
     // Частота — не процент: нулевая означает, что привод стоит,
     // и красить её как «низкую загрузку» неверно.
+    // Красным этот сигнал не красим. Регистр 1658 поднят 785 раз из
+    // 2807 за сутки — для аварии слишком часто, и что он значит на
+    // самом деле, пока не подтверждено. Красное требует действия, а
+    // действовать не на что.
     const c = bogus ? 'var(--text-dim)'
-            : a  ? (v>0?'var(--danger)':'var(--text-dim)')
+            : a  ? 'var(--text)'
             : hz ? (v>0?'var(--text)':'var(--text-dim)')
             : v<50?'var(--danger)':v<80?'var(--warn)':'var(--text)';
 
     const p=(pctKey && !bogus)?Math.min(v,100):0;
-    const text = a  ? (v>0?'<span data-icon=alert></span> АВАРИЯ':'нет')
+    const text = a  ? (v>0?'есть':'нет')
                : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
                : bogus ? v.toFixed(1)+'% <span data-icon=alert></span>'
                : v.toFixed(1)+'%';
 
-    return `<div class="ss-item"${bogus?' title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно"':''}>
+    return `<div class="ss-item"${bogus?' title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно"':(a?' title="Регистр 1658 панели WebHMI. Что он означает — не подтверждено: за сутки поднят 785 раз из 2807, для аварии это слишком часто. Уточняется у главного инженера. Ни на какие расчёты и на «Аварии» в меню не влияет."':'')}>
       ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
       <span class="ss-label">${LABELS[k]}</span>
       <span class="ss-val" style="color:${c}">${text}</span>
