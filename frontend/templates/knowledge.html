@@ -7,7 +7,7 @@
 <title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=39">
+<link rel="stylesheet" href="/static/acai.css?v=40">
 <style>
 /* Раздел «Знания» — три источника ответа «как чинить», сведённые на
    одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
@@ -63,6 +63,17 @@
 .doc-where { font-size:11px; color:var(--text-dim); margin-top:2px; }
 .doc-row.gone { cursor:default; opacity:.65; }
 .doc-row.gone:hover { background:none; }
+.doc-note { font-size:12px;color:var(--text-dim);line-height:1.5;margin:0 0 10px; }
+.doc-part { font-size:12px;font-weight:600;color:var(--text);
+  margin:12px 0 6px;display:flex;align-items:center;gap:8px; }
+.doc-part-n { font-size:11px;font-weight:400;color:var(--text-dim);
+  background:var(--surface-2);padding:1px 7px;border-radius:999px; }
+.section-head.foldable { cursor:pointer; }
+.section-head.foldable:hover { color:var(--accent); }
+.doc-caret { display:inline-block;width:12px;color:var(--text-dim); }
+.doc-part.foldable { cursor:pointer; }
+.doc-part.foldable:hover { color:var(--accent); }
+.doc-part-hint { font-size:11px;font-weight:400;color:var(--accent); }
 
 .search-wrap { position:relative;margin-bottom:16px; }
 .search-wrap input { padding-left:36px; }
@@ -117,13 +128,15 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=39"></script>
+<script src="/static/acai_layout.js?v=40"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
 // ── Три источника знаний ────────────────────────────────────────────
 let procedures = {};      // инструкции завода, пишут люди
 let resolutions = {};     // решения из закрытых обращений
-let documents = [];       // документация станков, PDF
+let docGroups = [];       // документация с диска, по станкам
+let docOrphans = [];      // записи системы, потерявшие файл
+let docStats = {};
 let procEquipment = [];
 let knUser = null;
 let tab = 'proc';
@@ -150,7 +163,8 @@ function counts(){
       n + items.filter(p => !searchQ || has(m) || has(p.title)).length, 0),
     sol: Object.entries(resolutions).reduce((n,[m,items]) =>
       n + items.filter(i => !searchQ || has(m) || has(i.symptom) || has(i.resolution)).length, 0),
-    doc: documents.filter(d => !searchQ || has(d.title) || has(d.equipment_name) || has(d.zone)).length,
+    doc: docGroups.reduce((n, g) =>
+      n + g.items.filter(d => !searchQ || has(d.title) || has(g.title) || has(d.part) || has(g.sub)).length, 0),
   };
 }
 
@@ -174,8 +188,8 @@ function switchTab(key){
 function renderVerdict(){
   const procTotal = Object.values(procedures).reduce((s,a)=>s+a.length,0);
   const solTotal = Object.values(resolutions).reduce((s,a)=>s+a.length,0);
-  const docTotal = documents.length;
-  const missing = documents.filter(d => !d.exists).length;
+  const docTotal = docStats.unique || 0;
+  const missing = docOrphans.length;
 
   if(!procTotal && !solTotal && !docTotal){
     ACAI.verdict('kbVerdict', {title:'Знаний пока нет',
@@ -188,8 +202,10 @@ function renderVerdict(){
     where:'ИИ ищет здесь в первую очередь — пока искать нечего'});
   if(!solTotal) rows.push({level:'warning', what:'Решений из обращений нет',
     where:'они появляются сами, когда специалист закрывает обращение с описанием ремонта'});
-  if(missing) rows.push({level:'warning', what:`Файлов нет на месте: ${missing}`,
-    where:'документ переложили или удалили мимо системы'});
+  if(missing) rows.push({level:'warning', what:`Записей без файла: ${missing}`,
+    where:'документ заводили, но файла по этому пути нет — надо перезалить'});
+  if(docStats.unlinked) rows.push({level:'info', what:`Не привязано к станку: ${docStats.unlinked}`,
+    where:'папка не совпала ни с одним названием станка — лежат в конце списка'});
 
   const sub = `Инструкций ${procTotal} · решений ${solTotal} · документов ${docTotal}`;
   if(rows.length){
@@ -274,45 +290,120 @@ function renderResolutions(){
 }
 
 // ── Вкладка «Документация» ──────────────────────────────────────────
-function renderDocuments(){
-  const list = documents.filter(d =>
-    !searchQ || has(d.title) || has(d.equipment_name) || has(d.zone));
+// Показываем то, что лежит на диске, а не то, что завели руками: в
+// списке системы 18 строк, на диске 650 файлов. Одинаковые файлы
+// схлопнуты по sha256 — одну инструкцию по вентилятору положили в
+// пять папок, и списком это читалось бы как пять разных документов.
+function docSize(bytes){
+  const mb = (bytes || 0) / 1048576;
+  return mb >= 1 ? `${mb.toFixed(1)} МБ` : `${Math.max(1, Math.round((bytes||0)/1024))} КБ`;
+}
 
-  if(!list.length){
+// Со скольких файлов часть сворачивается: до восьми список читается,
+// дальше он выдавливает соседние станки за экран.
+const DOC_PART_FOLD = 8;
+
+// Что человек раскрыл руками.
+const docOpen = new Set();
+function docToggle(title){
+  docOpen.has(title) ? docOpen.delete(title) : docOpen.add(title);
+  render();
+}
+
+// Параметр называется file, а не item: «item» на этой странице — это
+// решение из обращения, и tests/test_knowledge_shows_content.py сверяет
+// все item.<поле> с ответом /api/knowledge. Документ приходит из другого
+// запроса, и путать их нельзя — проверка перестанет ловить настоящее.
+function docMatch(group, file){
+  return !searchQ || has(file.title) || has(group.title) || has(file.part) || has(group.sub);
+}
+
+function renderDocuments(){
+  const groups = docGroups
+    .map(g => ({...g, items: g.items.filter(i => docMatch(g, i))}))
+    .filter(g => g.items.length);
+
+  if(!groups.length && !docOrphans.length){
     return searchQ
       ? '<div class="empty compact"><span class="empty-text">По запросу документов нет.</span></div>'
-      : '<div class="empty compact"><span class="empty-text">Документов нет. Руководства прикрепляются в карточке станка.</span><a class="btn secondary sm" href="/equipment">Оборудование</a></div>';
+      : '<div class="empty compact"><span class="empty-text">Документов нет. Руководства кладут в папки завода или прикрепляют в карточке станка.</span><a class="btn secondary sm" href="/equipment">Оборудование</a></div>';
   }
 
-  // Группируем по станку: человек ищет «руководство по печи», а не
-  // «документ №8».
-  const byMachine = {};
-  list.forEach(d => (byMachine[d.equipment_name || 'Без станка'] ||= []).push(d));
+  const head = (!searchQ && docStats.unique) ? `
+    <div class="doc-note">
+      Всего файлов ${docStats.files_total}, из них разных ${docStats.unique}${
+        docStats.duplicates ? ` · одинаковых копий ${docStats.duplicates}, показаны один раз` : ''}.
+      Файлы открываются только после входа в систему.
+    </div>` : '';
 
-  return Object.entries(byMachine).map(([machine, items]) => `
+  const orphans = (!searchQ && docOrphans.length) ? `
     <div class="section-head">
-      <span><span data-icon=equipment></span> ${esc(machine)}</span>
-      <span class="section-count">${items.length}</span>
+      <span><span data-icon=alert></span> Файл не найден</span>
+      <span class="section-count">${docOrphans.length}</span>
     </div>
+    <div class="doc-note">Эти документы заводили в системе, но файла по записанному пути нет — их надо перезалить. Записи оставлены, чтобы было видно, что именно пропало.</div>
     <div class="card"><div class="card-body" style="padding:0">
-      ${items.map(d => d.exists
-        ? `<a class="doc-row" href="${d.url}" target="_blank" rel="noopener">
-             <span data-icon=reports></span>
-             <div style="flex:1;min-width:0">
-               <div class="doc-name">${esc(d.title)}</div>
-               <div class="doc-where">${esc(d.zone||'')}${d.added_at?' · добавлен '+ACAI.shortDate(d.added_at):''}${d.added_by?' · '+esc(d.added_by):''}</div>
-             </div>
-             <span class="badge accent" style="font-size:10px">Открыть</span>
-           </a>`
-        : `<div class="doc-row gone" title="Файл не найден в хранилище — его переложили или удалили мимо системы">
-             <span data-icon=alert></span>
-             <div style="flex:1;min-width:0">
-               <div class="doc-name">${esc(d.title)}</div>
-               <div class="doc-where">файла нет на месте</div>
-             </div>
-           </div>`).join('')}
-    </div></div>
-  `).join('');
+      ${docOrphans.map(o => `
+        <div class="doc-row gone" title="${esc(o.file_path || '')}">
+          <span data-icon=alert></span>
+          <div style="flex:1;min-width:0">
+            <div class="doc-name">${esc(o.title)}</div>
+            <div class="doc-where">${esc(o.equipment_name || 'станок не указан')}${o.added_at ? ' · заведён ' + ACAI.shortDate(o.added_at) : ''}</div>
+          </div>
+        </div>`).join('')}
+    </div></div>` : '';
+
+  return head + groups.map((g, gi) => {
+    // Внутри станка — по частям: «РЭ», «Электрическая схема». Без
+    // этого руководство по вальцам выглядело бы списком из 114
+    // безымянных сканов вместо двух документов.
+    const byPart = {};
+    g.items.forEach(i => (byPart[i.part || ''] ||= []).push(i));
+    const parts = Object.keys(byPart).sort();
+
+    // Непривязанные папки свёрнуты: в «Технической базе» 400 с лишним
+    // сканов, и развёрнутыми они превращали страницу в 40 000 px
+    // скролла, сквозь который не пройти до нужного станка. При поиске
+    // разворачиваем сами — человек ищет, а не листает.
+    const open = g.linked || searchQ || docOpen.has(g.title);
+    const body = !open ? '' : `
+      ${g.linked ? '' : `<div class="doc-note">${esc(g.sub)} — папка не совпала ни с одним названием станка, поэтому не привязана. Угадывать не стали.</div>`}
+      ${parts.map(part => {
+        // Руководство разложено постранично: 60 сканов «РЭ» — это один
+        // документ, а не шестьдесят. Длинные части свёрнуты, чтобы
+        // сквозь них было видно соседние станки.
+        const key = g.title + '/' + part;
+        const many = byPart[part].length > DOC_PART_FOLD;
+        const shown = (!many || searchQ || docOpen.has(key)) ? byPart[part] : [];
+        return `
+        ${part ? `<div class="doc-part ${many ? 'foldable' : ''}"
+             ${many ? `onclick="docToggle(${JSON.stringify(key).replace(/"/g,'&quot;')})"` : ''}>
+             ${many ? `<span class="doc-caret">${shown.length ? '▾' : '▸'}</span>` : ''}${esc(part)}
+             <span class="doc-part-n">${byPart[part].length}</span>
+             ${many && !shown.length ? '<span class="doc-part-hint">показать</span>' : ''}</div>` : ''}
+        ${!shown.length ? '' : `
+        <div class="card" style="margin-bottom:8px"><div class="card-body" style="padding:0">
+          ${shown.map(d => `
+            <a class="doc-row" href="${d.url}" target="_blank" rel="noopener">
+              <span data-icon=reports></span>
+              <div style="flex:1;min-width:0">
+                <div class="doc-name">${esc(d.title)}</div>
+                <div class="doc-where">${d.kind} · ${docSize(d.size_bytes)}${
+                  d.also_in.length ? ` · лежит ещё в: ${esc(d.also_in.slice(0,2).join(', '))}${d.also_in.length>2?' и ещё '+(d.also_in.length-2):''}` : ''}</div>
+              </div>
+              <span class="badge accent" style="font-size:10px">Открыть</span>
+            </a>`).join('')}
+        </div></div>`}`;
+      }).join('')}`;
+
+    return `
+      <div class="section-head ${g.linked ? '' : 'foldable'}"
+           ${g.linked ? '' : `onclick="docToggle(${JSON.stringify(g.title).replace(/"/g,'&quot;')})"`}>
+        <span>${g.linked ? '' : `<span class="doc-caret">${open ? '▾' : '▸'}</span>`}<span data-icon=${g.linked ? 'equipment' : 'reports'}></span> ${esc(g.title)}</span>
+        <span class="section-count">${g.items.length}</span>
+      </div>
+      ${body}`;
+  }).join('') + orphans;
 }
 
 function render(){
@@ -472,7 +563,10 @@ async function loadAll(){
   ]);
   procedures = proc.grouped || {};
   resolutions = know.grouped || {};
-  documents = docs.documents || [];
+  docGroups = docs.groups || [];
+  docOrphans = docs.orphans || [];
+  docStats = {files_total: docs.files_total || 0, unique: docs.unique || 0,
+              duplicates: docs.duplicates || 0, unlinked: docs.unlinked || 0};
 
   // Открываем ту вкладку, где что-то есть: раздел с тремя пустыми
   // вкладками читается как сломанный, даже когда работает.

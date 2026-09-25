@@ -27,6 +27,7 @@ from backend.api.common import (
     require_roles,
 )
 from backend.config import DB_NAME, DOCS_PATH
+from backend.services.docs_library_service import registry_orphans, scan_library
 
 router = APIRouter()
 
@@ -61,50 +62,31 @@ def get_knowledge_route(
 @router.get("/api/knowledge/documents")
 def all_documents(user: dict = Depends(get_current_user)):
     """
-    Вся документация завода одним списком, с названием станка.
+    Документация завода — то, что лежит на диске, а не то, что завели.
 
-    До этого документы можно было увидеть только в карточке своего
-    станка: чтобы узнать, есть ли вообще руководство по печи, надо
-    было угадать станок и открыть его. Для вкладки «Документация»
-    нужен общий список, иначе раздел «Знания» знает о документах
-    меньше, чем о них знает ИИ.
+    В списке документов системы 18 строк, их заводили руками через
+    карточку станка. На диске при этом 650 файлов: заводскую
+    документацию заливали папками, минуя систему. Вкладка показывала
+    шесть и была пустее, чем знает ИИ, — он ищет по этим же папкам.
 
-    Видно всем авторизованным — как инструкции и решения: это то, что
-    помогает на месте, а не отчётность для руководства.
+    Сюда же идут записи, у которых файла нет на месте: не удаляем, а
+    показываем отдельно, чтобы было видно, что надо перезалить.
+
+    Файлы отдаются не отсюда, а по /docs-files с проверкой сессии.
+    Видно всем авторизованным — как инструкции и решения.
     """
 
-    conn = sqlite3.connect(DB_NAME, timeout=10)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = [dict(r) for r in conn.execute(
-            """
-            SELECT d.id, d.equipment_id, d.title, d.file_path, d.doc_type,
-                   d.note, d.added_by, d.added_at,
-                   e.name AS equipment_name, e.location AS zone
-            FROM equipment_documents d
-            LEFT JOIN equipment e ON e.id = d.equipment_id
-            WHERE COALESCE(d.is_active, 1) = 1
-            ORDER BY e.name, d.title
-            """
-        )]
-    finally:
-        conn.close()
-
-    # Документ мог быть переложен или удалён из docs/ мимо системы.
-    # Честное «файла нет» лучше битой ссылки: по ней человек решит,
-    # что сломался сайт, и перестанет сюда ходить.
-    for item in rows:
-        if item.get("file_path"):
-            item["exists"] = (DOCS_PATH / item["file_path"]).exists()
-            item["url"] = f"/docs-files/{item['file_path']}"
-        else:
-            item["exists"] = False
-            item["url"] = None
+    library = scan_library()
 
     return {
         "success": True,
-        "documents": rows,
-        "missing": sum(1 for r in rows if not r["exists"]),
+        "groups": library["groups"],
+        "files_total": library["files_total"],
+        "unique": library["unique"],
+        "duplicates": library["duplicates"],
+        "unlinked": library["unlinked"],
+        # Записи системы, потерявшие файл. Перезалить их должен человек.
+        "orphans": registry_orphans(),
     }
 
 
