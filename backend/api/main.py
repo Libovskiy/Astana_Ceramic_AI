@@ -171,6 +171,11 @@ app.include_router(team_chat_router)
 from backend.api.docs_files_routes import router as docs_files_router
 app.include_router(docs_files_router)
 
+# Сканы в TIF: Chrome их не показывает ни на компьютере, ни на
+# Android — скачивает. Отдаём копию в PNG, оригинал не трогаем.
+from backend.api.docs_preview_routes import router as docs_preview_router
+app.include_router(docs_preview_router)
+
 from backend.api.regulation_admin_routes import router as regulation_admin_router
 app.include_router(regulation_admin_router)
 

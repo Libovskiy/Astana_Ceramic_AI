@@ -44,6 +44,12 @@ SUFFIX_LABEL = {".pdf": "PDF", ".doc": "Word", ".docx": "Word",
                 ".xls": "Excel", ".xlsx": "Excel", ".jpg": "Фото",
                 ".jpeg": "Фото", ".png": "Фото", ".tif": "Скан", ".tiff": "Скан"}
 
+# Что браузер не покажет сам. Проверено 25.09.2026: Chrome не
+# открывает TIF ни на компьютере, ни на Android — скачивает файл;
+# Safari на Маке и айфоне открывает. Для таких отдаём копию в PNG по
+# /docs-preview, а оригинал оставляем скачиваемым.
+NEEDS_PREVIEW = {".tif", ".tiff"}
+
 UNLINKED = "Без привязки к станку"
 
 _CACHE_PATH = DOCS_PATH.parent / "knowledge_base" / "docs_hashes.json"
@@ -176,6 +182,8 @@ def scan_library() -> dict:
             "size_bytes": stat.st_size,
             "kind": SUFFIX_LABEL.get(path.suffix.lower(), path.suffix.lstrip(".").upper()),
             "url": f"/docs-files/{rel.as_posix()}",
+            "preview_url": (f"/docs-preview/{rel.as_posix()}"
+                            if path.suffix.lower() in NEEDS_PREVIEW else None),
             "machine_id": machine["id"] if machine else None,
             "machine_name": machine["name"] if machine else None,
             "zone": (machine or {}).get("location") or rel.parts[0],
@@ -190,7 +198,9 @@ def scan_library() -> dict:
             if entry["machine_id"] is None and machine:
                 entry.update(machine_id=machine["id"], machine_name=machine["name"],
                              zone=machine["location"] or rel.parts[0], part=part,
-                             url=f"/docs-files/{rel.as_posix()}", path=rel.as_posix())
+                             url=f"/docs-files/{rel.as_posix()}", path=rel.as_posix(),
+                             preview_url=(f"/docs-preview/{rel.as_posix()}"
+                                          if path.suffix.lower() in NEEDS_PREVIEW else None))
 
     if changed or len(fresh) != len(cache):
         _save_cache(fresh)

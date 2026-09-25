@@ -7,7 +7,7 @@
 <title>Знания — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=40">
+<link rel="stylesheet" href="/static/acai.css?v=41">
 <style>
 /* Раздел «Знания» — три источника ответа «как чинить», сведённые на
    одну страницу. Раньше их было два: «Инструкции» и «База знаний»,
@@ -74,6 +74,9 @@
 .doc-part.foldable { cursor:pointer; }
 .doc-part.foldable:hover { color:var(--accent); }
 .doc-part-hint { font-size:11px;font-weight:400;color:var(--accent); }
+.doc-orig { font-size:11px;color:var(--text-dim);flex-shrink:0;
+  border-bottom:1px dotted var(--text-dim);cursor:pointer; }
+.doc-orig:hover { color:var(--accent);border-color:var(--accent); }
 
 .search-wrap { position:relative;margin-bottom:16px; }
 .search-wrap input { padding-left:36px; }
@@ -128,7 +131,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=40"></script>
+<script src="/static/acai_layout.js?v=41"></script>
 <script src="/static/mobile_nav_v2.js?v=5"></script>
 <script>
 // ── Три источника знаний ────────────────────────────────────────────
@@ -384,13 +387,19 @@ function renderDocuments(){
         ${!shown.length ? '' : `
         <div class="card" style="margin-bottom:8px"><div class="card-body" style="padding:0">
           ${shown.map(d => `
-            <a class="doc-row" href="${d.url}" target="_blank" rel="noopener">
+            <a class="doc-row" href="${d.preview_url || d.url}" target="_blank" rel="noopener">
               <span data-icon=reports></span>
               <div style="flex:1;min-width:0">
                 <div class="doc-name">${esc(d.title)}</div>
                 <div class="doc-where">${d.kind} · ${docSize(d.size_bytes)}${
                   d.also_in.length ? ` · лежит ещё в: ${esc(d.also_in.slice(0,2).join(', '))}${d.also_in.length>2?' и ещё '+(d.also_in.length-2):''}` : ''}</div>
               </div>
+              ${d.preview_url
+                // Скан в TIF Chrome не показывает — ни на компьютере, ни
+                // на Android. По «Открыть» уходим на копию в PNG, а
+                // оригинал остаётся отдельной кнопкой: он нужен тому,
+                // кто печатает чертёж или кладёт его себе.
+                ? `<span class="doc-orig" onclick="event.preventDefault();event.stopPropagation();window.open('${d.url}','_blank')" title="Скачать исходный TIF">оригинал</span>` : ''}
               <span class="badge accent" style="font-size:10px">Открыть</span>
             </a>`).join('')}
         </div></div>`}`;
