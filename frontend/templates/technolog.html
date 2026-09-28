@@ -186,6 +186,7 @@ function liveValueOf(paramName){
   return {kind: 'value', register: key, value: parseFloat(row.value), at: row.updated_at};
 }
 
+let canEditParams=false;
 let allParams=[];let liveData={};let currentUser=null;
 const collapsed=new Set();
 
@@ -217,8 +218,11 @@ async function load(){
   }
   if(pr.value?.success){
     allParams=pr.value.params;
-    if(!allParams.length){
-      // заполняем дефолтными значениями
+    canEditParams=pr.value.can_edit===true;
+    // Стартовый набор заводит только тот, кому это положено. Раньше
+    // страница звала эту ручку у всех подряд, и аналитик получал 403 в
+    // консоль — а ручка при этом была открыта любому вошедшему.
+    if(!allParams.length&&canEditParams){
       await ACAI.post('/api/technolog/params/seed',{});
       const r2=await ACAI.get('/api/technolog/params');
       allParams=r2.params||[];
@@ -440,7 +444,7 @@ function renderStages(){
     byStage[p.stage].push(p);
   }
   const stages=[...STAGE_ORDER.filter(s=>byStage[s]),...Object.keys(byStage).filter(s=>!STAGE_ORDER.includes(s))];
-  const canEdit=currentUser&&['admin','director','chief_engineer','technologist'].includes(currentUser.role);
+  const canEdit=canEditParams;   // право приходит с сервера, а не выписано здесь вторым списком
 
   document.getElementById('stagesContent').innerHTML=stages.map(stage=>{
     const params=byStage[stage];

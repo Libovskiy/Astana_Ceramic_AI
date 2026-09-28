@@ -14,7 +14,7 @@ from backend.api.common import (
     require_roles,
 )
 from backend.services import sensor_registers_service as registers
-from backend.services.audit_service import log_edit
+from backend.services.audit_service import log_action, log_edit
 
 router = APIRouter()
 
@@ -23,6 +23,12 @@ router = APIRouter()
 # какой регистр к какому станку относится — это про железо, и
 # отвечает за это главный инженер.
 REGISTER_EDIT_ROLES = ("chief_engineer", "chief_electrician", "admin")
+
+# Нормы задаёт технолог, а не всякий вошедший. Список был выписан у
+# каждой ручки отдельно, и у одной — «завести стартовый набор» — его
+# просто забыли: 24 нормы мог создать любой, включая рабочего. По этим
+# нормам потом сверяют линию.
+PARAM_EDIT_ROLES = ("admin", "director", "chief_engineer", "technologist")
 
 
 class RegisterPatch(BaseModel):
@@ -108,10 +114,13 @@ def get_technolog_params(user: dict = Depends(get_current_user)):
     conn.commit()
     rows = conn.execute("SELECT * FROM technolog_params ORDER BY stage, param_name").fetchall()
     conn.close()
-    return {"success": True, "params": [dict(r) for r in rows]}
+    # Право на правку отдаём вместе со списком: страница сама решает,
+    # показывать ли кнопки, и не бьётся о 403 там, где их быть не должно.
+    return {"success": True, "params": [dict(r) for r in rows],
+            "can_edit": user["role"] in PARAM_EDIT_ROLES}
 
 @router.put("/api/technolog/params/{param_id}")
-def update_technolog_param(param_id: int, request: dict, user: dict = Depends(require_roles("admin","director","chief_engineer","technologist"))):
+def update_technolog_param(param_id: int, request: dict, user: dict = Depends(require_roles(*PARAM_EDIT_ROLES))):
     import sqlite3 as _sq
     from datetime import datetime as _dt
     conn = _sq.connect(DB_NAME, timeout=10)
@@ -120,18 +129,46 @@ def update_technolog_param(param_id: int, request: dict, user: dict = Depends(re
     if not old:
         conn.close()
         return {"success": False, "message": "Не найден"}
+    # Поле, которого в запросе нет, остаётся прежним. Раньше здесь был
+    # request.get(...), и частичная правка молча обнуляла соседние
+    # границы: прислали один минимум — максимум и цель становились
+    # пустыми. Ровно этим же способом у станков стиралась служба.
+    def keep(field, column):
+        return request[field] if field in request else old[column]
+
+    new_min = keep("min_val", "min_val")
+    new_max = keep("max_val", "max_val")
+    new_target = keep("target_val", "target_val")
+
+    before = {"min_val": old["min_val"], "max_val": old["max_val"],
+              "target_val": old["target_val"]}
+    after = {"min_val": new_min, "max_val": new_max, "target_val": new_target}
+
+    if before == after:
+        # Нажали «Сохранить», ничего не поменяв. Записи быть не должно:
+        # иначе история допусков забьётся пустыми строками.
+        conn.close()
+        return {"success": True, "changed": False}
+
+    who = user["full_name"] or user["username"]
+    now = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
     conn.execute("""INSERT INTO technolog_params_log
         (param_id,stage,param_name,old_min,old_max,old_target,new_min,new_max,new_target,changed_by,changed_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (param_id,old["stage"],old["param_name"],old["min_val"],old["max_val"],old["target_val"],
-         request.get("min_val"),request.get("max_val"),request.get("target_val"),
-         user["full_name"] or user["username"],_dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+         new_min,new_max,new_target,who,now))
     conn.execute("UPDATE technolog_params SET min_val=?,max_val=?,target_val=?,updated_by=?,updated_at=? WHERE id=?",
-        (request.get("min_val"),request.get("max_val"),request.get("target_val"),
-         user["full_name"] or user["username"],_dt.now().strftime("%Y-%m-%d %H:%M:%S"),param_id))
+        (new_min,new_max,new_target,who,now,param_id))
     conn.commit()
     conn.close()
-    return {"success": True}
+
+    # Своя история у параметра уже была, а в общем журнале правки норм
+    # не было вовсе — «кто поменял допуск» приходилось искать глазами
+    # по другой таблице.
+    log_edit("technolog_param", param_id, before, after, user=user,
+             name=f'{old["stage"]}: {old["param_name"]}')
+    return {"success": True, "changed": True}
 
 @router.get("/api/technolog/params/{param_id}/history")
 def get_param_history(param_id: int, user: dict = Depends(get_current_user)):
@@ -143,7 +180,8 @@ def get_param_history(param_id: int, user: dict = Depends(get_current_user)):
     return {"success": True, "history": [dict(r) for r in rows]}
 
 @router.post("/api/technolog/params/seed")
-def seed_technolog_params(user: dict = Depends(get_current_user)):
+def seed_technolog_params(user: dict = Depends(require_roles(*PARAM_EDIT_ROLES))):
+    """Завести стартовый набор норм. Только то, чего ещё нет."""
     import sqlite3 as _sq
     from datetime import datetime as _dt
     conn = _sq.connect(DB_NAME, timeout=10)
@@ -173,18 +211,31 @@ def seed_technolog_params(user: dict = Depends(get_current_user)):
         ("Обжиг","Температура дымовых газов","°C",100,180,140),
         ("Упаковка","Брак (норма)","%",0,3,1),
     ]
+    added = []
     for stage,name,unit,mn,mx,tgt in defaults:
         try:
-            conn.execute("INSERT OR IGNORE INTO technolog_params (stage,param_name,unit,min_val,max_val,target_val,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            cur = conn.execute("INSERT OR IGNORE INTO technolog_params (stage,param_name,unit,min_val,max_val,target_val,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
                 (stage,name,unit,mn,mx,tgt,user["username"],_dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+            if cur.rowcount:
+                added.append(f"{stage}: {name}")
         except: pass
     conn.commit()
     conn.close()
-    return {"success": True}
+
+    # Пишем в журнал только когда что-то действительно завелось: нажатая
+    # повторно кнопка не должна оставлять след «завёл 24 нормы».
+    if added:
+        log_action(username=user.get("full_name") or user["username"],
+                   role=user["role"], action="technolog_params_seeded",
+                   target="technolog_params",
+                   details=f"Заведён стартовый набор норм: {len(added)} шт. — "
+                           + "; ".join(added[:5])
+                           + (f" и ещё {len(added) - 5}" if len(added) > 5 else ""))
+    return {"success": True, "added": len(added)}
 
 
 @router.post("/api/technolog/params")
-def create_technolog_param(request: dict, user: dict = Depends(require_roles("admin","director","chief_engineer","technologist"))):
+def create_technolog_param(request: dict, user: dict = Depends(require_roles(*PARAM_EDIT_ROLES))):
     import sqlite3 as _sq
     from datetime import datetime as _dt
     conn = _sq.connect(DB_NAME, timeout=10)
@@ -196,6 +247,15 @@ def create_technolog_param(request: dict, user: dict = Depends(require_roles("ad
              request.get("min_val"), request.get("max_val"), request.get("target_val"),
              user["full_name"] or user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
+        log_action(username=user.get("full_name") or user["username"],
+                   role=user["role"], action="technolog_param_added",
+                   target=f"technolog_param:{cur.lastrowid}",
+                   details=f'{request["stage"]}: {request["param_name"]} — '
+                           f'{request.get("min_val")}…{request.get("max_val")}, '
+                           f'цель {request.get("target_val")}',
+                   after={"min_val": request.get("min_val"),
+                          "max_val": request.get("max_val"),
+                          "target_val": request.get("target_val")})
         return {"success": True, "id": cur.lastrowid}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -203,10 +263,27 @@ def create_technolog_param(request: dict, user: dict = Depends(require_roles("ad
         conn.close()
 
 @router.delete("/api/technolog/params/{param_id}")
-def delete_technolog_param(param_id: int, user: dict = Depends(require_roles("admin","director","chief_engineer","technologist"))):
+def delete_technolog_param(param_id: int, user: dict = Depends(require_roles(*PARAM_EDIT_ROLES))):
     import sqlite3 as _sq
     conn = _sq.connect(DB_NAME, timeout=10)
+    conn.row_factory = _sq.Row
+    old = conn.execute("SELECT * FROM technolog_params WHERE id=?", (param_id,)).fetchone()
+    if not old:
+        conn.close()
+        return {"success": False, "message": "Не найден"}
+
     conn.execute("DELETE FROM technolog_params WHERE id=?", (param_id,))
     conn.commit()
     conn.close()
+
+    # Удаление нормы не писалось никуда. Норма — это то, с чем сверяют
+    # линию; её исчезновение должно быть видно и объяснимо, а история
+    # правок (technolog_params_log) при этом остаётся на месте.
+    log_action(username=user.get("full_name") or user["username"],
+               role=user["role"], action="technolog_param_deleted",
+               target=f"technolog_param:{param_id}",
+               details=f'Удалена норма «{old["stage"]}: {old["param_name"]}» '
+                       f'({old["min_val"]}…{old["max_val"]}, цель {old["target_val"]})',
+               before={"min_val": old["min_val"], "max_val": old["max_val"],
+                       "target_val": old["target_val"]})
     return {"success": True}
