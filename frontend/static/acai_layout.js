@@ -548,8 +548,15 @@ async function renderFactoryState(role) {
       ${ACAI.icon(icon, 14)}<span>${item.text}</span>
     </div>`;
 
+  // У молчания датчиков теперь есть причина — показываем её второй
+  // строкой и целиком в подсказке: «расширение не на связи» и «панель
+  // не отвечает» чинят разные люди.
   box.innerHTML = row(d.alarms, d.alarms.state === 'ok' ? 'ok' : 'alert')
-                + row(d.sensors, d.sensors.state === 'ok' ? 'pulse' : 'offline')
+                + row(d.sensors, d.sensors.state === 'ok' ? 'pulse' : 'offline',
+                      d.sensors.hint || '')
+                + (d.sensors.why
+                    ? `<div class="st-row st-warn" style="padding-left:26px;font-size:11px;opacity:.85">${d.sensors.why}</div>`
+                    : '')
                 + row(d.people, 'users', d.people_note || '');
 
   // Обновляем раз в минуту: цифры живые, но дёргать сервер чаще незачем.

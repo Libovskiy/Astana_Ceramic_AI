@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ACAI WebHMI Collector",
-  "version": "5.0",
+  "version": "6.0",
   "description": "Собирает показания с WebHMI и отправляет на сервер ACAI",
   "permissions": [
     "storage"

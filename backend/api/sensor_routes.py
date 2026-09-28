@@ -13,6 +13,7 @@ from backend.database import get_db
 from backend import models
 from backend.services.auth_service import get_user_by_session
 from backend.services import sensor_recorder
+from backend.services import sensor_health_service as sensor_health
 
 router = APIRouter(prefix="/api/sensors", tags=["sensors"])
 
@@ -89,6 +90,11 @@ def current_user(session_token: Optional[str] = Cookie(None)):
 
 class PushPayload(BaseModel):
     readings: dict
+    # Расширение шлёт «сердцебиение» и тогда, когда прочитать панель не
+    # удалось — с текстом ошибки. Без этого сервер не мог отличить
+    # «расширение не на связи» от «панель не отвечает»: и там и там
+    # просто переставали приходить данные.
+    error: str | None = None
 
 
 class ReadingOut(BaseModel):
@@ -106,8 +112,21 @@ def live_push(payload: PushPayload, _ok: bool = Depends(require_sensor_key)):
     """
     Принимает данные каждую секунду от Chrome-расширения.
     Хранит только в памяти — не пишет в БД.
+
+    Отдельно отмечаем сам факт запроса: он говорит, что расширение
+    живо, даже если панель не прочиталась.
     """
     ts = datetime.now().isoformat()   # время местное, не UTC
+
+    try:
+        sensor_health.note_collector(payload.error)
+    except Exception as error:      # отметка не должна ронять приём данных
+        print(f"[датчики] не отметил расширение: {error}")
+
+    # Панель не прочиталась — значений нет, и старые за живые не выдаём.
+    if payload.error:
+        return {"ok": True, "noted": "error"}
+
     for name, value in payload.readings.items():
         _live_cache[str(name)] = {"value": str(value), "updated_at": ts}
     # Панель присылает только изменившиеся регистры, поэтому набор
@@ -150,6 +169,76 @@ def collector_status(user: dict = Depends(current_user), session_token: Optional
         "live_age_seconds": None if age is None else round(age),
         "online": age is not None and age <= sensor_recorder.LIVE_FRESH_SEC,
     }
+
+
+@router.get("/health")
+def sensors_health(user: dict = Depends(current_user)):
+    """
+    Идёт ли сбор и где оборвалось. Открыто всем вошедшим: страницы с
+    показаниями обязаны знать, живые у них цифры или вчерашние.
+    """
+    current = sensor_health.state()
+    current["success"] = True
+    current["settings"] = sensor_health.settings()
+    current["can_edit"] = user.get("role") in HEALTH_EDIT_ROLES
+    return current
+
+
+@router.get("/outages")
+def sensors_outages(days: int = 30, limit: int = 50,
+                    user: dict = Depends(current_user)):
+    """История перерывов — для «Аналитики», вкладка «Датчики»."""
+    return {
+        "success": True,
+        "outages": sensor_health.outages(limit=limit, days=days),
+        "summary": sensor_health.summary(days=days),
+    }
+
+
+class HealthSettings(BaseModel):
+    silence_minutes: int | None = None
+    push_after_minutes: int | None = None
+    alert_roles: list[str] | None = None
+    alert_users: list[str] | None = None
+
+
+# Пороги и адресатов правит тот, кто отвечает за завод целиком.
+HEALTH_EDIT_ROLES = ("chief_engineer", "director", "admin")
+
+
+@router.put("/health/settings")
+def save_health_settings(request: HealthSettings,
+                         user: dict = Depends(current_user)):
+    if user.get("role") not in HEALTH_EDIT_ROLES:
+        raise HTTPException(status_code=403,
+                            detail="Настройки сбора меняет главный инженер, директор или админ.")
+
+    try:
+        changes = sensor_health.save_settings(
+            silence_minutes=request.silence_minutes,
+            push_after_minutes=request.push_after_minutes,
+            alert_roles=request.alert_roles,
+            alert_users=request.alert_users,
+            who=user["username"],
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    if changes:
+        from backend.services.audit_service import log_action
+
+        log_action(
+            username=user["username"], role=user["role"],
+            action="sensors_watch_changed",
+            target="settings:sensors",
+            details="; ".join(
+                f"{field}: {value['before']} → {value['after']}"
+                for field, value in changes.items()),
+            before={f: v["before"] for f, v in changes.items()},
+            after={f: v["after"] for f, v in changes.items()},
+        )
+
+    return {"success": True, "settings": sensor_health.settings()}
 
 
 @router.get("/latest")

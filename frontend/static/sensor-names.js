@@ -24,6 +24,14 @@
 
   var cache = null;
   var pending = null;
+  var healthCache = null;
+  var healthAt = 0;
+
+  function escapeText(value) {
+    var box = document.createElement("div");
+    box.textContent = value == null ? "" : String(value);
+    return box.innerHTML;
+  }
 
   function empty(key) {
     // Регистра нет в справочнике: показываем его системное имя, а не
@@ -73,6 +81,51 @@
       })();
 
       return pending;
+    },
+
+    /**
+     * Идёт ли сбор прямо сейчас.
+     *
+     * Страница с показаниями обязана это знать. Раньше она рисовала
+     * последние известные значения и ставила рядом ТЕКУЩЕЕ время —
+     * то есть выдавала вчерашние цифры за живые. За 17 дней до 24.09
+     * в истории 37 перерывов внутри рабочего дня, самый длинный 83
+     * минуты, и всё это время экран показывал «всё идёт».
+     *
+     * Ответ кэшируем на полминуты: страниц с показаниями несколько,
+     * и каждая обновляется своим таймером.
+     */
+    async health() {
+      const now = Date.now();
+      if (healthCache && now - healthAt < 30000) return healthCache;
+      try {
+        const response = await fetch("/api/sensors/health", { credentials: "include" });
+        if (!response.ok) throw new Error(String(response.status));
+        healthCache = await response.json();
+        healthAt = now;
+      } catch (error) {
+        // Не спросили — не выдумываем. Пусть страница покажет данные
+        // как есть, но и «всё хорошо» не напишет.
+        healthCache = null;
+      }
+      return healthCache;
+    },
+
+    /**
+     * Готовая строка «нет данных с 14:32» с причиной.
+     * Пустая строка — сбор идёт, писать нечего.
+     */
+    silenceNote(health, style) {
+      if (!health || health.ok) return "";
+      const since = (health.since || "").slice(11, 16);
+      const why = health.state === "panel" ? "панель не отвечает"
+                : health.state === "collector" ? "расширение не на связи"
+                : "показаний не было ни разу";
+      const head = since ? `Нет данных с ${since}` : "Нет данных с датчиков";
+      const extra = health.error ? ` · ${escapeText(health.error)}` : "";
+      return `<div class="sensor-silence" style="${style || ""}">
+          <b>${head}</b> — ${why}${extra}
+        </div>`;
     },
 
     info(key) { return (cache && cache[key]) || empty(key); },

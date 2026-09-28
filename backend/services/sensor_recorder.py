@@ -166,6 +166,17 @@ def _loop(live_cache):
             snapshot(live_cache)
         except Exception as error:
             print(f"[sensor_recorder] Ошибка записи: {error}")
+
+        # Тем же тактом смотрим, идёт ли сбор вообще: открываем и
+        # закрываем перерывы, решаем про уведомление. Отдельного
+        # сторожа заводить незачем — этот цикл и есть сбор.
+        try:
+            from backend.services import sensor_health_service
+
+            sensor_health_service.tick()
+        except Exception as error:
+            print(f"[sensor_recorder] Наблюдение за сбором: {error}")
+
         time.sleep(_TICK_SEC)
 
 

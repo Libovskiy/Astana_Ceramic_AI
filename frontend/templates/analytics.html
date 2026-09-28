@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=61">
+<link rel="stylesheet" href="/static/acai.css?v=62">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -162,13 +162,25 @@
         <div class="card-body" id="sensorNow" style="padding:10px 14px"></div>
       </div>
 
+      <!-- ПЕРЕРЫВЫ В СБОРЕ.
+           «Данные идут» без истории — обещание. Здесь видно, сколько
+           раз сбор вставал и насколько: по этим же показаниям
+           считаются простои и исправность. -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Перерывы в сборе</h2>
+          <span id="outageSummary" style="font-size:11px;color:var(--text-dim)">—</span>
+        </div>
+        <div class="card-body" id="outageList" style="padding:0"></div>
+      </div>
+
     </div>
   </div>
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=1"></script>
-<script src="/static/acai_layout.js?v=61"></script>
+<script src="/static/sensor-names.js?v=2"></script>
+<script src="/static/acai_layout.js?v=62"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script src="/static/xls-report.js?v=2"></script>
 <script>
@@ -643,7 +655,19 @@ async function loadDowntimeChart(){
   }
 }
 
-function renderSensorsNow(lv){
+async function renderSensorsNow(lv){
+  // Сначала — идёт ли сбор. Если нет, показания не рисуем вовсе:
+  // последние известные значения рядом с текущим временем читаются
+  // как живые, а они стоят.
+  let health=null;
+  try{ health=await ACAISensors.health(); }catch{}
+  if(health && !health.ok && health.state!=='never'){
+    document.getElementById('sensorNow').innerHTML=ACAISensors.silenceNote(health,'margin:0');
+    const timeBox=document.getElementById('sensorTime');
+    if(timeBox) timeBox.textContent='—';
+    return;
+  }
+
   // Список и имена — из справочника регистров. Раньше и то и другое
   // было зашито здесь: новый регистр с панели не появлялся на
   // странице, пока программист не впишет его в этот массив, а имена
@@ -789,6 +813,59 @@ function saMetric(label,value,color){
 function saMin(m){const h=Math.floor(m/60),r=m%60;return h?`${h} ч ${r} мин`:`${r} мин`;}
 function saEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
 setInterval(()=>ACAI.get('/api/sensors/live').then(renderSensorsNow).catch(()=>{}),5000);
+
+// ── ПЕРЕРЫВЫ В СБОРЕ ───────────────────────────────────────────────
+async function loadOutages(){
+  const list=document.getElementById('outageList');
+  const head=document.getElementById('outageSummary');
+  if(!list) return;
+
+  let data;
+  try{ data=await ACAI.get('/api/sensors/outages?days=30&limit=50'); }
+  catch{ list.innerHTML='<div class="empty">Не удалось прочитать историю перерывов</div>'; return; }
+
+  const rows=data.outages||[];
+  const total=data.summary||{};
+  const hours=Math.round((total.minutes||0)/60*10)/10;
+  // Идущий перерыв в сводку по закрытым не попадает — и это выглядело
+  // как «перерывов не было» ровно в тот момент, когда сбор стоит.
+  const ongoing = rows.find(o => !o.ended_at);
+  const closed = total.count
+    ? `за 30 дней: ${total.count} ${total.count===1?'перерыв':total.count<5?'перерыва':'перерывов'}, всего ${hours} ч`
+    : 'за 30 дней перерывов не было';
+  head.textContent = ongoing
+    ? `перерыв идёт с ${String(ongoing.started_at).slice(11,16)} · ${closed}`
+    : closed;
+
+  if(!rows.length){
+    list.innerHTML='<div class="empty compact"><span class="empty-text">Сбор не прерывался ни разу за месяц.</span></div>';
+    return;
+  }
+
+  const fmt=v=>{
+    const d=new Date(String(v).replace(' ','T'));
+    return isNaN(d)?'—':d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  };
+  const dur=m=>m>=60?`${Math.floor(m/60)} ч ${m%60} мин`:`${m} мин`;
+
+  list.innerHTML=rows.map(o=>`
+    <div style="display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px">${fmt(o.started_at)} → ${o.ended_at?fmt(o.ended_at):'идёт сейчас'}</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
+          ${o.kind_label}${o.last_error?' · '+esc(o.last_error):''}${o.push_sent_at?' · уведомление отправлено':''}
+        </div>
+      </div>
+      <div style="font-size:13px;font-weight:600;flex-shrink:0;color:${o.ended_at?'var(--text)':'var(--warn)'}">
+        ${o.minutes?dur(o.minutes):'—'}
+      </div>
+    </div>`).join('');
+}
+
+function esc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+loadOutages();
+setInterval(loadOutages, 60000);
 </script>
 </body>
 </html>

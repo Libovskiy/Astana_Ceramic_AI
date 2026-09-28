@@ -6,7 +6,7 @@
 <title>ACAI — Astana Ceramic</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=61">
+<link rel="stylesheet" href="/static/acai.css?v=62">
 <style>
 /* ОТВЕТ НА ГЛАВНЫЙ ВОПРОС: всё ли в порядке */
 .verdict{border-radius:16px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);}
@@ -214,8 +214,8 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=1"></script>
-<script src="/static/acai_layout.js?v=61"></script>
+<script src="/static/sensor-names.js?v=2"></script>
+<script src="/static/acai_layout.js?v=62"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 document.getElementById('topbarDate').textContent=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
@@ -472,14 +472,26 @@ function renderProdMap(equipment, liveData){
 
 // ── СЕНСОРЫ ───────────────────────────────────────────────
 let _live={};
+let _health=null;
 async function fetchLive(){
   // Имена регистров — из справочника. Ждём его до отрисовки: иначе
   // в первую секунду подписи будут системными именами.
   try{ await ACAISensors.load(); }catch{}
+  // И сразу — идёт ли сбор. Без этого строка показаний врала: она
+  // рисовала последние известные значения и ставила рядом текущее
+  // время, то есть выдавала старые цифры за живые.
+  try{ _health=await ACAISensors.health(); }catch{ _health=null; }
   try{_live=await ACAI.get('/api/sensors/live');}catch{}
   renderSensors(_live);
 }
 function renderSensors(lv){
+  // Сбор стоит — показаний не показываем вовсе. Лучше честная строка
+  // «нет данных с 14:32», чем цифры, которые давно не менялись.
+  if(_health && !_health.ok && _health.state!=='never'){
+    document.getElementById('sensorStrip').innerHTML =
+      ACAISensors.silenceNote(_health, 'margin:0');
+    return;
+  }
   if(!Object.keys(lv).length)return;
   // Загрузки, авария и частоты приводов. Частоты раньше собирались,
   // но на экран не выводились — их просто не было в этом списке.
@@ -550,7 +562,10 @@ function renderSensors(lv){
     .filter(Boolean).join('<div class="ss-sep"></div>');
   const belts = line(BELTS);
 
-  const now=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  // Время СНЯТИЯ данных, а не текущее: если сбор отстал на минуту,
+  // человек должен видеть минуту, а не «сейчас».
+  const takenAt = _health && _health.last_data_at ? new Date(_health.last_data_at) : new Date();
+  const now=takenAt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
   document.getElementById('sensorStrip').innerHTML=
     `<div class="ss-row">

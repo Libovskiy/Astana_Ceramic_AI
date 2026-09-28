@@ -105,14 +105,30 @@ def header_status(user: dict = Depends(get_current_user)):
     finally:
         conn.close()
 
-    age = _sensors_age_minutes()
+    # Состояние сбора считает одна служба на всю систему: «расширение
+    # не на связи» и «панель не отвечает» — разные беды с разными
+    # виноватыми, и в шапке это должно быть написано словами, а не
+    # свёрнуто в «32 мин назад».
+    from backend.services import sensor_health_service as sensor_health
 
-    if age is None:
+    health = sensor_health.state()
+
+    if health["state"] == "never":
         sensors = {"state": "none", "text": "Датчики: данных нет"}
-    elif age > SENSORS_STALE_MINUTES:
-        sensors = {"state": "warn", "text": f"Датчики: {_human_age(age)}"}
-    else:
+    elif health["ok"]:
         sensors = {"state": "ok", "text": "Датчики: идут"}
+    else:
+        since = (health.get("since") or "")[11:16]
+        where = ("панель не отвечает" if health["state"] == "panel"
+                 else "расширение не на связи")
+        sensors = {
+            "state": "warn",
+            "text": f"Датчики молчат с {since}" if since else "Датчики молчат",
+            "why": where,
+            "hint": health["text"],
+        }
+
+    sensors["kind"] = health["state"]
 
     if broken or open_cases:
         parts = []

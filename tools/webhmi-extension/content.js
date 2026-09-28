@@ -65,12 +65,17 @@ function mergeRegisters(data) {
   }
 }
 
-async function sendLive() {
+async function sendLive(error) {
   const resp = await fetch(ACAI_LIVE, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sensor-Key": SENSOR_KEY },
-    // пустой набор тоже шлём: сервер по нему видит, что панель на связи
-    body: JSON.stringify({ readings: known }),
+    // пустой набор тоже шлём: сервер по нему видит, что панель на связи.
+    // А если панель не прочиталась — шлём текст ошибки: по нему сервер
+    // отличает «панель не отвечает» от «расширение не на связи». Это
+    // разные беды, и чинят их разные люди. Значения при ошибке сервер
+    // не берёт: выдавать старые цифры за живые нельзя.
+    body: JSON.stringify(error ? { readings: {}, error: String(error) }
+                               : { readings: known }),
   });
   if (resp.status === 403) throw new Error("сервер ACAI: неверный SENSOR_KEY в content.js");
   if (!resp.ok) throw new Error(`сервер ACAI ответил ${resp.status}`);
@@ -98,6 +103,15 @@ async function tick() {
   } catch (e) {
     console.warn("[ACAI]", e.message);
     saveStatus(false, e.message);
+
+    // Сердцебиение с текстом ошибки: расширение живо, а панель — нет.
+    // Без этого сервер видел ровно то же, что при выключенном
+    // компьютере, и написать, что именно чинить, не мог.
+    try {
+      await sendLive(e.message);
+    } catch (sendError) {
+      console.warn("[ACAI] сервер тоже недоступен:", sendError.message);
+    }
   } finally {
     busy = false;
   }
@@ -119,4 +133,4 @@ function startTimer() {
 
 tick();
 startTimer();
-console.log("[ACAI] Коллектор v5 запущен");
+console.log("[ACAI] Коллектор v6 запущен");

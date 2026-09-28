@@ -7,7 +7,7 @@
 <title>Настройки — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=61">
+<link rel="stylesheet" href="/static/acai.css?v=62">
 <style>
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
 .u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
@@ -139,6 +139,18 @@
         </div>
       </div>
 
+      <!-- НАБЛЮДЕНИЕ ЗА СБОРОМ ДАННЫХ.
+           Пороги и адресаты — настройка, а не число в коде: режим
+           сбора меняется (до 24.09 данные шли только в смену, теперь
+           круглосуточно), и вместе с ним меняется, что считать бедой. -->
+      <div class="card" id="sensorsWatchCard" style="display:none;margin-bottom:14px">
+        <div class="card-head">
+          <h2>Наблюдение за датчиками</h2>
+          <span id="sensorsWatchState" style="font-size:11px;color:var(--text-dim);margin-left:auto">—</span>
+        </div>
+        <div class="card-body" id="sensorsWatchBody"><div class="empty">Загрузка…</div></div>
+      </div>
+
       <div class="card" id="systemCard">
         <div class="card-head"><h2>Система</h2></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
@@ -163,7 +175,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=61"></script>
+<script src="/static/acai_layout.js?v=62"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 const ROLE_LABELS={admin:'Администратор',director:'Директор',chief_engineer:'Гл. инженер',engineer:'Инженер',worker:'Рабочий',shift_supervisor:'Мастер смены',chief_mechanic:'Гл. механик',mechanic:'Механик',chief_electrician:'Гл. электрик',electrician:'Электрик',analyst:'Аналитик',technologist:'Технолог',lab_technician:'Лаборант'};
@@ -236,12 +248,138 @@ async function saveRate(section, title){
 // пароли. Правило прежнее: кнопка есть — значит, она работает.
 let fullAccess = false;
 
+// ── НАБЛЮДЕНИЕ ЗА СБОРОМ ДАННЫХ ────────────────────────────────────
+//
+// Порог тишины, порог уведомления и адресаты. Адресаты двух видов:
+// по должности (главный инженер — потому что отвечает за цех) и
+// поимённо (тот, у кого стоит компьютер со сбором, — это конкретный
+// человек, роли для него нет).
+const WATCH_ROLE_LABELS = {
+  chief_engineer:'главный инженер', director:'директор', admin:'администратор',
+  chief_mechanic:'главный механик', chief_electrician:'главный энергетик',
+  production_chief:'начальник производства', shift_supervisor:'мастер смены',
+};
+let watchConf=null, watchUsers=[];
+
+async function loadSensorsWatch(role){
+  const card=document.getElementById('sensorsWatchCard');
+  if(!card) return;
+
+  let health;
+  try{ health=await ACAI.get('/api/sensors/health'); }catch{ card.remove(); return; }
+  if(!health.can_edit){ card.remove(); return; }
+
+  card.style.display='';
+  watchConf=health.settings;
+
+  try{
+    const r=await ACAI.get('/api/settings/users');
+    // Сорок пять человек списком — это стена. Тот, у кого стоит
+    // компьютер со сбором, почти наверняка из инженерной части, а
+    // операторов у станков в этом списке ищут в последнюю очередь.
+    const FIRST=['admin','chief_engineer','director','production_chief',
+                 'chief_mechanic','chief_electrician','analyst','technologist',
+                 'shift_supervisor'];
+    watchUsers=(r.users||[]).filter(u=>u.is_active!==0)
+      .sort((a,b)=>{
+        const ia=FIRST.indexOf(a.role), ib=FIRST.indexOf(b.role);
+        return (ia<0?99:ia)-(ib<0?99:ib)
+            || String(a.full_name||a.username).localeCompare(String(b.full_name||b.username));
+      });
+  }catch{ watchUsers=[]; }
+
+  document.getElementById('sensorsWatchState').textContent =
+    health.ok ? 'данные идут'
+    : health.state==='never' ? 'показаний не было ни разу'
+    : health.text;
+
+  renderSensorsWatch();
+}
+
+function renderSensorsWatch(){
+  const box=document.getElementById('sensorsWatchBody');
+  const roleBoxes=Object.entries(WATCH_ROLE_LABELS).map(([key,label])=>`
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+      <input type="checkbox" value="${key}" ${watchConf.alert_roles.includes(key)?'checked':''}
+             class="sw-role" style="cursor:pointer"> ${label}
+    </label>`).join('');
+
+  const userOpts=watchUsers.map(u=>`
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+      <input type="checkbox" value="${u.username}" ${watchConf.alert_users.includes(u.username)?'checked':''}
+             class="sw-user" style="cursor:pointer"> ${u.full_name||u.username}
+      <span style="color:var(--text-dim)">· ${u.username}</span>
+    </label>`).join('');
+
+  box.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field">
+        <label>Тишина считается с</label>
+        <input class="input" id="sw-silence" type="number" min="1" max="1440" value="${watchConf.silence_minutes}">
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          минут без данных — после этого на экранах вместо показаний пишется «нет данных с …»
+        </div>
+      </div>
+      <div class="field">
+        <label>Уведомление после</label>
+        <input class="input" id="sw-push" type="number" min="1" max="1440" value="${watchConf.push_after_minutes}">
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          минут тишины — одно сообщение на перерыв, повторов нет.
+          С ${watchConf.night_from}:00 до ${watchConf.night_to}:00 не отправляется: утром уйдёт одна строка.
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:6px">
+      <label>Кому сообщать по должности</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 18px;background:var(--surface-2);border-radius:8px;padding:10px">
+        ${roleBoxes}
+      </div>
+    </div>
+    <div class="field">
+      <label>И поимённо</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 18px;background:var(--surface-2);border-radius:8px;padding:10px;max-height:160px;overflow:auto">
+        ${userOpts || '<span style="font-size:12px;color:var(--text-dim)">Список сотрудников недоступен</span>'}
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Здесь отмечают того, у кого стоит компьютер со сбором: роли для него нет.
+        Никого не отмечено — уведомления не уходят вовсе.
+      </div>
+    </div>
+    <div id="sw-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <button class="btn primary" onclick="saveSensorsWatch()">Сохранить</button>`;
+}
+
+async function saveSensorsWatch(){
+  const err=document.getElementById('sw-err');
+  const silence=parseInt(document.getElementById('sw-silence').value||0);
+  const push=parseInt(document.getElementById('sw-push').value||0);
+  if(!silence||!push){ err.textContent='Пороги — целые числа минут больше нуля'; return; }
+
+  const roles=[...document.querySelectorAll('.sw-role:checked')].map(c=>c.value);
+  const users=[...document.querySelectorAll('.sw-user:checked')].map(c=>c.value);
+
+  try{
+    const r=await fetch('/api/sensors/health/settings',{
+      method:'PUT',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({silence_minutes:silence,push_after_minutes:push,
+                           alert_roles:roles,alert_users:users})
+    });
+    if(!r.ok){ err.textContent=(await r.json()).detail||'Не удалось сохранить'; return; }
+    watchConf=(await r.json()).settings;
+    err.textContent='';
+    ACAI.toast('Настройки сбора сохранены ✓','ok');
+    renderSensorsWatch();
+  }catch(e){ err.textContent=e.message||'Нет связи с сервером'; }
+}
+
 async function load(){
   let me = null;
   try { me = (await ACAI.get('/auth/me'))?.user || await ACAI.get('/auth/me'); } catch {}
   const isAdmin = (me?.role || '') === 'admin';
 
   loadRates(me?.role || '');
+  loadSensorsWatch(me?.role || '');
 
   // Статус коллектора и версия системы — дело администратора.
   if (!isAdmin) document.getElementById('systemCard')?.remove();
