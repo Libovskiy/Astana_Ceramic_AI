@@ -594,47 +594,94 @@ async function loadSensorHistory(){
 // Линия по времени, а не по номеру точки: если сбор стоял, на графике
 // видна дыра, а не ровная линия поверх часов без данных.
 const CHART_GAP_MS=5*60*1000;
-function timeChart(points,color,w=400,h=80){
-  if(points.length<2)return'<div class="empty">Мало данных для графика</div>';
+
+// Шкала загрузки стоит намертво: 0–100 %.
+//
+// Раньше она подстраивалась под данные — брала минимум и максимум за
+// сутки. Из-за этого ровная линия 79–81 % занимала всю высоту и
+// выглядела скачками от пола до потолка, а на следующий день те же
+// проценты рисовались совсем иначе. Сравнить два дня было нельзя, и
+// спокойная смена казалась дёрганой.
+//
+// Ось времени размечена каждые 3 часа по часам стены (00, 03, 06…),
+// а окно графика — ровно последние 24 часа, а не «от первой точки до
+// последней». Тогда отсутствие данных в начале суток видно как пустое
+// место, а не подтягивается к краю.
+const CHART_TICK_HOURS=3;
+
+function timeChart(points,color,w=480,h=110){
+  const now=Date.now(), t0=now-24*3600*1000, t1=now, span=t1-t0;
+  const PAD_L=28, PAD_T=8, PAD_B=6;          // место под подписи шкалы
+  const plotW=w-PAD_L-6, plotH=h-PAD_T-PAD_B;
+
+  const px=ms=>PAD_L+Math.round((Math.min(Math.max(ms,t0),t1)-t0)/span*plotW);
+  // Ноль внизу, сто наверху — всегда, независимо от данных.
+  const py=v=>PAD_T+Math.round((1-Math.min(Math.max(v,0),100)/100)*plotH);
+
+  const fmt=ms=>new Date(ms).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+
+  // ── сетка: 0/25/50/75/100 по высоте ──────────────────────────────
+  const grid=[0,25,50,75,100].map(v=>
+    `<line x1="${PAD_L}" y1="${py(v)}" x2="${w-6}" y2="${py(v)}"
+           stroke="var(--border)" stroke-width="1" opacity="${v===0||v===100?'.9':'.45'}"/>`
+    +([0,50,100].includes(v)
+      ? `<text x="${PAD_L-5}" y="${py(v)+3}" text-anchor="end" class="chart-label">${v}</text>` : '')
+  ).join('');
+
+  // ── отметки времени каждые 3 часа, по часам стены ────────────────
+  const first=new Date(t0); first.setMinutes(0,0,0);
+  first.setHours(first.getHours()+((CHART_TICK_HOURS-first.getHours()%CHART_TICK_HOURS)%CHART_TICK_HOURS));
+  const ticks=[];
+  for(let t=first.getTime(); t<=t1; t+=CHART_TICK_HOURS*3600*1000){
+    ticks.push(`<line x1="${px(t)}" y1="${PAD_T}" x2="${px(t)}" y2="${py(0)}"
+                      stroke="var(--border)" stroke-width="1" opacity=".45"/>
+      <text x="${px(t)}" y="${h+12}" text-anchor="middle" class="chart-label">${
+        new Date(t).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</text>`);
+  }
+
+  const data=points.filter(p=>p.ms>=t0&&p.ms<=t1);
+  if(data.length<2){
+    return `<svg viewBox="0 0 ${w} ${h+18}" style="width:100%;display:block">${grid}${ticks.join('')}</svg>`
+         + `<div style="font-size:11px;color:var(--text-dim);margin-top:4px">За последние сутки показаний почти нет — рисовать нечего.</div>`;
+  }
+
   // не больше ~200 точек на ширину графика: усредняем по отрезкам времени
-  const t0=points[0].ms,t1=points[points.length-1].ms,span=Math.max(1,t1-t0);
   const bucket=Math.max(60000,span/200);
   const merged=[];
-  for(const p of points){
+  for(const p of data){
     const last=merged[merged.length-1];
     if(last&&p.ms-last.start<bucket&&p.ms-last.end<CHART_GAP_MS){last.sum+=p.v;last.n++;last.end=p.ms;}
     else merged.push({start:p.ms,end:p.ms,sum:p.v,n:1});
   }
-  // разрыв считаем между концом одной группы и началом следующей —
-  // иначе при крупных группах каждая пара точек выглядела бы дырой
-  const data=merged.map(m=>({ms:(m.start+m.end)/2,start:m.start,end:m.end,v:m.sum/m.n}));
-  const vals=data.map(d=>d.v);
-  const max=Math.max(...vals),min=Math.min(...vals),range=(max-min)||1;
-  const px=ms=>Math.round((ms-t0)/span*(w-20))+10;
-  const py=v=>Math.round((1-(v-min)/range)*(h-20))+10;
-  const segs=[[]];
-  data.forEach((d,i)=>{
-    if(i&&d.start-data[i-1].end>CHART_GAP_MS)segs.push([]);
+  const line=merged.map(m=>({ms:(m.start+m.end)/2,start:m.start,end:m.end,v:m.sum/m.n}));
+
+  // разрыв считаем между концом одной группы и началом следующей
+  const segs=[[]], gaps=[];
+  line.forEach((d,i)=>{
+    if(i&&d.start-line[i-1].end>CHART_GAP_MS){segs.push([]);gaps.push([line[i-1].end,d.start]);}
     segs[segs.length-1].push(d);
   });
-  const gaps=[];
-  for(let i=1;i<data.length;i++){
-    if(data[i].start-data[i-1].end>CHART_GAP_MS)gaps.push([data[i-1].end,data[i].start]);
-  }
-  const fmt=ms=>new Date(ms).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  // Края суток тоже честные: если сбор начался позже полуночи или
+  // оборвался час назад, это пустое место, а не растянутая линия.
+  if(line[0].start-t0>CHART_GAP_MS) gaps.unshift([t0,line[0].start]);
+  if(t1-line[line.length-1].end>CHART_GAP_MS) gaps.push([line[line.length-1].end,t1]);
+
   const lines=segs.map(sg=>sg.length===1
     ?`<circle cx="${px(sg[0].ms)}" cy="${py(sg[0].v)}" r="2" fill="${color}"/>`
-    :`<polygon points="${px(sg[0].ms)},${h} ${sg.map(d=>px(d.ms)+','+py(d.v)).join(' ')} ${px(sg[sg.length-1].ms)},${h}" fill="${color}" opacity=".1"/>
+    :`<polygon points="${px(sg[0].ms)},${py(0)} ${sg.map(d=>px(d.ms)+','+py(d.v)).join(' ')} ${px(sg[sg.length-1].ms)},${py(0)}" fill="${color}" opacity=".1"/>
       <polyline points="${sg.map(d=>px(d.ms)+','+py(d.v)).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`).join('');
-  const gapRects=gaps.map(([a,b])=>`<rect x="${px(a)}" y="6" width="${Math.max(1,px(b)-px(a))}" height="${h-6}" fill="var(--text-dim)" opacity=".12"><title>Нет данных ${fmt(a)}–${fmt(b)}</title></rect>`).join('');
-  const labels=[[t0,'start'],[t0+span/2,'middle'],[t1,'end']].map(([ms,a])=>`<text x="${px(ms)}" y="${h+14}" text-anchor="${a}" class="chart-label">${fmt(ms)}</text>`).join('');
+
+  const gapRects=gaps.map(([a,b])=>`<rect x="${px(a)}" y="${PAD_T}" width="${Math.max(1,px(b)-px(a))}" height="${plotH}" fill="var(--text-dim)" opacity=".12"><title>Нет данных ${fmt(a)}–${fmt(b)}</title></rect>`).join('');
+
   const lost=gaps.reduce((acc,[a,b])=>acc+(b-a),0);
-  const note=lost>=CHART_GAP_MS?`<div style="font-size:11px;color:var(--text-dim);margin-top:4px">Серым — время без данных: ${Math.round(lost/60000)} мин</div>`:'';
-  return`<svg viewBox="0 0 ${w} ${h+20}" style="width:100%;display:block">
-    ${gapRects}${lines}
-    <text x="4" y="16" class="chart-label">${max.toFixed(0)}%</text>
-    <text x="4" y="${h}" class="chart-label">${min.toFixed(0)}%</text>
-    ${labels}
+  const over=data.filter(d=>d.v>100).length;
+  const notes=[];
+  if(lost>=CHART_GAP_MS) notes.push(`Серым — время без данных: ${Math.round(lost/60000)} мин`);
+  if(over) notes.push(`${over} показаний выше 100 % — линия их обрезает по верхней границе`);
+  const note=notes.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:4px">${notes.join(' · ')}</div>`:'';
+
+  return`<svg viewBox="0 0 ${w} ${h+18}" style="width:100%;display:block">
+    ${grid}${ticks.join('')}${gapRects}${lines}
   </svg>${note}`;
 }
 
