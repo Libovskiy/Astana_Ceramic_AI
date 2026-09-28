@@ -7,8 +7,8 @@
 <title>ACAI — Механика</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=62">
-<link rel="stylesheet" href="/static/equipment-page.css?v=4">
+<link rel="stylesheet" href="/static/acai.css?v=63">
+<link rel="stylesheet" href="/static/equipment-page.css?v=5">
 </head>
 <body>
 <div class="app">
@@ -37,62 +37,83 @@
            было нигде. -->
       <div id="myMaintenance"></div>
 
-      <section class="dashboard-card">
-        <div class="card-header">
-          <h2>Очередь работ</h2>
-          <p>Открытые обращения по вашей части — от самых срочных</p>
+      <!-- Очередь и список оборудования вместе занимали два экрана, и
+           до нижнего раздела приходилось листать. Обе секции свёрнуты,
+           число работ видно в заголовке и свёрнутым: свёрнуто — не
+           значит спрятано. Развернул — останется развёрнутым. -->
+      <section class="dashboard-card collapsible collapsed" id="queueCard">
+        <div class="card-header collapse-head" onclick="toggleSection('queueCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Очередь работ <span class="collapse-count" id="queueCount"></span></h2>
+              <p>Открытые обращения по вашей части — от самых срочных</p>
+            </div>
+          </div>
         </div>
-        <div id="workQueue">
-          <div class="loading-state">Загрузка...</div>
-        </div>
-      </section>
-
-      <section class="diagnostic-toolbar" style="flex-wrap: wrap;">
-        <select id="stageFilter">
-          <option value="">Все этапы</option>
-          <option value="mass">Массаподготовка</option>
-          <option value="forming">Формовка</option>
-          <option value="drying">Сушка</option>
-          <option value="kiln">Печь</option>
-          <option value="packaging">Упаковка</option>
-        </select>
-        <select id="statusFilter">
-          <option value="">Все статусы</option>
-          <option value="Работает">Работает</option>
-          <option value="Внимание">Внимание</option>
-          <option value="Ошибка">Ошибка</option>
-        </select>
-        <input id="nameFilter" type="text" placeholder="Поиск по названию..." style="flex: 2;">
-      </section>
-
-      <section class="dashboard-summary">
-        <div class="summary-card">
-          <div class="summary-icon">▣</div>
-          <div><span>Оборудование механики</span><strong id="totalCount">—</strong>
-            <div style="font-size:10px;color:var(--text-dim);margin-top:2px;white-space:nowrap">
-              механики и общее<span id="totalHint"></span></div></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">✓</div>
-          <div><span>Работает</span><strong id="workingCount">—</strong></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">!</div>
-          <div><span>Внимание</span><strong id="warningCount">—</strong></div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-icon">!</div>
-          <div><span>Ошибка</span><strong id="errorCount">—</strong></div>
+        <div class="collapse-body">
+          <div id="workQueue">
+            <div class="loading-state">Загрузка...</div>
+          </div>
         </div>
       </section>
 
-      <section class="dashboard-card">
-        <div class="card-header">
-          <h2>Список оборудования</h2>
-          <p>Кликните "История" для полного журнала по станку</p>
+      <section class="dashboard-card collapsible collapsed" id="equipmentCard">
+        <div class="card-header collapse-head" onclick="toggleSection('equipmentCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Оборудование механики <span class="collapse-count" id="equipmentCount"></span></h2>
+              <p>Кликните "История" для полного журнала по станку</p>
+            </div>
+          </div>
+          <div class="collapse-tools" onclick="event.stopPropagation()">
+            <input id="nameFilter" class="input" type="search" placeholder="Поиск по названию…">
+          </div>
         </div>
-        <div id="equipmentList">
-          <div class="loading-state">Загрузка оборудования...</div>
+
+        <div class="collapse-body">
+          <section class="diagnostic-toolbar" style="flex-wrap: wrap;">
+            <select id="stageFilter">
+              <option value="">Все этапы</option>
+              <option value="mass">Массаподготовка</option>
+              <option value="forming">Формовка</option>
+              <option value="drying">Сушка</option>
+              <option value="kiln">Печь</option>
+              <option value="packaging">Упаковка</option>
+            </select>
+            <select id="statusFilter">
+              <option value="">Все статусы</option>
+              <option value="Работает">Работает</option>
+              <option value="Внимание">Внимание</option>
+              <option value="Ошибка">Ошибка</option>
+            </select>
+          </section>
+
+          <section class="dashboard-summary">
+            <div class="summary-card">
+              <div class="summary-icon">▣</div>
+              <div><span>Оборудование механики</span><strong id="totalCount">—</strong>
+                <div style="font-size:10px;color:var(--text-dim);margin-top:2px;white-space:nowrap">
+                  механики и общее<span id="totalHint"></span></div></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">✓</div>
+              <div><span>Работает</span><strong id="workingCount">—</strong></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">!</div>
+              <div><span>Внимание</span><strong id="warningCount">—</strong></div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">!</div>
+              <div><span>Ошибка</span><strong id="errorCount">—</strong></div>
+            </div>
+          </section>
+
+          <div id="equipmentList">
+            <div class="loading-state">Загрузка оборудования...</div>
+          </div>
         </div>
       </section>
 
@@ -101,11 +122,11 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=62"></script>
+<script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>window.DISCIPLINE_LOCK = "mechanical";</script>
-<script src="/static/my-maintenance.js?v=4"></script>
-<script src="/static/equipment.js?v=16"></script>
+<script src="/static/my-maintenance.js?v=5"></script>
+<script src="/static/equipment.js?v=17"></script>
 <script>ACAIMyTO.load();
 initLayout().then(ctx => { window.currentUser = ctx?.user; });</script>
 

@@ -290,6 +290,10 @@ function chatZoneOf(item) {
  * Когда станков мало, ни цехов, ни поиска не показываем: делить список
  * из трёх строк на группы — это мешать, а не помогать.
  */
+/* Какие цехи сейчас развёрнуты. Живёт до перезагрузки страницы:
+   обращение заводят за одну минуту, запоминать это на завтра незачем. */
+const openZones = new Set();
+
 function renderEquipment(query) {
     const box = document.getElementById("chatEquipmentList");
     if (!box) return;
@@ -307,6 +311,11 @@ function renderEquipment(query) {
             <span class="chat-equipment-status">${escapeHtml(item.status || "")}</span>
         </button>`;
 
+    // Если станок уже выбран, его цех открываем: иначе человек не
+    // увидит собственный выбор.
+    const chosen = equipment.find(item => item.id === selectedEquipmentId);
+    if (chosen) openZones.add(chatZoneOf(chosen));
+
     if (equipment.length <= 6) {
         box.innerHTML = found.map(card).join("");
     } else {
@@ -322,15 +331,29 @@ function renderEquipment(query) {
         box.innerHTML = `
             <input type="search" id="chatEquipmentFind" class="chat-equipment-find"
                    placeholder="Найти станок или цех..." value="${escapeHtml(query || "")}">
-            ${zones.length ? zones.map(zone => `
-                <div class="chat-zone">
-                    <div class="chat-zone-head">
-                        <span>${escapeHtml(zone)}</span>
+            ${zones.length ? zones.map(zone => {
+                // Цех свёрнут, пока его не открыли: пять цехов подряд —
+                // это полсотни строк, и до печи надо листать. При поиске
+                // разворачиваем сами: искать в свёрнутом бессмысленно.
+                const open = q ? true : openZones.has(zone);
+                return `
+                <div class="chat-zone ${open ? "" : "chat-zone-closed"}">
+                    <button type="button" class="chat-zone-head" data-zone="${escapeHtml(zone)}">
+                        <span class="chat-zone-arrow">▸</span>
+                        <span class="chat-zone-name">${escapeHtml(zone)}</span>
                         <span class="chat-zone-n">${byZone[zone].length}</span>
-                    </div>
+                    </button>
                     ${byZone[zone].map(card).join("")}
-                </div>`).join("")
+                </div>`; }).join("")
               : `<div class="chat-empty">Такого станка нет. Проверьте название.</div>`}`;
+
+        box.querySelectorAll(".chat-zone-head").forEach(head => {
+            head.addEventListener("click", function () {
+                const zone = head.dataset.zone;
+                if (openZones.has(zone)) openZones.delete(zone); else openZones.add(zone);
+                renderEquipment(query);
+            });
+        });
 
         const find = document.getElementById("chatEquipmentFind");
         if (find) {

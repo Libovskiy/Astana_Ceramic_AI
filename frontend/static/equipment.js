@@ -66,9 +66,53 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (nameFilter) {
         nameFilter.addEventListener("input", applyFilters);
+        // Искать в свёрнутой секции бессмысленно — раскрываем при вводе.
+        nameFilter.addEventListener("input", event => {
+            if (event.target.value.trim() && window.expandSection) expandSection("equipmentCard");
+        });
     }
 
+    watchSectionCounts();
+
+    // Что человек свернул или развернул в прошлый раз — то и показываем.
+    if (window.restoreSections) restoreSections();
+
 });
+
+
+/*
+ * Числа у заголовков свёрнутых секций.
+ *
+ * Считаем то, что реально отрисовано (с учётом фильтров), а не то, что
+ * пришло с сервера: иначе в заголовке было бы «49», а под ним после
+ * фильтра три строки. Раньше это жило инлайном на одной «Электрике»;
+ * механику доставалась секция без числа, и свёрнутая выглядела пустой.
+ */
+function watchSectionCounts() {
+
+    const pairs = [
+        ["equipmentList", "equipmentCount", ".diagnostic-equipment-row"],
+        ["workQueue", "queueCount", ".alert-item"],
+    ];
+
+    for (const [listId, counterId, rowSelector] of pairs) {
+
+        const list = document.getElementById(listId);
+        const counter = document.getElementById(counterId);
+
+        if (!list || !counter) {
+            continue;
+        }
+
+        const update = () => {
+            const shown = list.querySelectorAll(rowSelector).length;
+            counter.textContent = shown ? String(shown) : "";
+        };
+
+        new MutationObserver(update).observe(list, { childList: true, subtree: true });
+        update();
+    }
+}
 
 
 /* =========================================

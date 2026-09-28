@@ -7,8 +7,8 @@
 <title>ACAI — Электрика</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=62">
-<link rel="stylesheet" href="/static/equipment-page.css?v=4">
+<link rel="stylesheet" href="/static/acai.css?v=63">
+<link rel="stylesheet" href="/static/equipment-page.css?v=5">
 </head>
 <body>
 <div class="app">
@@ -37,13 +37,23 @@
            было нигде. -->
       <div id="myMaintenance"></div>
 
-      <section class="dashboard-card">
-        <div class="card-header">
-          <h2>Очередь работ</h2>
-          <p>Открытые обращения по вашей части — от самых срочных</p>
+      <!-- Свёрнуто по умолчанию: очередь и список оборудования вместе
+           занимали два экрана, и до нижнего раздела приходилось
+           листать. Число работ видно в заголовке и свёрнутым. -->
+      <section class="dashboard-card collapsible collapsed" id="queueCard">
+        <div class="card-header collapse-head" onclick="toggleSection('queueCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Очередь работ <span class="collapse-count" id="queueCount"></span></h2>
+              <p>Открытые обращения по вашей части — от самых срочных</p>
+            </div>
+          </div>
         </div>
-        <div id="workQueue">
-          <div class="loading-state">Загрузка...</div>
+        <div class="collapse-body">
+          <div id="workQueue">
+            <div class="loading-state">Загрузка...</div>
+          </div>
         </div>
       </section>
 
@@ -138,12 +148,12 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=62"></script>
+<script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>window.DISCIPLINE_LOCK = "electrical";</script>
-<script src="/static/my-maintenance.js?v=4"></script>
-<script src="/static/equipment.js?v=16"></script>
-<script src="/static/plc-errors.js?v=2"></script>
+<script src="/static/my-maintenance.js?v=5"></script>
+<script src="/static/equipment.js?v=17"></script>
+<script src="/static/plc-errors.js?v=3"></script>
 <script>
 ACAIMyTO.load();
 initLayout().then(ctx => {
@@ -151,27 +161,8 @@ initLayout().then(ctx => {
   initPlcErrors(ctx?.user);
 });
 
-// Счётчик у заголовка секции оборудования: считаем то, что реально
-// отрисовано (с учётом фильтров) — equipment.js перерисовывает список
-// сам, поэтому просто следим за контейнером, а не дублируем его логику.
-(function () {
-  const list = document.getElementById("equipmentList");
-  const counter = document.getElementById("equipmentCount");
-  if (!list || !counter) return;
-
-  const update = () => {
-    const shown = list.querySelectorAll(".diagnostic-equipment-row").length;
-    counter.textContent = shown ? String(shown) : "";
-  };
-
-  new MutationObserver(update).observe(list, { childList: true, subtree: true });
-  update();
-
-  // Искать в свёрнутой секции бессмысленно — раскрываем при вводе.
-  document.getElementById("nameFilter")?.addEventListener("input", e => {
-    if (e.target.value.trim()) expandSection("equipmentCard");
-  });
-})();
+// Счётчики у заголовков и раскрытие при поиске — в equipment.js:
+// один механизм на «Электрику» и «Механику», а не два похожих.
 </script>
 
 </body>

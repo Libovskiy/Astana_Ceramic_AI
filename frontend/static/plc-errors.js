@@ -16,19 +16,7 @@ let _plcCurrentLine = null;
 let _plcErrors = [];
 let _plcLines = [];   // [{id, name, codes_count}] — разделы ведёт гл. электрик/гл. инженер
 
-/**
- * Сворачивание секции. Общее для кодов ошибок и для оборудования —
- * обе секции длинные, и держать их открытыми одновременно нельзя.
- */
-function toggleSection(cardId, event) {
-  const card = document.getElementById(cardId);
-  if (!card) return;
-  card.classList.toggle("collapsed");
-}
-
-function expandSection(cardId) {
-  document.getElementById(cardId)?.classList.remove("collapsed");
-}
+// toggleSection / expandSection — общие, в acai_layout.js.
 
 async function initPlcErrors(user) {
   _plcCurrentUser = user;

@@ -140,13 +140,21 @@
     const { near, old } = split(rows);
 
     box.style.display = "";
+    // Свёрнуто, как очередь работ и список оборудования рядом: три
+    // длинных раздела подряд не помещались на экран. Число работ
+    // остаётся в заголовке — свёрнутое не значит забытое.
     box.innerHTML = `
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-          <h2>Мои работы по ТО <span style="font-size:11px;color:var(--text-dim)">${near.length}</span></h2>
+      <div class="card collapsible collapsed" id="myToCard" style="margin-bottom:16px">
+        <div class="card-head collapse-head" onclick="toggleSection('myToCard', event)">
+          <div class="collapse-title">
+            <span class="collapse-chevron">▸</span>
+            <div>
+              <h2>Мои работы по ТО <span class="collapse-count">${near.length}</span></h2>
+            </div>
+          </div>
           <span style="font-size:11px;color:var(--text-dim)">${MONTHS[new Date().getMonth()]} · отметку принимает главный инженер</span>
         </div>
-        <div class="card-body" style="padding:0">
+        <div class="card-body collapse-body" style="padding:0">
           ${near.length
             ? near.map(row => line(row)).join("")
             : `<div class="empty compact"><span class="empty-text">На этот месяц работ ТО за вами нет.</span></div>`}
@@ -157,6 +165,8 @@
             </div>` : ""}
         </div>
       </div>`;
+
+    if (window.restoreSections) restoreSections(box);
   }
 
   function plural(n, one, few, many) {

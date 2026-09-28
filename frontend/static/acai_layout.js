@@ -252,7 +252,51 @@ const ACAI = {
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3000);
   },
+
 };
+
+// ── СВОРАЧИВАЕМЫЕ СЕКЦИИ ──────────────────────────────────
+//
+// Было только на «Электрике» (в plc-errors.js), а длинные списки есть
+// и у механика, и в выборе станка при обращении. Перенесено сюда,
+// чтобы механизм был один: два разных сворачивания на соседних
+// страницах ведут себя по-разному, и человек перестаёт им доверять.
+//
+// Добавлена память: развернул раздел — он останется развёрнутым и
+// завтра. Хранится в этом браузере, на сервер не уходит. Ключ — id
+// карточки, поэтому он должен быть осмысленным и постоянным.
+
+function toggleSection(cardId, event) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const collapsed = card.classList.toggle("collapsed");
+  try { localStorage.setItem("acai_section_" + cardId, collapsed ? "0" : "1"); } catch (e) {}
+}
+
+function expandSection(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.remove("collapsed");
+  try { localStorage.setItem("acai_section_" + cardId, "1"); } catch (e) {}
+}
+
+// Восстановить выбор человека. Зовётся страницей после отрисовки:
+// пока выбора нет, остаётся то состояние, что записано в разметке.
+function restoreSections(root) {
+  (root || document).querySelectorAll(".collapsible[id]").forEach(card => {
+    let saved = null;
+    try { saved = localStorage.getItem("acai_section_" + card.id); } catch (e) {}
+    if (saved === null) return;
+    card.classList.toggle("collapsed", saved !== "1");
+  });
+}
+
+// Число в заголовке видно и у свёрнутой секции: свёрнуто — не значит
+// спрятано. Пустое значение убирает значок совсем.
+function sectionCount(id, value) {
+  const box = document.getElementById(id);
+  if (box) box.textContent = (value === null || value === undefined || value === "") ? "" : value;
+}
 
 // ── НАВИГАЦИЯ ─────────────────────────────────────────────
 const NAV_ITEMS = [

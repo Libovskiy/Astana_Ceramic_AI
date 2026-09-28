@@ -144,60 +144,7 @@
 .diagnostic-row-button:hover,
 .diagnostic-row-button-secondary:hover { filter: brightness(1.1); }
 
-/* ── Кнопки-модификаторы (рядом с базовым .btn из acai.css) ── */
-.btn-primary { background: var(--accent-solid); color: #fff; }
-.btn-success { background: var(--ok-solid); color: #fff; }
-.btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn-block { width: 100%; display: block; }
 
-/* ── СВОРАЧИВАЕМЫЕ СЕКЦИИ ──
-   Кодов ошибок под три сотни, станков — полсотни: развёрнутыми обе
-   секции сразу дают простыню, в которой ничего не найти. Поэтому
-   по умолчанию обе свёрнуты, а поиск и фильтры живут в шапке —
-   ими можно пользоваться, не разворачивая (при вводе в поиск
-   секция раскрывается сама, см. plc-errors.js / equipment.js). */
-.collapsible .collapse-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 0;
-}
-.collapsible.collapsed .collapse-head { margin-bottom: 0; }
-.collapsible:not(.collapsed) .collapse-head { margin-bottom: 14px; }
-
-.collapse-title { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.collapse-chevron {
-  color: var(--text-dim);
-  font-size: 13px;
-  line-height: 1.5;
-  transition: transform .15s;
-  flex-shrink: 0;
-}
-.collapsible:not(.collapsed) .collapse-chevron { transform: rotate(90deg); }
-
-.collapse-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--surface-2);
-  border-radius: 999px;
-  padding: 2px 8px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.collapse-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.collapse-tools .input,
-.collapse-tools .select { font-size: 13px; padding: 7px 10px; }
-.collapse-tools .input[type="search"] { min-width: 210px; }
-
-.collapsible.collapsed .collapse-body { display: none; }
 
 /* ── АДАПТИВ ──
    Кнопки "Руководство"/"История" в конце строки оборудования — на
