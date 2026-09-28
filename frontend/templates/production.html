@@ -18,7 +18,7 @@
     <header class="topbar">
       <div>
         <div class="topbar-title">Производство</div>
-        <div class="topbar-sub">Состояние всей технологической цепочки</div>
+        <div class="topbar-sub">Выпуск, простои, сменные отчёты</div>
       </div>
       <div class="topbar-right">
         <span class="topbar-clock" id="topbarClock"></span>
@@ -41,7 +41,6 @@
       <section class="dashboard-card" id="xlsOutputCard" style="display:none">
         <div class="card-header">
           <h2>Выпуск</h2>
-          <p>Пустотелый, полнотелый и блок. Блок пересчитан в штуки по 0,0208 м³</p>
         </div>
         <div class="xls-tabs" id="outputTabs"></div>
         <div id="xlsOutput"></div>
@@ -61,8 +60,9 @@
            число хуже, чем не показанное вовсе. -->
       <section class="dashboard-card" id="xlsCard">
         <div class="card-header">
-          <h2>Сменный отчёт из Экселя</h2>
-          <p>Файл начальника производства. Сайт только читает — в файл ничего не пишет</p>
+          <h2>Сменный отчёт из Экселя
+            <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:6px">сайт читает файл, но в него не пишет</span>
+          </h2>
         </div>
         <div id="xlsBody"><div class="loading-state">Загрузка…</div></div>
         <div id="xlsActions" style="display:none;margin-top:14px;gap:8px;flex-wrap:wrap;align-items:center">
@@ -82,8 +82,9 @@
              Раньше он уезжал к правому краю через space-between, и на
              широком экране посередине зияла пустота в половину карточки. -->
         <div class="card-header">
-          <h2>Сменный отчёт упаковки <span class="collapse-count" id="srStatus"></span></h2>
-          <p>По каждой вагонетке: время съёма слоёв, годные поддоны и брак. Время считается само</p>
+          <h2>Сменный отчёт упаковки <span class="collapse-count" id="srStatus"></span>
+            <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:6px">время съёма слоёв считается само</span>
+          </h2>
         </div>
 
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
@@ -107,8 +108,9 @@
       <!-- SHIFT PRODUCTION LOG -->
       <section class="dashboard-card" id="outputLogCard" style="display:none">
         <div class="card-header">
-          <h2>Учёт выпуска</h2>
-          <p>Ввести количество поддонов за смену — система сама переведёт в штуки</p>
+          <h2>Учёт выпуска
+            <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:6px">поддоны переводятся в штуки сами</span>
+          </h2>
         </div>
 
         <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
@@ -143,8 +145,9 @@
       <!-- MONTHLY PLAN -->
       <section class="dashboard-card" id="planSection" style="display: none;">
         <div class="card-header">
-          <h2>Месячный план</h2>
-          <p>В штуках, по каждому виду продукции</p>
+          <h2>Месячный план
+            <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:6px">в штуках</span>
+          </h2>
         </div>
         <div id="planInputs" style="display: flex; gap: 16px; flex-wrap: wrap;"></div>
         <div id="planSummary" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);"></div>
@@ -152,7 +155,7 @@
       <!-- SHIFT HISTORY (ручной учёт выпуска, не из Экселя) -->
       <section class="dashboard-card" id="historyCard" style="display:none">
         <div class="card-header">
-          <h2>История по сменам — ручной учёт</h2>
+          <h2>История по сменам</h2>
           <p id="averagePercentLabel">Среднее выполнение: —</p>
         </div>
         <div id="shiftHistory">
@@ -172,7 +175,7 @@
 <script src="/static/icons.js?v=4"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
-<script src="/static/production.js?v=61"></script>
+<script src="/static/production.js?v=62"></script>
 <script src="/static/xls-report.js?v=2"></script>
 <script src="/static/shift-report.js?v=5"></script>
 <script>
@@ -413,7 +416,7 @@ async function renderProdVerdict(role){
 
   if (!month || !month.pieces_total) {
     ACAI.verdict('prodVerdict', {title:'Отчёт начальника производства не загружен',
-      sub:'Пока файла нет, выпуск и брак считать не из чего. Загрузить — в карточке «Сменный отчёт из Экселя» ниже.'});
+      sub:'Выпуск и брак считать не из чего — загрузите файл в карточке ниже.'});
     return;
   }
 
@@ -430,9 +433,12 @@ async function renderProdVerdict(role){
   // старше трёх дней, это не «завод стоит», а «файл не обновляли» —
   // и путать эти две вещи нельзя.
   if (behind != null && behind > 3) {
-    ACAI.verdict('prodVerdict', {title:`Отчёт заполнен по ${xlsDate(last)}`,
-      rows:[{level:'warning', what:`файл не обновляли ${behind} ${xlsPlural(behind,'день','дня','дней')}`,
-             where:'цифры ниже — с того дня, а не с сегодняшнего'}]});
+    // Раньше здесь оставалось одно предупреждение, а сами цифры
+    // выпадали: человек видел «файл не обновляли 5 дней» и ни одного
+    // числа. Теперь и то, и другое в одной строке.
+    ACAI.verdict('prodVerdict', {
+      title:`Отчёт заполнен по ${xlsDate(last)} · файл не обновляли ${behind} ${xlsPlural(behind,'день','дня','дней')}`,
+      sub: parts.join(' · ') + '. Цифры — на тот день, не на сегодня.'});
     return;
   }
 

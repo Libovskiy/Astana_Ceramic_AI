@@ -227,6 +227,14 @@ async function loadPlanSummary(monthlyPlans) {
             return;
         }
 
+        // Пока план не задан, вся таблица — нули и прочерки в пять
+        // колонок. Одной строки достаточно: сказать, чего не хватает.
+        const planSet = Object.values(monthlyPlans || {}).some(v => Number(v) > 0);
+        if (!planSet) {
+            container.innerHTML = `<div class="empty-state">План на месяц не задан — заполните поля выше.</div>`;
+            return;
+        }
+
         container.innerHTML = `
             <h4 style="margin-bottom: 12px;">План месяца → произведено сегодня → осталось</h4>
             <table style="width: 100%; border-collapse: collapse;">
@@ -407,12 +415,15 @@ async function loadShiftHistory() {
             return;
         }
 
+        // «Среднее выполнение: 0%» без единой записи — неправда: это не
+        // ноль, а «не вносили». Пока записей нет, подписи нет вовсе.
         if (averageLabel) {
-            averageLabel.textContent = `Среднее выполнение: ${data.average_percent}%`;
+            averageLabel.textContent = data.entries.length
+                ? `Среднее выполнение: ${data.average_percent}%` : '';
         }
 
         if (!data.entries.length) {
-            container.innerHTML = `<div class="empty-state">Записей пока нет. Ручной ввод — внизу страницы, в «Ручном вводе».</div>`;
+            container.innerHTML = `<div class="empty-state">Записей нет — вносят выше, в «Учёте выпуска».</div>`;
             return;
         }
 

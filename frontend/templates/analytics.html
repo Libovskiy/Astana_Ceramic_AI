@@ -27,7 +27,7 @@
     <header class="topbar">
       <div>
         <div class="topbar-title">Аналитика</div>
-        <div class="topbar-sub">Производительность, простои, повторяющиеся проблемы</div>
+        <div class="topbar-sub">Простои, выпуск, повторяющиеся причины</div>
       </div>
       <div class="topbar-right">
         <span class="topbar-clock" id="topbarClock"></span>
@@ -43,7 +43,7 @@
 
       <!-- ВЫВОДЫ: сначала ответ, потом сырьё. Одна главная фраза и пара
            строк; графики ниже — для тех, кто хочет проверить. -->
-      <div class="card" id="conclusions" style="margin-bottom:16px;padding:18px 20px">
+      <div class="card" id="conclusions" style="margin-bottom:14px;padding:13px 16px">
         <div style="font-size:14px;color:var(--text-dim)">Считаю…</div>
       </div>
 
@@ -70,6 +70,31 @@
           <div class="metrics" id="saTotals" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px"></div>
           <div id="saBreakdown" style="display:grid;grid-template-columns:1fr 1fr;gap:14px"></div>
           <div id="saReasons" style="margin-top:14px"></div>
+        </div>
+      </div>
+
+      <!-- СМЕННЫЙ ОТЧЁТ НАЧАЛЬНИКА ПРОИЗВОДСТВА.
+           Стоит вторым блоком нарочно: это единственные данные за год,
+           которые на заводе уже есть. Раньше он лежал в самом низу, под
+           шестью пустыми карточками, и до него не доходили. -->
+      <div class="card" id="xlsAnalyticsCard" style="margin-bottom:16px;display:none">
+        <div class="card-head">
+          <h2>Простои за год</h2>
+          <span style="font-size:11px;color:var(--text-dim)">из файла начальника производства · кнопки периода сверху сюда не относятся</span>
+        </div>
+        <div class="card-body" style="padding:14px 16px">
+          <div id="xlsAnalytics"></div>
+        </div>
+      </div>
+
+      <div class="card" id="xlsBrigadesCard" style="margin-bottom:16px;display:none">
+        <div class="card-head">
+          <h2>Смены</h2>
+          <span style="font-size:11px;color:var(--text-dim)">по фамилии начальника смены из отчёта</span>
+        </div>
+        <div class="card-body" style="padding:14px 16px">
+          <div class="xls-tabs" id="brigadeTabs"></div>
+          <div id="xlsBrigades"></div>
         </div>
       </div>
 
@@ -120,39 +145,6 @@
         <div class="card">
           <div class="card-head"><h2>Простои по оборудованию</h2></div>
           <div class="card-body" id="downtimeList" style="padding:10px 14px"></div>
-        </div>
-      </div>
-
-      <!-- СМЕННЫЙ ОТЧЁТ НАЧАЛЬНИКА ПРОИЗВОДСТВА -->
-      <!-- Перенесено со страницы «Производство»: там отвечают на вопрос
-           «как идёт смена», а разбор за месяцы и сравнение бригад —
-           работа этой страницы. Числа те же самые, из тех же ручек:
-           два места не должны отвечать на один вопрос по-разному. -->
-      <div style="margin:22px 0 10px">
-        <div style="font-size:15px;font-weight:700">Сменный отчёт начальника производства</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-top:3px">
-          Файл в Экселе, помесячно. Кнопки периода наверху сюда не относятся.
-        </div>
-      </div>
-
-      <div class="card" id="xlsBrigadesCard" style="margin-bottom:16px;display:none">
-        <div class="card-head">
-          <h2>Какая смена сколько сделала</h2>
-          <span style="font-size:11px;color:var(--text-dim)">по фамилии начальника смены из отчёта</span>
-        </div>
-        <div class="card-body" style="padding:14px 16px">
-          <div class="xls-tabs" id="brigadeTabs"></div>
-          <div id="xlsBrigades"></div>
-        </div>
-      </div>
-
-      <div class="card" id="xlsAnalyticsCard" style="margin-bottom:16px;display:none">
-        <div class="card-head">
-          <h2>Что видно из отчёта</h2>
-          <span style="font-size:11px;color:var(--text-dim)">смены за год, сведённые вместе</span>
-        </div>
-        <div class="card-body" style="padding:14px 16px">
-          <div id="xlsAnalytics"></div>
         </div>
       </div>
 
@@ -263,12 +255,15 @@ function src(key){return SOURCES[key]||{period:0,total:0,last:null};}
 // занимали 817 px из 2957: четверть страницы уходила на сообщения о
 // том, чего нет. Строка объясняет причину, кнопка ведёт туда, где это
 // заводят, — иначе человек прочитал «данных нет» и не знает, что делать.
+// Пустая карточка — одна короткая строка и кнопка. Абзац объяснений в
+// каждой из шести пустых карточек занимал полэкрана и отодвигал вниз
+// то, по чему данные есть.
 function noDataNote(text, action){
   const go = action
     ? `<a class="btn secondary sm" href="${action.href}">${action.label}</a>`
     : '';
-  return `<div class="empty compact">
-    <span class="empty-text">${text}</span>${go}</div>`;
+  return `<div class="empty compact" style="padding:8px 2px;gap:10px">
+    <span class="empty-text" style="font-size:12px;line-height:1.4">${text}</span>${go}</div>`;
 }
 function lastSeen(key){
   const s=src(key);
@@ -323,14 +318,14 @@ function renderConclusions(s){
   const canOpen=l=>!!document.querySelector(`.nav-item[href="${l}"]`);
   const link=(l,text)=>l&&canOpen(l)?`<a href="${l}" style="color:inherit;text-decoration:none">${text} <span style="color:var(--text-dim)">›</span></a>`:text;
   box.innerHTML=`
-    <div style="display:flex;gap:10px;align-items:flex-start">
-      <span style="width:10px;height:10px;border-radius:50%;margin-top:9px;flex-shrink:0;background:${head[0]?colorOf(head[0]):'var(--border)'}"></span>
-      <div style="font-size:20px;font-weight:700;line-height:1.35">${link(head[2],head[1])}</div>
+    <div style="display:flex;gap:9px;align-items:flex-start">
+      <span style="width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0;background:${head[0]?colorOf(head[0]):'var(--border)'}"></span>
+      <div style="font-size:15px;font-weight:600;line-height:1.4">${link(head[2],head[1])}</div>
     </div>
     ${rest.slice(0,3).map(l=>`
-      <div style="display:flex;gap:10px;align-items:flex-start;margin-top:10px">
-        <span style="width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0;background:${l[0]?colorOf(l[0]):'var(--border)'}"></span>
-        <div style="font-size:15px;line-height:1.45">${link(l[2],l[1])}</div>
+      <div style="display:flex;gap:9px;align-items:flex-start;margin-top:6px">
+        <span style="width:6px;height:6px;border-radius:50%;margin-top:7px;flex-shrink:0;background:${l[0]?colorOf(l[0]):'var(--border)'}"></span>
+        <div style="font-size:13px;line-height:1.45;color:var(--text-dim)">${link(l[2],l[1])}</div>
       </div>`).join('')}`;
 }
 
@@ -367,10 +362,9 @@ function renderMetrics(s){
   // выводах сверху. Четыре пустые плитки на всю ширину — это не отчёт,
   // а место, занятое отсутствием данных. Ставим одну строку.
   if(noProduction && noDowntimeData && !loss.total_minutes){
-    document.getElementById('keyMetrics').innerHTML=noDataNote(
-      `${pw[0].toUpperCase()+pw.slice(1)} не внесли ни выпуска, ни обращений — считать нечего.`,
-      {href:'/production', label:'Внести выпуск'});
-    document.getElementById('keyMetrics').style.display='block';
+    // Про «нечего считать» уже сказано в выводах строкой выше. Вторая
+    // такая же строка — не забота о человеке, а шум.
+    document.getElementById('keyMetrics').style.display='none';
     return;
   }
   document.getElementById('keyMetrics').style.display='';
@@ -417,7 +411,7 @@ function renderTopProblems(d){
         <div class="top-bar"><div class="top-fill" style="width:${Math.round(p.count/max*100)}%;background:${colors[i]||'var(--accent)'}"></div></div>
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);width:24px;text-align:right">${p.count}</span>
       </div>`).join('')
-    :noDataNote(`Обращений о поломках не было — ${lastSeen('cases')}.`,
+    :noDataNote(`Обращений ещё не было.`,
             {href:'/cases', label:'Обращения'});
 }
 
@@ -461,8 +455,7 @@ function renderMaintenance(m){
   // Ни одной отметки ТО в системе — 0% значило бы «механики ничего не
   // делали», а на деле «никто не отмечал». Показываем это прямо.
   if(!src('maintenance').total){
-    box.innerHTML = noDataNote(`По графику на месяц ${m.due} работ, отметок о выполнении нет ни одной.
-      Процент появится с первой отметкой: сейчас он значил бы «не отмечали», а не «не делали».`,
+    box.innerHTML = noDataNote(`${m.due} работ в графике, отметок нет ни одной.`,
       {href:'/maintenance', label:'График ТО'});
     return;
   }
@@ -513,9 +506,11 @@ async function renderChecklist(c){
 
   if(!c || !c.rounds_count){
     const overdue = st.state==='overdue';
-    box.innerHTML = `<div style="font-size:13px;line-height:1.6;color:${overdue?'var(--warn)':'var(--text-dim)'}">
-      ${overdue?'<span data-icon=alert></span> ':''}${st.text || 'Обходы смены за период не проводились.'}
-      ${st.state==='ok' ? '<br>За выбранный период обходов нет — по недельному сроку это нормально.' : ''}</div>`;
+    // Срок обхода уже написан в заголовке карточки — во второй раз его
+    // повторять незачем. Остаётся только то, чего в заголовке нет.
+    box.innerHTML = `<div style="font-size:12px;line-height:1.45;color:${overdue?'var(--warn)':'var(--text-dim)'}">
+      ${overdue?'<span data-icon=alert></span> ':''}${
+        st.short ? st.short[0].toUpperCase()+st.short.slice(1)+'.' : 'Обходов за период не было.'}</div>`;
     return;
   }
   if(note && c.last_round)
@@ -567,7 +562,7 @@ function renderDowntimeList(dt){
         <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--warn)">${item.total_minutes>=60?Math.floor(item.total_minutes/60)+'ч '+item.total_minutes%60+'м':item.total_minutes+'м'}</span>
       </div>`).join('')
     :(!src('downtime').period && !src('cases').period
-        ? noDataNote(`Ни одного обращения — простои не фиксировались, это не значит, что их не было.`,
+        ? noDataNote(`Обращений не было — простои не фиксировались.`,
             {href:'/cases', label:'Обращения'})
         : '<div class="empty">Простоев не было ✓</div>');
 }
@@ -690,7 +685,7 @@ async function loadDowntimeChart(){
   try{
     const r=await ACAI.get('/api/production/history');
     const rows=(r.rows||r.history||[]).slice(0,7).reverse();
-    if(!rows.length){document.getElementById('downtimeChart').innerHTML=noDataNote(`График строится по сменному учёту выпуска — его ещё не вносили.`,
+    if(!rows.length){document.getElementById('downtimeChart').innerHTML=noDataNote(`Выпуск не вносили.`,
       {href:'/production', label:'Внести выпуск'});return;}
     const data=rows.map(row=>({
       v:row.total_downtime_minutes||0,
@@ -797,14 +792,19 @@ async function loadShiftAnalytics(){
   // Ни одной вагонетки за период — нули в выпуске и «брака нет» были бы
   // неправдой. Пишем, что отчётов не было.
   if(!(t.cars_count||0)){
+    // «Отчётов нет» уже сказано в выводах наверху. Держать ради этого
+    // целую карточку — значит занять экран отсутствием данных.
+    // Остаётся только то, чего в выводах нет: отчёт, который завели, но
+    // до сводки он не дошёл — его ждут от конкретной смены.
     document.getElementById('saTotals').innerHTML='';
     document.getElementById('saBreakdown').innerHTML='';
-    document.getElementById('saReasons').innerHTML=noDataNote(
-      `За этот период ни одного сменного отчёта упаковки с вагонетками — выпуск и брак неизвестны.`,
-      {href:'/production', label:'Внести выпуск'});
+    document.getElementById('saReasons').innerHTML='';
+    card.querySelector('.card-body').style.display='none';
+    card.style.display = (t.pending_reports||0) ? 'block' : 'none';
     return;
   }
 
+  card.querySelector('.card-body').style.display='';
   document.getElementById('saTotals').innerHTML=`
     ${saMetric('Вагонеток',t.cars_count||0)}
     ${saMetric('Поддонов годных',t.pallets_good||0,'var(--ok)')}

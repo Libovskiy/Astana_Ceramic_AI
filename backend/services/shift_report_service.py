@@ -659,9 +659,9 @@ def analytics(date_from: str | None = None, date_to: str | None = None) -> dict:
     pending_query += " ORDER BY report_date DESC, shift"
 
     WAITING_FOR = {
-        STATUS_DRAFT: "оператор не сдал",
-        STATUS_SUBMITTED: "ждёт проверки начальника смены",
-        STATUS_CHECKED: "ждёт подтверждения гл. инженера",
+        STATUS_DRAFT: "не сдан",
+        STATUS_SUBMITTED: "ждёт проверки",
+        STATUS_CHECKED: "ждёт подтверждения",
         STATUS_RETURNED: "возвращён на доработку",
     }
 
