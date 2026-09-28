@@ -128,6 +128,63 @@
         </div>`;
     },
 
+    /**
+     * Показание в том виде, в каком его читает человек.
+     *
+     * Единица берётся ИЗ СПРАВОЧНИКА (её заполняет главный инженер), а
+     * не угадывается по имени регистра. Пока угадывали, «Аналитика»
+     * подписывала процентами вообще всё: частота конвейера выглядела
+     * как «50,0 %», а моточасы — как «8 073 268,0 %».
+     *
+     * Возвращает:
+     *   text    — готовая строка со своей единицей;
+     *   percent — 0..100 для полоски заполнения, иначе null;
+     *   bogus   — процент вне 0..100: датчик врёт, прятать нельзя;
+     *   kind    — 'flag' | 'percent' | 'hours' | 'number'.
+     */
+    value(key, raw) {
+      const unit = (this.unit(key) || "").trim();
+      const number = parseFloat(raw);
+      // Дробная часть — через запятую: на русской странице «74.1» читается
+      // как чужое, а в таблицах отчёта рядом стоит «0,68%».
+      const one = n => n.toLocaleString("ru-RU", { minimumFractionDigits: 1,
+                                                   maximumFractionDigits: 1 });
+
+      // Регистр 1658 — не число на экране, а «есть/нет»: что он
+      // означает, пока не подтверждено.
+      if (key === "авария_флаг") {
+        return { text: number > 0 ? "есть" : "нет", percent: null,
+                 bogus: false, kind: "flag" };
+      }
+
+      if (!isFinite(number)) {
+        return { text: String(raw == null ? "—" : raw), percent: null,
+                 bogus: false, kind: "number" };
+      }
+
+      // Единицы нет в справочнике — падаем на имя регистра, но это
+      // запасной путь, а не основной: имя заводили люди и по-разному.
+      const guessed = unit || (key.includes("проц") ? "%"
+                            : key.includes("гц") ? "Гц"
+                            : key.includes("моточас") ? "ч" : "");
+
+      if (guessed === "%") {
+        const bogus = number < 0 || number > 100;
+        return { text: one(number) + " %", percent: bogus ? null : Math.min(number, 100),
+                 bogus, kind: "percent" };
+      }
+
+      if (guessed === "ч") {
+        // Моточасы — шестизначное число: дробная часть и проценты здесь
+        // одинаково бессмысленны.
+        return { text: Math.round(number).toLocaleString("ru-RU") + " ч",
+                 percent: null, bogus: false, kind: "hours" };
+      }
+
+      return { text: one(number) + (guessed ? " " + guessed : ""),
+               percent: null, bogus: false, kind: "number" };
+    },
+
     info(key) { return (cache && cache[key]) || empty(key); },
     title(key) { return this.info(key).title; },
     short(key) { return this.info(key).short; },

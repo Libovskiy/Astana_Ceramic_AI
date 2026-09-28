@@ -114,7 +114,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=2"></script>
+<script src="/static/sensor-names.js?v=3"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
@@ -293,16 +293,10 @@ async function showReport(type) {
     // Только то, что панель отдаёт сейчас: старые регистры остались в
     // истории и выглядели бы как текущие.
     const rows = Object.entries(r).filter(([k]) => ACAISensors.isLive(k));
-    const fmtVal = (k,v) => {
-      if (k==='моточасы_общие') return v.value;
-      // Сравнивать строкой нельзя: панель шлёт «0», но любое «0.0»
-      // или пробел превратили бы «нет сигнала» в «есть». Считаем числом.
-      // Слово нейтральное: что означает регистр 1658, не подтверждено.
-      if (k==='авария_флаг') { const a = parseFloat(v.value); return a > 0 ? 'есть' : 'нет'; }
-      const n = parseFloat(v.value);
-      if (!isFinite(n)) return v.value;
-      return n.toFixed(1) + (k.includes('проц') ? '%' : k.includes('гц') ? ' Гц' : '');
-    };
+    // Единица — из справочника регистров, общим правилом с «Главной» и
+    // «Аналитикой». Сравнение с нулём идёт числом: панель шлёт «0», но
+    // «0.0» или пробел превратили бы «нет сигнала» в «есть».
+    const fmtVal = (k,v) => ACAISensors.value(k, v.value).text;
     const fmtAt = v => {
       const d = new Date(String(v.recorded_at).replace(' ','T'));
       return isNaN(d) ? '' : d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});

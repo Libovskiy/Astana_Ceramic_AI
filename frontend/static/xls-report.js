@@ -161,7 +161,6 @@ async function loadXlsBrigades(span){
           (${r.day_shifts} ${xlsPlural(r.day_shifts,'дневная','дневных','дневных')} · ${r.night_shifts} ${xlsPlural(r.night_shifts,'ночная','ночных','ночных')}),
           всего ${xlsInt(r.pieces)} шт${r.defect_share != null ? `, брак ${String(r.defect_share).replace('.', ',')}%` : ''}${
             r.no_output ? `. В ${r.no_output} ${xlsPlural(r.no_output,'смене','сменах','сменах')} выпуск в отчёте не заполнен — в «штук за смену» они не считаются` : ''}
-          ${(r.spellings||[]).length ? `<br>в отчёте фамилию писали по-разному: ${r.spellings.map(s => `«${xlsEsc(s)}»`).join(', ')} — свёл в одну бригаду` : ''}
         </div>
       </div>`).join('')}`;
 }

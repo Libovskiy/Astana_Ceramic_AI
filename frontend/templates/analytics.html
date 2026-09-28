@@ -171,10 +171,10 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=2"></script>
+<script src="/static/sensor-names.js?v=3"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
-<script src="/static/xls-report.js?v=2"></script>
+<script src="/static/xls-report.js?v=3"></script>
 <script>
 let currentPeriod='today';
 
@@ -723,34 +723,31 @@ async function renderSensorsNow(lv){
   if(updated)document.getElementById('sensorTime').textContent=new Date(updated).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
   document.getElementById('sensorNow').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">`+
     available.map(k=>{
-      const v=parseFloat(lv[k].value);const isAlarm=k==='авария_флаг';
+      // Единица берётся из справочника регистров одним общим правилом
+      // (ACAISensors.value). Раньше здесь ко всему подряд дописывался
+      // процент: частота конвейера показывалась как «50,0 %», а
+      // моточасы — как «8 073 268,0 %».
+      const shown=ACAISensors.value(k, lv[k].value);
+      const v=parseFloat(lv[k].value);
 
-      // Загрузка вне 0-100% физически невозможна. KP-10, например,
-      // присылает и -189%, и +105%. Не прячем и не обрезаем: если
-      // подменить такое значение нулём, датчик никто не починит, а
-      // сводка будет тихо врать. Показываем как есть, но помечаем —
-      // это сигнал электрику, а не показатель работы цеха.
-      const isPct=k.includes('проц')&&!isAlarm;
-      const bogus=isPct&&(!isFinite(v)||v<0||v>100);
-
-      // Нейтрально, пока не подтверждено, что означает регистр 1658:
-      // красная плашка заставляет реагировать на сигнал, о котором мы
-      // сами не знаем, авария это или рабочий такт.
-      const color=bogus?'var(--text-dim)'
-                 :isAlarm?'var(--text)'
+      // Цветом красим только загрузку: для частоты «мало» и «много» —
+      // не про здоровье цеха, а про режим, и красный там врёт.
+      const color=shown.bogus?'var(--text-dim)'
+                 :shown.kind!=='percent'?'var(--text)'
                  :v<50?'var(--danger)':v<80?'var(--warn)':'var(--ok)';
-      const pct=(isPct&&!bogus)?Math.min(v,100):0;
 
-      const shown=isAlarm?(v>0?'есть':'нет')
-                 :bogus?v.toFixed(1)+'% <span data-icon=alert></span>'
-                 :v.toFixed(1)+'%';
+      const title=shown.bogus
+        ? 'title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно. В расчёты не берётся."'
+        : (shown.kind==='flag'
+           ? 'title="Регистр 1658 панели WebHMI. Что он означает — не подтверждено: за сутки поднят 785 раз из 2807, для аварии это слишком часто. Уточняется у главного инженера. Ни на какие расчёты и на «Аварии» в меню не влияет."'
+           : '');
 
-      return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px"
-             ${bogus?'title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно. В расчёты не берётся."':(isAlarm?'title="Регистр 1658 панели WebHMI. Что он означает — не подтверждено: за сутки поднят 785 раз из 2807, для аварии это слишком часто. Уточняется у главного инженера. Ни на какие расчёты и на «Аварии» в меню не влияет."':'')}>
+      return`<div style="background:var(--surface-2);border-radius:8px;padding:10px 12px" ${title}>
         <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">${LABELS[k]}</div>
-        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${shown}</div>
-        ${bogus?`<div style="font-size:10px;color:var(--warn);margin-top:4px">датчик врёт</div>`:''}
-        ${pct?`<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${color};border-radius:2px"></div></div>`:''}
+        <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${
+          shown.text}${shown.bogus?' <span data-icon=alert></span>':''}</div>
+        ${shown.bogus?`<div style="font-size:10px;color:var(--warn);margin-top:4px">датчик врёт</div>`:''}
+        ${shown.percent!=null?`<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden"><div style="width:${shown.percent}%;height:100%;background:${color};border-radius:2px"></div></div>`:''}
       </div>`;
     }).join('')+`</div>`;
 }

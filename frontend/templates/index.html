@@ -214,7 +214,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=2"></script>
+<script src="/static/sensor-names.js?v=3"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
@@ -543,11 +543,14 @@ function renderSensors(lv){
             : hz ? (v>0?'var(--text)':'var(--text-dim)')
             : v<50?'var(--danger)':v<80?'var(--warn)':'var(--text)';
 
-    const p=(pctKey && !bogus)?Math.min(v,100):0;
-    const text = a  ? (v>0?'есть':'нет')
-               : hz ? (v>0? v.toFixed(1)+' Гц' : 'стоит')
-               : bogus ? v.toFixed(1)+'% <span data-icon=alert></span>'
-               : v.toFixed(1)+'%';
+    // Единицу берём из справочника одним общим правилом — тем же, что
+    // на «Аналитике» и в «Отчётах». Раньше каждая страница угадывала
+    // по имени регистра, и подписи расходились.
+    const shown = ACAISensors.value(k, lv[k].value);
+    const p = shown.percent != null ? shown.percent : 0;
+    const text = (hz && v === 0) ? 'стоит'
+               : shown.bogus ? shown.text + ' <span data-icon=alert></span>'
+               : shown.text;
 
     return `<div class="ss-item"${bogus?' title="Значение вне диапазона 0-100% — датчик неисправен или откалиброван неверно"':(a?' title="Регистр 1658 панели WebHMI. Что он означает — не подтверждено: за сутки поднят 785 раз из 2807, для аварии это слишком часто. Уточняется у главного инженера. Ни на какие расчёты и на «Аварии» в меню не влияет."':'')}>
       ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
