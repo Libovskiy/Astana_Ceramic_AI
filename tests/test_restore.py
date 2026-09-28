@@ -28,10 +28,24 @@ from pathlib import Path
 
 from sandbox import Sandbox, check, finish, ROOT
 
-nightly = sorted((ROOT / "backups").glob("factory_*.db"))
+# Берём последнюю ПОЛНУЮ копию: ту, рядом с которой лежит и история
+# датчиков. Раньше брался просто последний файл по имени, и ручная
+# копия, сделанная перед правкой данных (одна factory.db, без
+# monitoring.db), роняла учение — не потому, что восстановление
+# сломано, а потому что рядом не было пары. Ручные копии теперь живут
+# в backups/ручные/, но правило всё равно надёжнее оставить здесь.
+def _stamp(path):
+    return path.stem.replace("factory_", "")
+
+
+nightly = [p for p in sorted((ROOT / "backups").glob("factory_*.db"))
+           if (ROOT / "backups" / f"monitoring_{_stamp(p)}.db").exists()]
+
 if not nightly:
-    print("  Ночных копий нет — учение провести не на чем.")
-    check("есть хотя бы одна ночная копия базы", False, "backups/factory_*.db пусто")
+    lonely = sorted((ROOT / "backups").glob("factory_*.db"))
+    print("  Полных ночных копий нет — учение провести не на чем.")
+    check("есть ночная копия с историей датчиков рядом", False,
+          f"копий базы {len(lonely)}, но ни к одной нет monitoring_*.db")
     finish("Восстановление из бэкапа")
 
 source = nightly[-1]
