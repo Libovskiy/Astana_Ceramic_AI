@@ -265,6 +265,97 @@ function bindEvents() {
    ОБОРУДОВАНИЕ
    ========================================================= */
 
+/* Цехи в порядке, в котором идёт производство, а не по алфавиту:
+   человек ищет станок там, где он стоит на линии. */
+const CHAT_ZONES = ["Массаподготовка", "Формовка", "Сушка / Углесушка",
+                    "Обжиг", "Упаковка"];
+
+/* Цех станка. Тот же порядок, что в «Обращениях»: сначала участок,
+   потом этап; пусто — так и пишем, а не прячем в «Другое». */
+function chatZoneOf(item) {
+    return (item.location || "").trim()
+        || (item.stage || "").trim()
+        || "Цех не указан";
+}
+
+/*
+ * Список станков для нового обращения — по цехам.
+ *
+ * Раньше здесь шли подряд все станки одним столбцом. У рабочего их
+ * два-три, и это было незаметно, а у мастера и главного инженера —
+ * сорок девять: чтобы дойти до печи, надо было прокрутить всю
+ * массоподготовку и формовку. Теперь они разложены по цехам и есть
+ * поиск по названию.
+ *
+ * Когда станков мало, ни цехов, ни поиска не показываем: делить список
+ * из трёх строк на группы — это мешать, а не помогать.
+ */
+function renderEquipment(query) {
+    const box = document.getElementById("chatEquipmentList");
+    if (!box) return;
+
+    const q = String(query || "").trim().toLowerCase();
+    const found = equipment.filter(item =>
+        !q || String(item.name || "").toLowerCase().includes(q)
+           || chatZoneOf(item).toLowerCase().includes(q));
+
+    const card = item => `
+        <button type="button"
+                class="chat-equipment ${item.id === selectedEquipmentId ? "chat-equipment-active" : ""}"
+                data-id="${item.id}">
+            <span class="chat-equipment-name">${escapeHtml(item.name)}</span>
+            <span class="chat-equipment-status">${escapeHtml(item.status || "")}</span>
+        </button>`;
+
+    if (equipment.length <= 6) {
+        box.innerHTML = found.map(card).join("");
+    } else {
+        const byZone = {};
+        found.forEach(item => {
+            const zone = chatZoneOf(item);
+            (byZone[zone] = byZone[zone] || []).push(item);
+        });
+
+        const zones = [...CHAT_ZONES.filter(z => byZone[z]),
+                       ...Object.keys(byZone).filter(z => !CHAT_ZONES.includes(z))];
+
+        box.innerHTML = `
+            <input type="search" id="chatEquipmentFind" class="chat-equipment-find"
+                   placeholder="Найти станок или цех..." value="${escapeHtml(query || "")}">
+            ${zones.length ? zones.map(zone => `
+                <div class="chat-zone">
+                    <div class="chat-zone-head">
+                        <span>${escapeHtml(zone)}</span>
+                        <span class="chat-zone-n">${byZone[zone].length}</span>
+                    </div>
+                    ${byZone[zone].map(card).join("")}
+                </div>`).join("")
+              : `<div class="chat-empty">Такого станка нет. Проверьте название.</div>`}`;
+
+        const find = document.getElementById("chatEquipmentFind");
+        if (find) {
+            find.addEventListener("input", function () {
+                renderEquipment(find.value);
+            });
+            if (q) {
+                find.focus();
+                find.setSelectionRange(q.length, q.length);
+            }
+        }
+    }
+
+    box.querySelectorAll(".chat-equipment").forEach(button => {
+        button.addEventListener("click", function () {
+            selectedEquipmentId = Number(button.dataset.id);
+            box.querySelectorAll(".chat-equipment").forEach(b =>
+                b.classList.remove("chat-equipment-active"));
+            button.classList.add("chat-equipment-active");
+            document.getElementById("chatNewText").focus();
+        });
+    });
+}
+
+
 async function loadEquipment() {
 
     try {
@@ -289,24 +380,7 @@ async function loadEquipment() {
         selectedEquipmentId = equipment[0].id;
     }
 
-    box.innerHTML = equipment.map(item => `
-        <button type="button"
-                class="chat-equipment ${item.id === selectedEquipmentId ? "chat-equipment-active" : ""}"
-                data-id="${item.id}">
-            <span class="chat-equipment-name">${escapeHtml(item.name)}</span>
-            <span class="chat-equipment-status">${escapeHtml(item.status || "")}</span>
-        </button>
-    `).join("");
-
-    box.querySelectorAll(".chat-equipment").forEach(button => {
-        button.addEventListener("click", function () {
-            selectedEquipmentId = Number(button.dataset.id);
-            box.querySelectorAll(".chat-equipment").forEach(b =>
-                b.classList.remove("chat-equipment-active"));
-            button.classList.add("chat-equipment-active");
-            document.getElementById("chatNewText").focus();
-        });
-    });
+    renderEquipment("");
 
 }
 

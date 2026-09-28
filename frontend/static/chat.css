@@ -384,6 +384,33 @@ body {
     gap: 8px;
 }
 
+/* Поиск и заголовки цехов в списке станков: появляются только когда
+   станков много (у рабочего их два-три, там делить нечего). */
+.chat-equipment-find {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 1px solid #dbe2ec;
+    border-radius: 10px;
+    font-size: 15px;
+    background: #fff;
+    color: #0f172a;
+}
+
+.chat-zone { display: flex; flex-direction: column; gap: 8px; }
+
+.chat-zone-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    padding: 4px 2px 0;
+}
+
+.chat-zone-n { font-size: 12px; font-weight: 600; color: #94a3b8; }
+
 .chat-equipment {
     color: #0f172a;   /* это <button>: без явного цвета текст был белым на белом */
     display: flex;
@@ -929,6 +956,9 @@ body[data-screen="list"] .chat-new-form { display: none; }
 
 :root[data-theme="dark"] .chat-item,
 :root[data-theme="dark"] .chat-equipment { background: #182030; border-color: #263045; color: #f1f5f9; }
+:root[data-theme="dark"] .chat-equipment-find { background: #182030; border-color: #263045; color: #f1f5f9; }
+:root[data-theme="dark"] .chat-zone-head { color: #94a3b8; }
+:root[data-theme="dark"] .chat-zone-n { color: #64748b; }
 :root[data-theme="dark"] .chat-item-active,
 :root[data-theme="dark"] .chat-equipment-active { background: #1c2a4d; border-color: #5b76ff; }
 
