@@ -624,14 +624,28 @@ def _register_document(equipment_id, safe_name, filename, user):
         import sqlite3 as _sq
         from datetime import datetime as _dt
         conn = _sq.connect(DB_NAME)
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO equipment_documents (equipment_id, title, file_path, doc_type, added_by, added_at, is_active) VALUES (?,?,?,?,?,?,1)",
             (equipment_id, filename, f"{safe_name}/{filename}", "manual", user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
         )
+        document_id = cur.lastrowid
         conn.commit()
         conn.close()
     except Exception as error:
         print(f"[equipment] документ не записан в карточку: {error}")
+        return None
+
+    # Через «Структуру» загрузка в журнал писалась, а через карточку
+    # станка — нет: один и тот же документ появлялся со следом или без
+    # него в зависимости от того, с какой страницы его принесли.
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action="equipment_document_uploaded",
+        target=f"equipment:{equipment_id}",
+        details=f"{safe_name}: загружен документ «{filename}»",
+        after={"title": filename, "file_path": f"{safe_name}/{filename}"},
+    )
+    return document_id
 
 
 @router.post("/api/equipment/{equipment_id}/documents/upload-b64")
@@ -664,11 +678,40 @@ async def upload_doc_b64(equipment_id: int, request: dict, background_tasks: Bac
 def delete_equipment_doc(equipment_id: int, doc_id: int, user: dict = Depends(require_roles("admin","director","chief_engineer","chief_mechanic","chief_electrician"))):
     import sqlite3 as _sq
     conn = _sq.connect(DB_NAME)
-    row = conn.execute("SELECT file_path FROM equipment_documents WHERE id=? AND equipment_id=?", (doc_id, equipment_id)).fetchone()
-    if row:
-        conn.execute("UPDATE equipment_documents SET is_active=0 WHERE id=?", (doc_id,))
-        conn.commit()
+    conn.row_factory = _sq.Row
+    # is_active=1 в условии обязателен: без него уже убранный документ
+    # «удалялся» повторно, отвечал «успешно» и писал в журнал вторую
+    # запись об одном и том же. Нашла это парная проверка.
+    row = conn.execute(
+        "SELECT * FROM equipment_documents WHERE id=? AND equipment_id=? "
+        "AND COALESCE(is_active, 1) = 1",
+        (doc_id, equipment_id)).fetchone()
+
+    if not row:
+        conn.close()
+        # Раньше отвечали «успешно» и на чужой, и на несуществующий
+        # документ: человек видел, что всё получилось, а не получалось
+        # ничего.
+        raise HTTPException(status_code=404, detail="Документ не найден у этого станка.")
+
+    conn.execute("UPDATE equipment_documents SET is_active=0 WHERE id=?", (doc_id,))
+    conn.commit()
     conn.close()
+
+    # Сам файл на диске остаётся: документы станка — это паспорта и
+    # руководства, и стирать их по нажатию кнопки нельзя. Из карточки
+    # он уходит, а в журнале видно кто и какой.
+    equipment = get_equipment(equipment_id)
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action="equipment_document_deleted",
+        target=f"equipment:{equipment_id}",
+        details=f'{(equipment or {}).get("name") or equipment_id}: убран документ '
+                f'«{row["title"]}» ({row["file_path"]}). Файл на диске остался.',
+        before={"title": row["title"], "file_path": row["file_path"],
+                "added_by": row["added_by"]},
+        after=None,
+    )
     return {"success": True}
 
 

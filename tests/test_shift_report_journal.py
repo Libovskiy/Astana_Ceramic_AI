@@ -103,6 +103,36 @@ check("явно присланная пустота очищает поле", ca
 check("и соседние поля при этом целы", car_row(car_id)["pallets_good"] == 18,
       car_row(car_id))
 
+# ── Парная проверка: а сценарий вообще чувствителен? ────────────────
+#
+# Зелёная проверка выше стоит ровно столько, сколько стоит её
+# способность покраснеть. В первый раз она прошла обманом: номер
+# вагонетки был обязательным, частичный запрос отлетал с 422, и
+# «поддоны не обнулились» выполнялось само собой — при полностью
+# сломанном коде.
+#
+# Поэтому здесь воспроизводится СТАРОЕ поведение: старая ручка звала
+# службу с полным словарём, где за непереданные поля стояли значения
+# по умолчанию («» и 0). Если так сделать, выпуск действительно
+# стирается — значит проверки выше не выполняются вхолостую.
+from backend.services import shift_report_service as svc   # noqa: E402
+
+as_old_code_did = {"car_number": "12", "brick_type": "", "layer1_at": "",
+                   "layer2_at": "", "layer3_at": "09:15", "finished_at": "",
+                   "pallets_good": 0, "pallets_defect": 0,
+                   "defect_reason": "", "defect_note": ""}
+svc.update_car(car_id, as_old_code_did)
+wiped = car_row(car_id)
+check("контрольная: по-старому выпуск действительно стирался",
+      wiped["pallets_good"] == 0 and wiped["layer1_at"] == "", wiped)
+
+# Возвращаем как было — дальше по сценарию нужны настоящие числа.
+svc.update_car(car_id, {"pallets_good": 18, "pallets_defect": 2,
+                        "layer1_at": "08:10", "layer2_at": "08:40",
+                        "brick_type": "М150", "defect_reason": "скол"})
+check("и восстановление работает тем же способом",
+      car_row(car_id)["pallets_good"] == 18, car_row(car_id))
+
 check("правка черновика в журнал не пишется",
       len(journal("shift_report_car_updated")) == 0,
       len(journal("shift_report_car_updated")))

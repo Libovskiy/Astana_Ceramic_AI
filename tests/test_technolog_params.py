@@ -113,6 +113,27 @@ hist2 = conn.execute("SELECT COUNT(*) FROM technolog_params_log WHERE param_id =
 conn.close()
 check("и в своей истории параметра тоже", hist2 == 1, hist2)
 
+# ── Парная проверка: сценарий должен уметь покраснеть ──────────────
+#
+# Старая ручка брала значения через request.get(...): чего нет в
+# запросе — то None, и оно уходило в UPDATE как настоящая пустота.
+# Воспроизводим это, присылая пустые границы ЯВНО: так и должно
+# стирать. Если бы не стирало — проверки выше ничего не значили бы.
+r = tech.put(f"/api/technolog/params/{param_id}",
+             json={"min_val": 12, "max_val": None, "target_val": None})
+conn = sb.db()
+wiped = conn.execute("SELECT * FROM technolog_params WHERE id = ?", (param_id,)).fetchone()
+conn.close()
+check("контрольная: явно присланная пустота действительно стирает границы",
+      wiped["max_val"] is None and wiped["target_val"] is None, dict(wiped))
+
+# Возвращаем как было — дальше сценарий смотрит на эти числа.
+tech.put(f"/api/technolog/params/{param_id}", json={"max_val": 30, "target_val": 20})
+conn = sb.db()
+back = conn.execute("SELECT * FROM technolog_params WHERE id = ?", (param_id,)).fetchone()
+conn.close()
+check("и возвращаются тем же способом", back["max_val"] == 30, dict(back))
+
 # ── Удаление ────────────────────────────────────────────────────────
 r = mech.delete(f"/api/technolog/params/{param_id}")
 check("механик не удаляет норму", r.status_code == 403, r.status_code)
@@ -130,7 +151,7 @@ conn = sb.db()
 left = conn.execute("SELECT COUNT(*) FROM technolog_params_log WHERE param_id = ?",
                     (param_id,)).fetchone()[0]
 conn.close()
-check("история правок после удаления нормы не пропала", left == 1, left)
+check("история правок после удаления нормы не пропала", left == 3, left)
 
 r = tech.delete(f"/api/technolog/params/{param_id}")
 check("повторное удаление отвечает честно, а не «успешно»",

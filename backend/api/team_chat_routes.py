@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.services.auth_service import get_user_by_session
+from backend.services.audit_service import log_action
 from backend.services import team_chat_service as svc
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
@@ -203,9 +204,28 @@ def read(conversation_id: int, payload: ReadPayload, user: dict = Depends(curren
     return {"success": True, "last_read_message_id": last}
 
 
+def _note(user: dict, action: str, target: str, details: str) -> None:
+    """
+    След от удалений в переписке: кто и что убрал, без единой строки
+    самого текста. Отправка, чтение, выход из группы и переименование
+    в журнал не идут — переписка сама себе запись, а журнал завода не
+    должен превращаться в её копию.
+    """
+    log_action(
+        username=user.get("full_name") or user.get("username"),
+        role=user.get("role"), action=action, target=target, details=details,
+    )
+
+
 @router.delete("/messages/{message_id}")
 def delete_message(message_id: int, user: dict = Depends(current_user)):
     _handle(svc.delete_message, message_id, user["id"])
+
+    # Только факт и автор. Текст в журнал не идёт намеренно: иначе
+    # журнал, который читают директор и аналитик, превратился бы в
+    # способ прочитать удалённую переписку сотрудников.
+    _note(user, "chat_message_deleted", f"message:{message_id}",
+          "Удалено своё сообщение в переписке")
     return {"success": True}
 
 
@@ -218,6 +238,8 @@ def add_members(conversation_id: int, payload: MembersPayload, user: dict = Depe
 @router.delete("/conversations/{conversation_id}/members/{user_id}")
 def remove_member(conversation_id: int, user_id: int, user: dict = Depends(current_user)):
     members = _handle(svc.remove_member, conversation_id, user["id"], user_id)
+    _note(user, "chat_member_removed", f"conversation:{conversation_id}",
+          f"Из группы исключён участник №{user_id}; осталось {len(members)}")
     return {"success": True, "members": members}
 
 
@@ -237,6 +259,8 @@ def leave(conversation_id: int, user: dict = Depends(current_user)):
 def clear(conversation_id: int, user: dict = Depends(current_user)):
     """Удалить личный чат у себя."""
     _handle(svc.clear_chat, conversation_id, user["id"])
+    _note(user, "chat_cleared", f"conversation:{conversation_id}",
+          "Личная переписка очищена у себя (у собеседника осталась)")
     return {"success": True}
 
 
@@ -244,4 +268,8 @@ def clear(conversation_id: int, user: dict = Depends(current_user)):
 def delete_group(conversation_id: int, user: dict = Depends(current_user)):
     """Удалить группу для всех участников."""
     _handle(svc.delete_group, conversation_id, user["id"])
+    # Групповая переписка пропадает у каждого участника вместе с
+    # файлами — это удаление общих данных, а не своих.
+    _note(user, "chat_group_deleted", f"conversation:{conversation_id}",
+          "Группа удалена для всех участников вместе с сообщениями и файлами")
     return {"success": True}

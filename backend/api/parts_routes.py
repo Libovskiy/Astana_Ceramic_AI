@@ -6,6 +6,7 @@
 
 from fastapi import APIRouter
 from backend.config import DB_NAME
+from backend.services.audit_service import log_action
 from fastapi import Depends
 
 from backend.api.common import (
@@ -60,8 +61,22 @@ def create_part(request: dict, user: dict = Depends(require_roles("admin","direc
          request.get("equipment_id"), request.get("unit","шт"),
          request.get("quantity",0), request.get("min_quantity",1),
          user["full_name"] or user["username"], _dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+    part_id = cur.lastrowid
     conn.commit(); conn.close()
-    return {"success": True, "id": cur.lastrowid}
+
+    # Заведение детали — это появление остатка на складе из ниоткуда.
+    # Движения (приход/расход) свой след уже пишут в parts_log, а вот
+    # начальный остаток не писался никуда.
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action="part_created", target=f"part:{part_id}",
+        details=f'Заведена деталь «{request["name"]}»'
+                f'{" (" + str(request.get("part_number")) + ")" if request.get("part_number") else ""}'
+                f', начальный остаток {request.get("quantity", 0)} {request.get("unit", "шт")}',
+        after={"name": request["name"], "quantity": request.get("quantity", 0),
+               "part_number": request.get("part_number")},
+    )
+    return {"success": True, "id": part_id}
 
 @router.post("/api/parts/{part_id}/move")
 def move_part(part_id: int, request: dict, user: dict = Depends(require_roles(*PARTS_ROLES))):

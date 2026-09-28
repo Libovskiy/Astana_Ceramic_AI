@@ -18,6 +18,7 @@ from fastapi import APIRouter, Cookie, Depends, File, Form, HTTPException, Uploa
 from fastapi.responses import FileResponse
 
 from backend.config import DB_NAME, CHECKLIST_PHOTOS_DIR
+from backend.services.audit_service import log_action
 from backend.services.auth_service import get_user_by_session
 
 router = APIRouter(prefix="/api/checklist", tags=["checklist"])
@@ -303,13 +304,29 @@ def delete_checklist_photo(photo_id: int, user: dict = Depends(round_user)):
         still = conn.execute(
             "SELECT 1 FROM checklist_photos WHERE file_hash = ? LIMIT 1", (row["file_hash"],)
         ).fetchone()
+        file_removed = False
         if not still:
             try:
                 (PHOTOS_DIR / row["rel_path"]).unlink(missing_ok=True)
+                file_removed = True
             except Exception:
                 pass
     finally:
         conn.close()
+
+    # Фото обхода — свидетельство состояния станка на такой-то час, и
+    # вместе с записью может уйти сам файл с диска. Загрузку в журнал не
+    # пишем (их десятки за обход, и в самой записи уже видно, кто и
+    # когда снял), а удаление — пишем всегда.
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action="checklist_photo_deleted", target=f"checklist_photo:{photo_id}",
+        details=f'Удалено фото обхода {row["rel_path"]}'
+                + (" — файл с диска тоже удалён" if file_removed
+                   else " — файл на диске остался: на него ссылается другая запись"),
+        before={"rel_path": row["rel_path"], "uploaded_by": row["uploaded_by"]},
+        after=None,
+    )
     return {"success": True}
 
 
@@ -384,7 +401,6 @@ def save_round(request: dict, user: dict = Depends(round_user)):
         conn.close()
 
     try:
-        from backend.services.audit_service import log_action
         log_action(
             username=user.get("username"), role=user.get("role"),
             action="checklist_round_saved", target=f"round:{round_id}",
@@ -425,19 +441,30 @@ def link_case(request: dict, user: dict = Depends(round_user)):
 
     conn = _db()
     try:
-        conn.execute(
+        items = conn.execute(
             """UPDATE checklist_items SET case_id = ?
                WHERE round_id = ? AND equipment_id = ?""",
             (case_id, round_id, equipment_id),
-        )
-        conn.execute(
+        ).rowcount
+        photos = conn.execute(
             """UPDATE checklist_photos SET case_id = ?
                WHERE round_id = ? AND equipment_id = ?""",
             (case_id, round_id, equipment_id),
-        )
+        ).rowcount
         conn.commit()
     finally:
         conn.close()
+
+    # Привязка решает, к какой поломке относятся снимки с обхода. Если
+    # привязали не туда, в карточке чужого обращения окажутся чужие
+    # фото, и разбираться будет не по чему.
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action="checklist_linked_to_case", target=f"case:{case_id}",
+        details=f"Обход №{round_id}, станок №{equipment_id}: "
+                f"привязано пунктов {items}, фото {photos}",
+        after={"round_id": round_id, "equipment_id": equipment_id, "case_id": case_id},
+    )
     return {"success": True}
 
 

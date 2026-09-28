@@ -149,8 +149,37 @@ def update(entry_id: int, request: EntryRequest, user: dict = Depends(lab_user))
     if user["role"] not in LAB_WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Правка журнала — работа лаборанта и технолога.")
 
+    before = get_entry(entry_id) or {}
+
     if not update_entry(entry_id, request.data):
         raise HTTPException(status_code=404, detail="Запись не найдена или нечего менять.")
+
+    after = get_entry(entry_id) or {}
+
+    # Дозапись пустого поля — это ввод данных: утром лаборант знает
+    # шихту, а вес и марку только через несколько суток, и писать в
+    # журнал каждое такое дополнение незачем.
+    #
+    # А вот изменение уже записанного — другое дело: цифра, которую
+    # кто-то мог увидеть и на которую мог опереться, стала другой.
+    # Пишем только такие поля.
+    overwritten = {
+        field: (before.get(field), after.get(field))
+        for field in request.data
+        if field in after
+        and str(before.get(field) or "").strip() not in ("", "None")
+        and str(before.get(field)) != str(after.get(field))
+    }
+
+    if overwritten:
+        log_action(
+            username=user.get("full_name") or user["username"], role=user["role"],
+            action="lab_entry_corrected", target=f"lab_entry:{entry_id}",
+            details="Исправлено уже записанное: " + "; ".join(
+                f"{field}: {was} → {now}" for field, (was, now) in overwritten.items()),
+            before={f: v[0] for f, v in overwritten.items()},
+            after={f: v[1] for f, v in overwritten.items()},
+        )
 
     return {"success": True, "entry": get_entry(entry_id)}
 
@@ -237,7 +266,16 @@ def complete(entry_id: int, request: CompleteRequest, user: dict = Depends(lab_u
     if not mark_complete(entry_id, who, complete=request.complete):
         raise HTTPException(status_code=404, detail="Запись не найдена.")
 
-    return {"success": True, "entry": get_entry(entry_id)}
+    entry = get_entry(entry_id) or {}
+    log_action(
+        username=who, role=user["role"],
+        action="lab_entry_completed" if request.complete else "lab_entry_reopened",
+        target=f"lab_entry:{entry_id}",
+        details=("Отчёт лаборатории за %s отмечен законченным" if request.complete
+                 else "С отчёта лаборатории за %s снята отметка «закончен»")
+                % (entry.get("log_date") or f"запись №{entry_id}"),
+    )
+    return {"success": True, "entry": entry}
 
 # =========================================================
 # РАЗГОВОР С ACAI
