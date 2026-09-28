@@ -265,6 +265,17 @@ def enrich_car(car: dict, norms: dict) -> dict:
 # ОТЧЁТЫ
 # =========================================================
 
+def find_report(report_date: str, shift: str, brigade: str | None) -> dict | None:
+    """Есть ли уже такой отчёт. Нужно, чтобы отличить открытие от захода."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT * FROM shift_reports WHERE report_date=? AND shift=? AND brigade IS ?",
+        (report_date, shift, brigade),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_or_create_report(report_date: str, shift: str, brigade: str, username: str) -> dict:
     conn = _conn()
     row = conn.execute(
@@ -431,22 +442,38 @@ def update_car(car_id: int, data: dict) -> dict:
         conn.close()
         raise ValueError("Отчёт уже сдан — править нельзя")
 
+    # Поле, которого нет в запросе, остаётся прежним. Раньше здесь
+    # подставлялись пустые значения по умолчанию: прислали одно время
+    # слоя — поддоны и остальные времена обнулялись молча, а по этим
+    # поддонам считается выпуск смены. Пустая строка, ПРИСЛАННАЯ явно,
+    # по-прежнему очищает поле: человек имеет право стереть время.
+    def text(field):
+        value = data[field] if field in data else car[field]
+        return str(value or "").strip()
+
+    def number(field):
+        value = data[field] if field in data else car[field]
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
     conn.execute(
         """UPDATE shift_report_cars
            SET car_number=?, brick_type=?, layer1_at=?, layer2_at=?, layer3_at=?, finished_at=?,
                pallets_good=?, pallets_defect=?, defect_reason=?, defect_note=?
            WHERE id=?""",
         (
-            str(data.get("car_number") or car["car_number"]).strip(),
-            (data.get("brick_type") or "").strip(),
-            (data.get("layer1_at") or "").strip(),
-            (data.get("layer2_at") or "").strip(),
-            (data.get("layer3_at") or "").strip(),
-            (data.get("finished_at") or "").strip(),
-            int(data.get("pallets_good") or 0),
-            int(data.get("pallets_defect") or 0),
-            (data.get("defect_reason") or "").strip(),
-            (data.get("defect_note") or "").strip(),
+            text("car_number") or str(car["car_number"]).strip(),
+            text("brick_type"),
+            text("layer1_at"),
+            text("layer2_at"),
+            text("layer3_at"),
+            text("finished_at"),
+            number("pallets_good"),
+            number("pallets_defect"),
+            text("defect_reason"),
+            text("defect_note"),
             car_id,
         ),
     )
@@ -454,6 +481,13 @@ def update_car(car_id: int, data: dict) -> dict:
     row = conn.execute("SELECT * FROM shift_report_cars WHERE id=?", (car_id,)).fetchone()
     conn.close()
     return enrich_car(dict(row), get_norms())
+
+
+def get_car(car_id: int) -> dict | None:
+    conn = _conn()
+    row = conn.execute("SELECT * FROM shift_report_cars WHERE id=?", (car_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def delete_car(car_id: int) -> None:

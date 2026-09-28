@@ -52,6 +52,28 @@ class CarPayload(BaseModel):
     defect_note: str = ""
 
 
+class CarPatch(BaseModel):
+    """
+    Правка вагонетки: всё необязательно.
+
+    Отдельная модель от CarPayload нарочно. В CarPayload у полей есть
+    значения по умолчанию («» и 0) — для создания это удобно, а для
+    правки смертельно: поле, которого нет в запросе, приходило в UPDATE
+    пустым и затирало выпуск смены. Здесь по умолчанию нет ничего, и
+    вместе с exclude_unset в правку уходит ровно то, что прислали.
+    """
+    car_number: str | None = None
+    brick_type: str | None = None
+    layer1_at: str | None = None
+    layer2_at: str | None = None
+    layer3_at: str | None = None
+    finished_at: str | None = None
+    pallets_good: int | None = None
+    pallets_defect: int | None = None
+    defect_reason: str | None = None
+    defect_note: str | None = None
+
+
 class ReasonPayload(BaseModel):
     name: str
 
@@ -69,6 +91,47 @@ class ReturnPayload(BaseModel):
 class NormsPayload(BaseModel):
     car_minutes: int
     layer_minutes: int
+
+
+
+# ── Что из сменного отчёта попадает в журнал ────────────────────────
+#
+# По этому отчёту считают выпуск смены, поэтому след нужен. Но писать
+# в журнал каждую вагонетку нельзя: за смену их десятки, и журнал, в
+# котором сейчас 281 запись, перестанет читаться за неделю.
+#
+# Поэтому по-разному:
+#   • открыт, сдан, проверен, подтверждён, возвращён — одной строкой,
+#     это и есть то, за что отвечают люди;
+#   • нормы — «было → стало»: они меняют счёт по всем отчётам сразу;
+#   • удаление вагонетки — «было → стало»: данные исчезают;
+#   • правка вагонетки — только после того, как отчёт возвращали с
+#     проверки. Пока идёт смена и отчёт в черновике, правки — это ввод
+#     данных, а не изменение записи, которую кто-то уже видел.
+
+CAR_FIELDS = ("car_number", "brick_type", "layer1_at", "layer2_at", "layer3_at",
+              "finished_at", "pallets_good", "pallets_defect",
+              "defect_reason", "defect_note")
+
+
+def _report_line(report: dict) -> str:
+    """«28.09, смена 2, бригада А» — чтобы строка журнала читалась без базы."""
+    bits = [str(report.get("report_date") or "")]
+    if report.get("shift"):
+        bits.append(f'смена {report["shift"]}')
+    if report.get("brigade"):
+        bits.append(f'бригада {report["brigade"]}')
+    return ", ".join(b for b in bits if b)
+
+
+def _note(user: dict, action: str, report: dict, details: str = "",
+          before=None, after=None) -> None:
+    log_action(
+        username=user.get("full_name") or user["username"], role=user["role"],
+        action=action, target=f"shift_report:{report.get('id')}",
+        details=f"{_report_line(report)}{(' — ' + details) if details else ''}",
+        before=before, after=after,
+    )
 
 
 @router.get("/meta")
@@ -151,7 +214,12 @@ def open_report(payload: OpenPayload, user: dict = Depends(current_user)):
     if payload.shift not in svc.SHIFTS:
         raise HTTPException(status_code=400, detail="Неизвестная смена.")
 
+    before = svc.find_report(payload.report_date, payload.shift, brigade)
     report = svc.get_or_create_report(payload.report_date, payload.shift, brigade, user["username"])
+    if before is None:
+        # Открытие пишем один раз: возвращение на ту же страницу в
+        # середине смены журнал засорять не должно.
+        _note(user, "shift_report_opened", report)
     return {"success": True, "report": svc.report_with_cars(report["id"])}
 
 
@@ -199,22 +267,48 @@ def add_car(report_id: int, payload: CarPayload, user: dict = Depends(current_us
 
 
 @router.put("/cars/{car_id}")
-def update_car(car_id: int, payload: CarPayload, user: dict = Depends(current_user)):
+def update_car(car_id: int, payload: CarPatch, user: dict = Depends(current_user)):
     _require(svc.FILL_ROLES | svc.CHECK_ROLES, user, "править вагонетки")
+
+    was = svc.get_car(car_id)
     try:
-        car = svc.update_car(car_id, payload.model_dump())
+        # exclude_unset: в правку уходит только то, что действительно
+        # прислали. Иначе значения по умолчанию из модели затирали бы
+        # соседние поля пустотой.
+        car = svc.update_car(car_id, payload.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    report = svc.get_report(was["report_id"]) if was else None
+    if was and report and report.get("status") == svc.STATUS_RETURNED:
+        before = {f: was.get(f) for f in CAR_FIELDS}
+        after = {f: car.get(f) for f in CAR_FIELDS}
+        if before != after:
+            _note(user, "shift_report_car_updated", report,
+                  f'вагонетка {was.get("car_number")} исправлена после возврата',
+                  before=before, after=after)
+
     return {"success": True, "car": car}
 
 
 @router.delete("/cars/{car_id}")
 def delete_car(car_id: int, user: dict = Depends(current_user)):
     _require(svc.FILL_ROLES | svc.CHECK_ROLES, user, "убирать вагонетки")
+
+    was = svc.get_car(car_id)
     try:
         svc.delete_car(car_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    report = svc.get_report(was["report_id"]) if was else None
+    if was and report:
+        _note(user, "shift_report_car_deleted", report,
+              f'убрана вагонетка {was.get("car_number")} '
+              f'({was.get("pallets_good") or 0} поддонов годных, '
+              f'{was.get("pallets_defect") or 0} в брак)',
+              before={f: was.get(f) for f in CAR_FIELDS}, after=None)
+
     return {"success": True}
 
 
@@ -222,42 +316,77 @@ def delete_car(car_id: int, user: dict = Depends(current_user)):
 def submit(report_id: int, user: dict = Depends(current_user)):
     _require(svc.FILL_ROLES | svc.CHECK_ROLES, user, "сдавать отчёт")
     try:
-        return {"success": True, "report": svc.submit_report(report_id, user["username"])}
+        report = svc.submit_report(report_id, user["username"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    full = svc.report_with_cars(report_id) or {}
+    total = (full.get("totals") or {})
+    _note(user, "shift_report_submitted", report,
+          f'сдан: вагонеток {len(full.get("cars") or [])}, '
+          f'годных поддонов {total.get("pallets_good", "—")}, '
+          f'в брак {total.get("pallets_defect", "—")}')
+    return {"success": True, "report": report}
 
 
 @router.post("/{report_id}/check")
 def check(report_id: int, user: dict = Depends(current_user)):
     _require(svc.CHECK_ROLES, user, "проверять отчёт может начальник смены")
     try:
-        return {"success": True, "report": svc.check_report(report_id, user["username"])}
+        report = svc.check_report(report_id, user["username"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    _note(user, "shift_report_checked", report, "проверен мастером смены")
+    return {"success": True, "report": report}
 
 
 @router.post("/{report_id}/approve")
 def approve(report_id: int, user: dict = Depends(current_user)):
     _require(svc.APPROVE_ROLES, user, "подтверждать отчёт может гл. инженер")
     try:
-        return {"success": True, "report": svc.approve_report(report_id, user["username"])}
+        report = svc.approve_report(report_id, user["username"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    # После подтверждения отчёт идёт в аналитику — с этой минуты по
+    # нему считают выпуск завода. Кто именно подтвердил, должно быть
+    # видно без разбирательств.
+    _note(user, "shift_report_approved", report, "подтверждён — ушёл в аналитику")
+    return {"success": True, "report": report}
 
 
 @router.post("/{report_id}/return")
 def send_back(report_id: int, payload: ReturnPayload, user: dict = Depends(current_user)):
     _require(svc.CHECK_ROLES | svc.APPROVE_ROLES, user, "возвращать отчёт")
     try:
-        return {"success": True, "report": svc.return_report(report_id, user["username"], payload.comment)}
+        report = svc.return_report(report_id, user["username"], payload.comment)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    _note(user, "shift_report_returned", report,
+          f"возвращён на доработку: {payload.comment.strip()[:200]}")
+    return {"success": True, "report": report}
 
 
 @router.put("/norms")
 def set_norms(payload: NormsPayload, user: dict = Depends(current_user)):
     _require(svc.APPROVE_ROLES, user, "менять нормы может гл. инженер")
+
+    was = svc.get_norms()
     try:
-        return {"success": True, "norms": svc.set_norms(payload.car_minutes, payload.layer_minutes, user["username"])}
+        norms = svc.set_norms(payload.car_minutes, payload.layer_minutes, user["username"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    # Нормы пересчитывают ВСЕ отчёты сразу: вчерашняя смена, уложившаяся
+    # в норматив, назавтра может оказаться отстающей. Поэтому «было →
+    # стало», а не одна строка.
+    before = {"car_minutes": was.get("car_minutes"), "layer_minutes": was.get("layer_minutes")}
+    after = {"car_minutes": norms.get("car_minutes"), "layer_minutes": norms.get("layer_minutes")}
+    if before != after:
+        log_action(
+            username=user.get("full_name") or user["username"], role=user["role"],
+            action="shift_report_norms_changed", target="shift_report_norms",
+            details=f'Норма на вагонетку {before["car_minutes"]} → {after["car_minutes"]} мин, '
+                    f'на слой {before["layer_minutes"]} → {after["layer_minutes"]} мин',
+            before=before, after=after,
+        )
+    return {"success": True, "norms": norms}
