@@ -74,6 +74,12 @@ os.environ["ACAI_FILES_ROOT"] = str(_FILES)
 
 os.environ["ACAI_DB"] = str(_TMP / "factory.db")
 os.environ["ACAI_MONITORING_DB"] = str(_TMP / "monitoring.db")
+# На боевом сервере ENVIRONMENT=production, и куку входа сервер ставит
+# с флагом secure — по http её браузер (и TestClient) не сохраняет.
+# Проверки из-за этого на сервере не работали вовсе: вход проходил, а
+# следующий запрос получал «Не авторизован». Песочница ходит по http к
+# самой себе, поэтому здесь всегда development.
+os.environ["ENVIRONMENT"] = "development"
 os.environ["OPENAI_API_KEY"] = ""            # client = None
 os.environ["ACAI_LIVE_PROXY"] = "http://127.0.0.1:9"   # фоновые потоки не стартуют
 os.environ["ACAI_WEBHMI_COLLECTOR"] = "0"
