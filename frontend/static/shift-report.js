@@ -247,15 +247,26 @@ function srRenderActions(report) {
   const buttons = [];
 
   if (["draft", "returned"].includes(report.status) && _srMeta.can_fill) {
-    buttons.push(`<button class="btn primary" onclick="srSubmit()">Сдать начальнику смены</button>`);
+    buttons.push(`<button class="btn primary" onclick="srSubmit()">Сдать на проверку</button>`);
   }
-  if (report.status === "submitted" && _srMeta.can_check) {
-    buttons.push(`<button class="btn primary" onclick="srAction('check')">Проверено — гл. инженеру</button>`);
+
+  // Права спрашиваем у сервера ПО ЭТОМУ отчёту: свой сданный отчёт
+  // человек дальше не двигает, и кнопки на него быть не должно.
+  if (report.you_can_check) {
+    buttons.push(`<button class="btn primary" onclick="srAction('check')">Проверено — на подтверждение</button>`);
     buttons.push(`<button class="btn secondary" onclick="srReturn()">Вернуть смене</button>`);
   }
-  if (report.status === "checked" && _srMeta.can_approve) {
+  if (report.you_can_approve) {
     buttons.push(`<button class="btn ok" onclick="srAction('approve')">Подтвердить</button>`);
     buttons.push(`<button class="btn secondary" onclick="srReturn()">Вернуть</button>`);
+  }
+
+  // Сдал сам — объясняем, почему кнопок нет, а не оставляем пустое место.
+  if (["submitted", "checked"].includes(report.status)
+      && !report.you_can_check && !report.you_can_approve
+      && (_srMeta.can_check || _srMeta.can_approve)) {
+    buttons.push(`<span style="font-size:12px;color:var(--text-dim)">Свой отчёт проверяет и подтверждает другой человек${
+      report.submitted_by ? " — сдал " + srEscape(report.submitted_by) : ""}.</span>`);
   }
   if (report.status === "approved") {
     buttons.push(`<span style="color:var(--ok);font-size:12px">✓ Подтверждён${

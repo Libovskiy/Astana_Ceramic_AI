@@ -32,8 +32,12 @@ from sandbox import Sandbox, check, finish   # noqa: E402
 
 sb = Sandbox()
 
-worker = sb.user("worker", brigade="А")
+# Решение владельца 28.09.2026: отчёт ведут начальник смены и начальник
+# производства, оператор упаковки его больше не заполняет.
+worker = sb.user("worker", brigade="А")          # больше не ведёт отчёт
 master = sb.user("shift_supervisor", brigade="А")
+master2 = sb.user("shift_supervisor", brigade="А")
+prod = sb.user("production_chief")
 chief = sb.user("chief_engineer")
 
 
@@ -62,20 +66,20 @@ conn.close()
 free = [f"2026-12-{d:02d}" for d in range(1, 29) if f"2026-12-{d:02d}" not in busy]
 DAY, NEXT_DAY = free[0], free[1]
 
-r = worker.post("/api/shift-report/open",
+r = master.post("/api/shift-report/open",
                 json={"report_date": DAY, "shift": "День", "brigade": "А"})
 check("смена открывается", r.status_code == 200 and r.json().get("success"), r.text[:200])
 report_id = r.json()["report"]["id"]
 check("открытие записано одной строкой", len(journal("shift_report_opened")) == 1,
       len(journal("shift_report_opened")))
 
-r = worker.post("/api/shift-report/open",
+r = master.post("/api/shift-report/open",
                 json={"report_date": DAY, "shift": "День", "brigade": "А"})
 check("повторный заход на ту же смену журнал не засоряет",
       len(journal("shift_report_opened")) == 1, len(journal("shift_report_opened")))
 
 # ── Вагонетка: частичная правка не стирает выпуск ───────────────────
-r = worker.post(f"/api/shift-report/{report_id}/cars", json={
+r = master.post(f"/api/shift-report/{report_id}/cars", json={
     "car_number": "12", "brick_type": "М150",
     "layer1_at": "08:10", "layer2_at": "08:40", "layer3_at": "09:05",
     "finished_at": "09:30", "pallets_good": 18, "pallets_defect": 2,
@@ -84,7 +88,7 @@ check("вагонетка заведена", r.status_code == 200 and r.json().g
 car_id = r.json()["car"]["id"]
 
 # Прислали ОДНО поле — остальные должны остаться как были.
-r = worker.put(f"/api/shift-report/cars/{car_id}", json={"layer3_at": "09:15"})
+r = master.put(f"/api/shift-report/cars/{car_id}", json={"layer3_at": "09:15"})
 check("частичная правка принята", r.status_code == 200, r.text[:200])
 
 row = car_row(car_id)
@@ -97,7 +101,7 @@ check("первое время слоя на месте", row["layer1_at"] == "0
 check("причина брака на месте", row["defect_reason"] == "скол", row)
 
 # Присланная пустая строка по-прежнему очищает: это осознанное действие.
-r = worker.put(f"/api/shift-report/cars/{car_id}", json={"defect_note": ""})
+r = master.put(f"/api/shift-report/cars/{car_id}", json={"defect_note": ""})
 check("явно присланная пустота очищает поле", car_row(car_id)["defect_note"] == "",
       car_row(car_id))
 check("и соседние поля при этом целы", car_row(car_id)["pallets_good"] == 18,
@@ -138,21 +142,21 @@ check("правка черновика в журнал не пишется",
       len(journal("shift_report_car_updated")))
 
 # ── Путь отчёта ─────────────────────────────────────────────────────
-r = worker.post(f"/api/shift-report/{report_id}/submit")
+r = master.post(f"/api/shift-report/{report_id}/submit")
 check("отчёт сдан", r.status_code == 200, r.text[:200])
 rows = journal("shift_report_submitted")
 check("сдача записана", len(rows) == 1, len(rows))
 check("и в строке видно выпуск смены",
       "18" in (rows[0]["details"] or ""), dict(rows[0]))
 
-r = master.post(f"/api/shift-report/{report_id}/return", json={"comment": "Проверь вагонетку 12"})
-check("мастер вернул отчёт", r.status_code == 200, r.text[:200])
+r = master2.post(f"/api/shift-report/{report_id}/return", json={"comment": "Проверь вагонетку 12"})
+check("другой начальник смены вернул отчёт", r.status_code == 200, r.text[:200])
 rows = journal("shift_report_returned")
 check("возврат записан с причиной", len(rows) == 1 and "вагонетку 12" in rows[0]["details"],
       [dict(x) for x in rows])
 
 # После возврата правка — это уже изменение записи, которую видели.
-r = worker.put(f"/api/shift-report/cars/{car_id}", json={"pallets_good": 17})
+r = master.put(f"/api/shift-report/cars/{car_id}", json={"pallets_good": 17})
 check("правка после возврата принята", r.status_code == 200, r.text[:200])
 rows = journal("shift_report_car_updated")
 check("и записана в журнал", len(rows) == 1, len(rows))
@@ -160,9 +164,9 @@ check("с «было → стало»",
       "18" in (rows[0]["before_json"] or "") and "17" in (rows[0]["after_json"] or ""),
       dict(rows[0]))
 
-worker.post(f"/api/shift-report/{report_id}/submit")
-r = master.post(f"/api/shift-report/{report_id}/check")
-check("мастер проверил", r.status_code == 200, r.text[:200])
+master.post(f"/api/shift-report/{report_id}/submit")
+r = master2.post(f"/api/shift-report/{report_id}/check")
+check("другой начальник смены проверил", r.status_code == 200, r.text[:200])
 check("проверка записана", len(journal("shift_report_checked")) == 1)
 
 r = chief.post(f"/api/shift-report/{report_id}/approve")
@@ -174,14 +178,14 @@ check("и видно, кто подтвердил",
       or rows[0]["role"] == "chief_engineer", dict(rows[0]))
 
 # ── Удаление вагонетки: «было → стало» ──────────────────────────────
-r = worker.post("/api/shift-report/open",
+r = master.post("/api/shift-report/open",
                 json={"report_date": NEXT_DAY, "shift": "День", "brigade": "А"})
 second = r.json()["report"]["id"]
-r = worker.post(f"/api/shift-report/{second}/cars",
+r = master.post(f"/api/shift-report/{second}/cars",
                 json={"car_number": "7", "pallets_good": 20, "pallets_defect": 1})
 gone_id = r.json()["car"]["id"]
 
-r = worker.delete(f"/api/shift-report/cars/{gone_id}")
+r = master.delete(f"/api/shift-report/cars/{gone_id}")
 check("вагонетка убрана", r.status_code == 200, r.text[:200])
 rows = journal("shift_report_car_deleted")
 check("удаление записано", len(rows) == 1, len(rows))
@@ -190,7 +194,7 @@ check("и видно, сколько поддонов исчезло",
       dict(rows[0]))
 
 # ── Нормы: «было → стало» ───────────────────────────────────────────
-r = worker.put("/api/shift-report/norms", json={"car_minutes": 40, "layer_minutes": 12})
+r = master.put("/api/shift-report/norms", json={"car_minutes": 40, "layer_minutes": 12})
 check("рабочий нормы не меняет", r.status_code == 403, r.status_code)
 
 conn = sb.db()

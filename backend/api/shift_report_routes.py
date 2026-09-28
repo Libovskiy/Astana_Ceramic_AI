@@ -146,10 +146,10 @@ def meta(user: dict = Depends(current_user)):
         "can_fill": user["role"] in svc.FILL_ROLES,
         "can_check": user["role"] in svc.CHECK_ROLES,
         "can_approve": user["role"] in svc.APPROVE_ROLES,
-        "can_set_norms": user["role"] in svc.APPROVE_ROLES,
+        "can_set_norms": user["role"] in svc.NORMS_ROLES,
         "status_labels": svc.STATUS_LABELS,
         "defect_reasons": [r["name"] for r in svc.list_defect_reasons()],
-        "can_edit_reasons": user["role"] in svc.APPROVE_ROLES,
+        "can_edit_reasons": user["role"] in svc.NORMS_ROLES,
     }
 
 
@@ -160,7 +160,7 @@ def defect_reasons(user: dict = Depends(current_user)):
 
 @router.post("/defect-reasons")
 def add_defect_reason(payload: ReasonPayload, user: dict = Depends(current_user)):
-    _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
+    _require(svc.NORMS_ROLES, user, "править справочник причин может гл. инженер")
     try:
         reason = svc.create_defect_reason(payload.name, user["username"])
     except ValueError as exc:
@@ -182,7 +182,7 @@ def add_defect_reason(payload: ReasonPayload, user: dict = Depends(current_user)
 
 @router.delete("/defect-reasons/{reason_id}")
 def remove_defect_reason(reason_id: int, user: dict = Depends(current_user)):
-    _require(svc.APPROVE_ROLES, user, "править справочник причин может гл. инженер")
+    _require(svc.NORMS_ROLES, user, "править справочник причин может гл. инженер")
 
     was = next((r for r in svc.list_defect_reasons() if r["id"] == reason_id), None)
     svc.archive_defect_reason(reason_id)
@@ -253,6 +253,16 @@ def get_report(report_id: int, user: dict = Depends(current_user)):
         raise HTTPException(status_code=404, detail="Отчёт не найден.")
     if not _can_see_report(user, report):
         raise HTTPException(status_code=403, detail="Это отчёт другой бригады.")
+
+    # Права по ЭТОМУ отчёту, а не вообще: свой сданный отчёт человек
+    # дальше по цепочке не двигает, и кнопок на него быть не должно —
+    # иначе он нажмёт и получит отказ, не понимая, за что.
+    mine = report.get("submitted_by") == user["username"]
+    report["you_can_check"] = (user["role"] in svc.CHECK_ROLES
+                               and report["status"] == svc.STATUS_SUBMITTED and not mine)
+    report["you_can_approve"] = (user["role"] in svc.APPROVE_ROLES
+                                 and report["status"] in (svc.STATUS_SUBMITTED, svc.STATUS_CHECKED)
+                                 and not mine)
     return {"success": True, "report": report}
 
 
@@ -368,7 +378,7 @@ def send_back(report_id: int, payload: ReturnPayload, user: dict = Depends(curre
 
 @router.put("/norms")
 def set_norms(payload: NormsPayload, user: dict = Depends(current_user)):
-    _require(svc.APPROVE_ROLES, user, "менять нормы может гл. инженер")
+    _require(svc.NORMS_ROLES, user, "менять нормы может гл. инженер")
 
     was = svc.get_norms()
     try:
