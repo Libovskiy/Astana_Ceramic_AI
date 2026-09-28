@@ -24,6 +24,12 @@
   let works = [];
   let year = new Date().getFullYear();
 
+  // День, с которого график действует. До него просрочки не бывает:
+  // работы внесли в систему задним числом, и никто их не пропускал.
+  // Без этой отсечки у механика выходило 376 «просроченных» работ с
+  // января — за месяцы, когда графика в системе ещё не было.
+  let startDate = null;
+
   function esc(value) {
     const box = document.createElement("div");
     box.textContent = value == null ? "" : String(value);
@@ -43,6 +49,10 @@
 
     for (const work of works) {
       for (const month of work.months) {
+        // До начала учёта — не просрочено, а «графика тогда не было».
+        if (startDate && (year < startDate.year
+            || (year === startDate.year && month < startDate.month))) continue;
+
         const isPast = year < now.getFullYear()
           || (year === now.getFullYear() && month < thisMonth);
         const isNow = year === now.getFullYear() && month === thisMonth;
@@ -90,6 +100,18 @@
     const box = document.getElementById("myMaintenance");
     if (!box) return;
 
+    // Отсечку берём до работ: от неё зависит, что считать просроченным.
+    try {
+      const settings = await fetch("/api/maintenance/settings", { credentials: "include" });
+      if (settings.ok) {
+        const value = (await settings.json()).start_date;
+        if (value) {
+          const [y, m] = value.split("-").map(Number);
+          startDate = { year: y, month: m, raw: value };
+        }
+      }
+    } catch (error) { /* без отсечки просто покажем всё */ }
+
     let data;
     try {
       const response = await fetch(`/api/maintenance/my-schedule?year=${year}`,
@@ -131,8 +153,7 @@
           ${old.length ? `
             <div style="padding:11px 14px;font-size:12px;color:var(--text-dim);border-top:1px solid var(--border)">
               Просрочено за прошлые месяцы: <b>${old.length}</b>
-              ${plural(old.length, "работа", "работы", "работ")}. Отмечать их
-              задним числом смысла нет — что с ними делать, решает главный инженер.
+              ${plural(old.length, "работа", "работы", "работ")}.
             </div>` : ""}
         </div>
       </div>`;

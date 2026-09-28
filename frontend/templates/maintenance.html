@@ -7,7 +7,7 @@
 <title>График ТО — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=59">
+<link rel="stylesheet" href="/static/acai.css?v=61">
 <style>
 .to-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
 .to-table{width:100%;border-collapse:collapse;min-width:900px;}
@@ -105,7 +105,9 @@
       </div>
 
       <!-- МЕТРИКИ -->
-      <!-- ЖДУТ ПРОВЕРКИ: видит главный инженер и тот, кто его замещает -->
+      <div id="startBox" style="font-size:12px;color:var(--text-dim);margin-bottom:12px"></div>
+
+      <!-- ЖДУТ ПРОВЕРКИ: видит главный своей службы или инженер -->
       <div id="pendingBox" style="display:none;margin-bottom:16px"></div>
 
       <div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="toMetrics">
@@ -136,7 +138,7 @@
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:560px;max-width:95vw"></div></div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=59"></script>
+<script src="/static/acai_layout.js?v=61"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
@@ -172,7 +174,8 @@ let toStart={year:null,month:null};
 async function loadToSettings(){
   try{
     const r=await ACAI.get('/api/maintenance/settings');
-    toStart={year:r.start_year,month:r.start_month};
+    toStart={year:r.start_year,month:r.start_month,date:r.start_date,canEdit:r.can_edit_start};
+    renderStart();
   }catch{ toStart={year:null,month:null}; }
 }
 
@@ -405,6 +408,58 @@ function renderTable(){
 }
 
 function mEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
+
+// ── ДАТА НАЧАЛА УЧЁТА ──────────────────────────────────────────────
+//
+// До этого дня просрочки не бывает: график завели задним числом, и
+// работы за прошлые месяцы никто не пропускал. Раньше дата лежала в
+// .env, и поправить её мог только тот, у кого доступ к серверу, — а
+// знает её главный инженер.
+function renderStart(){
+  const box=document.getElementById('startBox');
+  if(!box) return;
+  const has=!!toStart.date;
+  box.innerHTML = `
+    Учёт ТО ведётся ${has?`с <b>${mEsc(toStart.date)}</b>`:'без отсечки'}
+    — работы до этой даты просроченными не считаются.
+    ${toStart.canEdit?`<button class="btn secondary sm" style="margin-left:8px" onclick="openStart()">Изменить</button>`:''}`;
+}
+
+function openStart(){
+  ACAI.showModal(`
+    <h3>Дата начала учёта ТО</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+      До этого дня просрочки нет: график внесли в систему задним числом,
+      и работы за прошлые месяцы никто не пропускал.
+    </div>
+    <div class="field">
+      <label>С какого дня</label>
+      <input class="input" id="st-date" type="date" value="${mEsc(toStart.date||'')}">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Пустое поле снимает отсечку — тогда просроченным будет всё с начала года.
+      </div>
+    </div>
+    <div id="st-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" onclick="ACAI.closeModal()">Отмена</button>
+      <button class="btn primary" onclick="saveStart()">Сохранить</button>
+    </div>`);
+}
+
+async function saveStart(){
+  const value=document.getElementById('st-date')?.value||'';
+  try{
+    const r=await fetch('/api/maintenance/settings/start',{
+      method:'PUT',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({start_date:value||null})});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.detail||'Не удалось сохранить');
+    ACAI.closeModal();
+    ACAI.toast('Дата сохранена','ok');
+    await loadSchedule();
+  }catch(e){ document.getElementById('st-err').textContent=e.message; }
+}
 
 // ── ЖДУТ ПРОВЕРКИ ──────────────────────────────────────────────────
 //

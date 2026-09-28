@@ -19,6 +19,7 @@
 import sqlite3
 from datetime import datetime
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 
 import os
@@ -31,22 +32,14 @@ def _maintenance_start():
     """
     Месяц, с которого график считается действующим. До него просрочки
     быть не может: работы внесли задним числом, и никто их не пропускал.
+
+    Дата лежит в настройках (её правит главный инженер), .env остаётся
+    запасным значением.
     """
-    raw = (os.environ.get("ACAI_MAINTENANCE_START") or "").strip()
+    from backend.services.app_settings_service import maintenance_start
 
-    if not raw:
-        env_file = Path(__file__).resolve().parents[2] / ".env"
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                if line.startswith("ACAI_MAINTENANCE_START="):
-                    raw = line.split("=", 1)[1].strip()
-                    break
-
-    try:
-        year_str, month_str = raw.split("-")[:2]
-        return int(year_str), int(month_str)
-    except Exception:
-        return None, None
+    day = maintenance_start()
+    return (day.year, day.month) if day else (None, None)
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance-summary"])
 
@@ -212,12 +205,64 @@ def maintenance_summary(
     return result
 
 
+# Дату начала учёта задаёт тот, кто отвечает за график.
+START_EDIT_ROLES = ("chief_engineer", "chief_mechanic", "chief_electrician",
+                    "director", "admin")
+
+
+class StartRequest(BaseModel):
+    start_date: str | None = None
+
+
 @router.get("/settings")
 def maintenance_settings(user: dict = Depends(current_user)):
     """Дата запуска графика — фронтенд красит месяцы по ней же."""
+    from backend.services.app_settings_service import maintenance_start
+
+    day = maintenance_start()
     start_year, start_month = _maintenance_start()
+
     return {
         "success": True,
         "start_year": start_year,
         "start_month": start_month,
+        "start_date": day.isoformat() if day else None,
+        "can_edit_start": user.get("role") in START_EDIT_ROLES,
     }
+
+
+@router.put("/settings/start")
+def set_maintenance_start_route(request: StartRequest,
+                                user: dict = Depends(current_user)):
+    """
+    Задать день, с которого график действует.
+
+    До этого дня просрочки не бывает: работы в систему внесли задним
+    числом, и никто их не пропускал. Раньше дата лежала в .env, и
+    поправить её мог только тот, у кого есть доступ к серверу, — а
+    знает её главный инженер.
+    """
+    from fastapi import HTTPException
+
+    from backend.services.app_settings_service import set_maintenance_start
+    from backend.services.audit_service import log_edit
+
+    if user.get("role") not in START_EDIT_ROLES:
+        raise HTTPException(status_code=403,
+                            detail="Дату начала учёта задаёт главный инженер.")
+
+    try:
+        result = set_maintenance_start(request.start_date,
+                                       user.get("full_name") or user.get("username"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    log_edit(
+        entity_type="maintenance_settings", entity_id=0,
+        before={"start_date": result["before"]},
+        after={"start_date": result["after"]},
+        user=user, action="maintenance_start_set",
+        name="дата начала учёта ТО",
+    )
+
+    return {"success": True, "start_date": result["after"]}

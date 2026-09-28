@@ -7,7 +7,7 @@
 <title>Журнал — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=59">
+<link rel="stylesheet" href="/static/acai.css?v=61">
 <style>
 .log-item {
   display:flex; align-items:flex-start; gap:14px;
@@ -101,7 +101,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/acai_layout.js?v=59"></script>
+<script src="/static/acai_layout.js?v=61"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
 let allEntries = [];
@@ -164,6 +164,13 @@ const ACTION_META = {
   parts_written_off:             { icon:ACAI.icon('parts'), bg:'rgba(34,197,94,.1)', label:'Списаны запчасти по ремонту' },
   parts_writeoff_skipped:        { icon:ACAI.icon('parts'), bg:'rgba(245,158,11,.1)', label:'Запчасти списать не вышло' },
   sensor_register_updated:       { icon:ACAI.icon('diagnostics'), bg:'rgba(245,158,11,.1)', label:'Изменён регистр панели' },
+  maintenance_marked_done:       { icon:ACAI.icon('maintenance'), bg:'rgba(59,130,246,.1)', label:'Отмечено выполнение ТО' },
+  maintenance_confirmed:         { icon:ACAI.icon('ok'), bg:'rgba(34,197,94,.1)', label:'ТО принято' },
+  maintenance_rejected:          { icon:ACAI.icon('alert'), bg:'rgba(239,68,68,.1)', label:'ТО возвращено на переделку' },
+  maintenance_unmarked:          { icon:ACAI.icon('trash'), bg:'rgba(239,68,68,.1)', label:'Снята отметка ТО' },
+  maintenance_start_set:         { icon:ACAI.icon('calendar'), bg:'rgba(100,116,139,.1)', label:'Задана дата начала учёта ТО' },
+  maintenance_substitute_added:  { icon:ACAI.icon('users'), bg:'rgba(99,102,241,.1)', label:'Назначено замещение по ТО' },
+  maintenance_substitute_removed:{ icon:ACAI.icon('users'), bg:'rgba(100,116,139,.1)', label:'Снято замещение по ТО' },
   regulation_created:            { icon:ACAI.icon('reports'), bg:'rgba(59,130,246,.1)', label:'Создан регламент' },
   regulation_changed:            { icon:ACAI.icon('edit'), bg:'rgba(245,158,11,.1)', label:'Регламент изменён' },
 

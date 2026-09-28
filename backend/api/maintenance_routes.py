@@ -6,6 +6,7 @@
 
 from fastapi import APIRouter
 from backend.config import DB_NAME
+from backend.services.audit_service import log_action
 from fastapi import Depends
 
 from backend.api.common import (
@@ -45,23 +46,73 @@ def delete_maintenance_schedule(schedule_id: int, user: dict = Depends(require_r
 
 @router.post("/api/maintenance/log")
 def log_maintenance_done(request: dict, user: dict = Depends(get_current_user)):
+    # Старый путь отметки: ставит сразу «выполнено», без описания и без
+    # проверки. Оставлен для совместимости, но теперь пишет в журнал —
+    # раньше и отметка, и снятие не оставляли вообще никакого следа.
+    #
+    # Новый путь — POST /api/maintenance/done: отметка с описанием,
+    # которую принимает главный своей службы.
     import sqlite3 as _sq
     from datetime import datetime as _dt
     conn = _sq.connect(DB_NAME, timeout=10)
-    conn.execute("INSERT INTO maintenance_log (plan_id,schedule_id,equipment_id,work_name,month,year,done_at,done_by,note) VALUES (?,?,?,?,?,?,?,?,?)",
+    cur = conn.execute("INSERT INTO maintenance_log (plan_id,schedule_id,equipment_id,work_name,month,year,done_at,done_by,note) VALUES (?,?,?,?,?,?,?,?,?)",
         (request["schedule_id"], request["schedule_id"], request["equipment_id"], request["work_name"],
          request["month"], request["year"], _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
          user["full_name"] or user["username"], request.get("note","")))
+    log_id = cur.lastrowid
     conn.commit(); conn.close()
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="maintenance_marked_done",
+        target=f"maintenance:{log_id}",
+        details=f"{request.get('work_name')}, месяц {request.get('month')} (старый путь, без проверки)",
+    )
+
     return {"success": True}
 
+# Снять отметку может только тот, кто её принимает: главный своей
+# службы, главный инженер, директор или админ.
+#
+# Почему это важно. Раньше ручка была открыта любому вошедшему и
+# ничего не писала в журнал. Пять отметок ТО от 18.09 исчезли с
+# боевой базы между 24.09 16:08 и 25.09 02:00, и узнать, кто их снял,
+# нельзя: следа не осталось нигде. Одного клика по зелёной клетке
+# хватало, чтобы стереть чужую работу бесследно.
+UNLOG_ROLES = ("chief_engineer", "chief_mechanic", "chief_electrician",
+               "director", "admin")
+
+
 @router.delete("/api/maintenance/log")
-def unlog_maintenance(request: dict, user: dict = Depends(get_current_user)):
+def unlog_maintenance(request: dict, user: dict = Depends(require_roles(*UNLOG_ROLES))):
     import sqlite3 as _sq
     conn = _sq.connect(DB_NAME)
+    conn.row_factory = _sq.Row
+
+    # Что именно снимаем — читаем ДО удаления: иначе в журнале
+    # останется «что-то удалили», и это ничем не лучше молчания.
+    was = conn.execute(
+        "SELECT id, work_name, done_by, done_at, status, note FROM maintenance_log "
+        "WHERE schedule_id=? AND month=? AND year=?",
+        (request["schedule_id"], request["month"], request["year"]),
+    ).fetchone()
+
     conn.execute("DELETE FROM maintenance_log WHERE schedule_id=? AND month=? AND year=?",
         (request["schedule_id"], request["month"], request["year"]))
     conn.commit(); conn.close()
+
+    if was:
+        log_action(
+            username=user["username"], role=user["role"],
+            action="maintenance_unmarked",
+            target=f"maintenance:{was['id']}",
+            details=f"{was['work_name']}, месяц {request.get('month')} — снята отметка "
+                    f"{was['done_by']} от {str(was['done_at'])[:16]}",
+            before={"status": was["status"], "done_by": was["done_by"],
+                    "note": was["note"]},
+            after={"status": "снято"},
+        )
+
     return {"success": True}
 
 

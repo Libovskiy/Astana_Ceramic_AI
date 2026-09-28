@@ -32,9 +32,23 @@ from backend.services.auth_service import get_user_by_session
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance-confirm"])
 
-# Принимает работу только главный инженер. Директор — на случай отпуска
-# или болезни: без этого график встанет, а работы копятся.
-CONFIRM_ROLES = {"chief_engineer", "director", "admin"}
+# Принимает работу главный СВОЕЙ службы: механические — главный
+# механик, электрические — главный энергетик. Главный инженер
+# принимает любую, он отвечает за картину целиком; директор и админ —
+# на случай отпуска или болезни, иначе график встанет.
+#
+# Раньше принимать мог только главный инженер, и он становился узким
+# местом: 428 работ в год через одного человека.
+CONFIRM_ANY_ROLES = {"chief_engineer", "director", "admin"}
+
+# Кто принимает какую часть графика.
+CONFIRM_BY_DISCIPLINE = {
+    "mechanical": {"chief_mechanic"},
+    "electrical": {"chief_electrician"},
+}
+
+# Совместимость: список всех, кто в принципе может принимать.
+CONFIRM_ROLES = CONFIRM_ANY_ROLES | {"chief_mechanic", "chief_electrician"}
 
 # Отмечать выполнение может тот, кто работу делает или за неё отвечает.
 PERFORM_ROLES = {
@@ -120,14 +134,28 @@ def active_substitute_ids(conn) -> set:
     return {row["user_id"] for row in rows}
 
 
-def can_confirm(user, conn=None) -> bool:
+def can_confirm(user, conn=None, discipline: str = None) -> bool:
     """
-    Право принимать работу: по роли или по действующему замещению.
+    Право принимать работу: по роли, по службе или по замещению.
+
+    Без указания службы отвечает на вопрос «может ли этот человек
+    принимать хоть что-нибудь» — по нему решается, показывать ли блок
+    проверки вообще. Со службой — «может ли он принять ИМЕННО ЭТУ
+    работу»: главный механик не принимает электрику, и наоборот.
 
     Главный инженер своё право сохраняет и на время замещения — он может
     принять что-то из отпуска, и это нормально.
     """
-    if user.get("role") in CONFIRM_ROLES:
+    role = user.get("role")
+
+    if role in CONFIRM_ANY_ROLES:
+        return True
+
+    if discipline is None:
+        # Вопрос «может ли вообще»: главный механик может — свою часть.
+        if role in {"chief_mechanic", "chief_electrician"}:
+            return True
+    elif role in CONFIRM_BY_DISCIPLINE.get(discipline, set()):
         return True
 
     own = conn is None
@@ -249,10 +277,15 @@ def pending(year: int | None = None, user: dict = Depends(current_user)):
         except Exception:
             pass
 
-    items = [
-        {**dict(row), "discipline": discipline_of(row["responsible"])}
-        for row in rows
-    ]
+    # Каждому — своя часть: главный механик видит механические работы,
+    # энергетик электрические, инженер и директор всё. Показывать
+    # чужие с неработающей кнопкой хуже, чем не показывать.
+    items = []
+    for row in rows:
+        discipline = discipline_of(row["responsible"])
+        if not can_confirm(user, discipline=discipline):
+            continue
+        items.append({**dict(row), "discipline": discipline})
 
     return {
         "success": True,
@@ -263,11 +296,12 @@ def pending(year: int | None = None, user: dict = Depends(current_user)):
 
 @router.post("/review")
 def review(request: ReviewRequest, user: dict = Depends(current_user)):
-    """Главный инженер принимает работу или возвращает с замечанием."""
+    """Главный своей службы принимает работу или возвращает с замечанием."""
     if not can_confirm(user):
         raise HTTPException(
             status_code=403,
-            detail="Принимает работу главный инженер или тот, кто его замещает.",
+            detail="Принимает работу главный своей службы, главный инженер "
+                   "или тот, кто его замещает.",
         )
 
     comment = (request.comment or "").strip()
@@ -283,12 +317,27 @@ def review(request: ReviewRequest, user: dict = Depends(current_user)):
     conn = _db()
     try:
         row = conn.execute(
-            "SELECT id, work_name, month, status FROM maintenance_log WHERE id = ?",
+            """SELECT l.id, l.work_name, l.month, l.status, s.responsible
+               FROM maintenance_log l
+               LEFT JOIN maintenance_schedule s ON s.id = l.schedule_id
+               WHERE l.id = ?""",
             (request.log_id,),
         ).fetchone()
 
         if row is None:
             raise HTTPException(status_code=404, detail="Отметка не найдена.")
+
+        # Право проверяем по ЭТОЙ работе, а не вообще. Общего права
+        # мало: главный механик не должен принимать электрику, даже
+        # если знает номер отметки.
+        work_discipline = discipline_of(row["responsible"])
+        if not can_confirm(user, conn=conn, discipline=work_discipline):
+            raise HTTPException(
+                status_code=403,
+                detail="Эту работу принимает главный " +
+                       ("энергетик" if work_discipline == "electrical" else "механик") +
+                       " или главный инженер.",
+            )
 
         conn.execute(
             """UPDATE maintenance_log
