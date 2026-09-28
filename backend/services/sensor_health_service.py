@@ -54,6 +54,10 @@ SILENCE_MINUTES = "sensors_silence_minutes"      # когда считать т�
 PUSH_AFTER_MINUTES = "sensors_push_after_minutes"  # когда слать уведомление
 ALERT_ROLES = "sensors_alert_roles"              # кому слать, по должности
 ALERT_USERS = "sensors_alert_users"              # кому слать, поимённо
+# Сколько часов значение регистра может стоять на месте, прежде чем мы
+# напишем «не меняется». Частота привода честно держится часами — это
+# режим, а не поломка, поэтому порог щедрый.
+STALE_HOURS = "sensors_stale_hours"
 
 # Служебные, их правит не человек, а сам сбор.
 COLLECTOR_SEEN = "sensors_collector_seen_at"
@@ -70,6 +74,7 @@ DEFAULTS = {
     # роль, поэтому для него есть список поимённо.
     ALERT_ROLES: "chief_engineer",
     ALERT_USERS: "",
+    STALE_HOURS: 2,
 }
 
 # Ночью не звоним: сбор держится на вкладке браузера на заводском
@@ -109,6 +114,7 @@ def settings() -> dict:
                                    DEFAULTS[SILENCE_MINUTES]),
         "push_after_minutes": _as_int(settings_store.get(PUSH_AFTER_MINUTES),
                                       DEFAULTS[PUSH_AFTER_MINUTES]),
+        "stale_hours": _as_int(settings_store.get(STALE_HOURS), DEFAULTS[STALE_HOURS]),
         "alert_roles": [r.strip() for r in roles.split(",") if r.strip()],
         "alert_users": [u.strip() for u in users.split(",") if u.strip()],
         "night_from": NIGHT_FROM,
@@ -116,7 +122,7 @@ def settings() -> dict:
     }
 
 
-def save_settings(silence_minutes=None, push_after_minutes=None,
+def save_settings(silence_minutes=None, push_after_minutes=None, stale_hours=None,
                   alert_roles=None, alert_users=None, who: str = None) -> dict:
     """Сохранить настройки. Возвращает «было → стало» для журнала."""
     changes = {}
@@ -134,6 +140,12 @@ def save_settings(silence_minutes=None, push_after_minutes=None,
             raise ValueError("Порог уведомления — целое число минут больше нуля.")
         changes["push_after_minutes"] = settings_store.set_value(
             PUSH_AFTER_MINUTES, value, who)
+
+    if stale_hours is not None:
+        value = _as_int(stale_hours, 0)
+        if not value:
+            raise ValueError("Порог «не меняется» — целое число часов больше нуля.")
+        changes["stale_hours"] = settings_store.set_value(STALE_HOURS, value, who)
 
     if alert_roles is not None:
         value = ",".join(r.strip() for r in alert_roles if r and r.strip())

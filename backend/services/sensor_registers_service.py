@@ -37,6 +37,21 @@ from backend.config import DB_NAME, DB_PATH
 # выходной тишина — это норма, а не поломка.
 SILENT_AFTER_HOURS = 24
 
+# Сколько часов значение может стоять на месте, прежде чем мы скажем
+# «не меняется». Частота привода честно держится часами — это режим, а
+# не поломка, поэтому порог щедрый. Настройка, а не число в коде.
+STALE_HOURS_KEY = "sensors_stale_hours"
+STALE_HOURS_DEFAULT = 2
+
+
+def _stale_hours() -> int:
+    try:
+        from backend.services import app_settings_service as settings_store
+        value = int(str(settings_store.get(STALE_HOURS_KEY) or STALE_HOURS_DEFAULT))
+        return value if value > 0 else STALE_HOURS_DEFAULT
+    except Exception:
+        return STALE_HOURS_DEFAULT
+
 # Связи, зашитые в technolog.html. Переносим их в базу как есть — это
 # знание главного инженера, и терять его нельзя. Три из пяти регистров
 # панель не присылает; они станут silent сами, по факту.
@@ -150,6 +165,13 @@ CREATE TABLE IF NOT EXISTS sensor_registers (
     state TEXT NOT NULL DEFAULT 'unknown',
     last_seen_at TEXT,
 
+    -- Когда регистр последний раз ИЗМЕНИЛ значение. Приходить он может
+    -- каждую секунду и при этом стоять неделю: панель шлёт только
+    -- изменившиеся регистры, а расширение досылает последнее известное,
+    -- чтобы после перезапуска экран не пустовал. Без этой отметки
+    -- замерший регистр неотличим от живого.
+    last_change_at TEXT,
+
     note TEXT,
     updated_by TEXT,
     updated_at TEXT,
@@ -170,7 +192,7 @@ def _conn():
     # EXISTS их не добавит: таблица уже есть, и он просто ничего не
     # делает. На боевом справочник завели раньше short_title.
     have = {r[1] for r in conn.execute("PRAGMA table_info(sensor_registers)")}
-    for column, kind in (("short_title", "TEXT"),):
+    for column, kind in (("short_title", "TEXT"), ("last_change_at", "TEXT")):
         if column not in have:
             conn.execute(f"ALTER TABLE sensor_registers ADD COLUMN {column} {kind}")
     conn.commit()
@@ -198,6 +220,64 @@ def _last_seen() -> dict:
     except Exception as error:
         print(f"[регистры] история показаний не прочитана: {error}")
         return {}
+
+
+def _last_change() -> dict:
+    """
+    Когда каждый регистр последний раз изменил значение.
+
+    Считается по истории: берём текущее значение и ищем время первой
+    записи в непрерывном хвосте с этим же значением. Записей за
+    последние сутки — около двух тысяч на регистр, запрос по индексу.
+    """
+    result = {}
+    try:
+        mon = sqlite3.connect(DB_PATH, timeout=10)
+        mon.row_factory = sqlite3.Row
+        latest = mon.execute(
+            """
+            SELECT sensor_name, value, MAX(recorded_at) AS at
+            FROM sensor_readings GROUP BY sensor_name
+            """
+        ).fetchall()
+
+        for row in latest:
+            # Последняя запись, где значение БЫЛО другим.
+            other = mon.execute(
+                "SELECT MAX(recorded_at) FROM sensor_readings "
+                "WHERE sensor_name = ? AND value != ?",
+                (row["sensor_name"], row["value"]),
+            ).fetchone()[0]
+
+            if not other:
+                # Значение не менялось ни разу за всю историю. Тогда
+                # «стоит» оно с первой записи, а не «неизвестно с
+                # какого времени»: если истории всего час, называть
+                # регистр застывшим рано.
+                result[row["sensor_name"]] = mon.execute(
+                    "SELECT MIN(recorded_at) FROM sensor_readings WHERE sensor_name = ?",
+                    (row["sensor_name"],),
+                ).fetchone()[0]
+                continue
+
+            # Изменение — первая запись с ТЕКУЩИМ значением после неё.
+            #
+            # Искать «любую запись позже» нельзя: сервер пишет пачку
+            # регистров одной секундой, и старое со свежим попадают в
+            # одну отметку времени. Тогда «позже» не находилось ничего,
+            # и только что изменившийся регистр выглядел застывшим.
+            # Нашла это парная проверка.
+            changed = mon.execute(
+                "SELECT MIN(recorded_at) FROM sensor_readings "
+                "WHERE sensor_name = ? AND value = ? AND recorded_at >= ?",
+                (row["sensor_name"], row["value"], other),
+            ).fetchone()[0]
+            result[row["sensor_name"]] = changed
+
+        mon.close()
+    except Exception as error:
+        print(f"[регистры] не посчитал последнее изменение: {error}")
+    return result
 
 
 def sync_from_panel() -> dict:
@@ -281,18 +361,37 @@ def sync_from_panel() -> dict:
             "UPDATE sensor_registers SET note = COALESCE(NULLIF(note,''), ?) "
             "WHERE register = ?", (note, register))
 
-    # Состояние — по факту прихода.
-    live = silent = 0
+    # Состояние — по факту прихода И по факту изменения.
+    #
+    # Раньше состояний было два: приходит или не приходит. Оба врут на
+    # полпути: 28.09.2026 все 15 регистров числились «приходит», а на
+    # деле менялись только четыре — частоты приводов стояли трое суток,
+    # моточасы замерли с утра при работающей печи. Приходить и жить —
+    # разные вещи.
+    changed = _last_change()
+    stale_border = (datetime.now()
+                    - timedelta(hours=_stale_hours())).strftime("%Y-%m-%d %H:%M:%S")
+
+    live = silent = stale = 0
     for row in conn.execute("SELECT id, register FROM sensor_registers").fetchall():
         stamp = seen.get(row["register"])
-        state = "live" if stamp and str(stamp) >= border else "silent"
-        if state == "live":
+        change = changed.get(row["register"])
+
+        if not stamp or str(stamp) < border:
+            state = "silent"
+            silent += 1
+        elif change and str(change) >= stale_border:
+            state = "live"
             live += 1
         else:
-            silent += 1
+            # Приходит, но значение не двигается дольше порога.
+            state = "stale"
+            stale += 1
+
         conn.execute(
-            "UPDATE sensor_registers SET state = ?, last_seen_at = COALESCE(?, last_seen_at) "
-            "WHERE id = ?", (state, stamp, row["id"]),
+            "UPDATE sensor_registers SET state = ?, "
+            "last_seen_at = COALESCE(?, last_seen_at), last_change_at = ? "
+            "WHERE id = ?", (state, stamp, change, row["id"]),
         )
 
     conn.commit()
@@ -304,7 +403,7 @@ def sync_from_panel() -> dict:
     conn.close()
 
     return {"total": total, "added": added, "live": live, "silent": silent,
-            "unbound": unbound, "unnamed": unnamed}
+            "stale": stale, "unbound": unbound, "unnamed": unnamed}
 
 
 def list_registers() -> list:
@@ -315,7 +414,7 @@ def list_registers() -> list:
         SELECT s.*, e.name AS equipment_name, e.location AS zone
         FROM sensor_registers s
         LEFT JOIN equipment e ON e.id = s.equipment_id
-        ORDER BY (s.state = 'live') DESC, s.register
+        ORDER BY (s.state = 'live') DESC, (s.state = 'stale') DESC, s.register
         """)]
     conn.close()
     return rows
@@ -386,7 +485,7 @@ def names_for_pages() -> dict:
     rows = [dict(r) for r in conn.execute(
         """
         SELECT s.register, s.title, s.short_title, s.unit, s.state,
-               s.equipment_id, s.note, e.name AS equipment_name
+               s.last_change_at, s.equipment_id, s.note, e.name AS equipment_name
         FROM sensor_registers s
         LEFT JOIN equipment e ON e.id = s.equipment_id
         """)]
@@ -400,6 +499,7 @@ def names_for_pages() -> dict:
             "short": (r["short_title"] or "").strip() or title,
             "unit": r["unit"] or "",
             "state": r["state"],
+            "last_change_at": r["last_change_at"],
             "equipment_id": r["equipment_id"],
             "equipment_name": r["equipment_name"],
             "note": r["note"] or "",

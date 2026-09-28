@@ -284,8 +284,12 @@ function switchTech(tab){
 // Привязка к станку НЕ УГАДЫВАЕТСЯ. «pl024_1_загрузка_проц» похоже на
 // «PL024», но похоже — не значит «тот самый»: привязать неверно хуже,
 // чем не привязать.
+// Три состояния, а не два. «Приходит» и «живёт» — разные вещи: панель
+// шлёт только изменившиеся регистры, расширение досылает последнее
+// известное каждую секунду, и замерший регистр выглядел живым.
 const REG_STATE_LABEL = {
   live:    {text: 'приходит',          cls: 'ok'},
+  stale:   {text: 'не меняется',       cls: 'warn'},
   silent:  {text: 'не поступает',      cls: 'warn'},
   unknown: {text: 'не разобран',       cls: ''},
 };
@@ -300,13 +304,15 @@ function renderRegisters(){
   }
 
   const live = allRegisters.filter(r => r.state === 'live').length;
+  const stale = allRegisters.filter(r => r.state === 'stale').length;
   const silent = allRegisters.filter(r => r.state === 'silent').length;
   const unbound = allRegisters.filter(r => !r.equipment_id).length;
   const unnamed = allRegisters.filter(r => !(r.title||'').trim()).length;
 
   box.innerHTML = `
     <div class="doc-note">
-      Регистров ${allRegisters.length}: приходит ${live}, не поступает ${silent}.
+      Регистров ${allRegisters.length}: живых ${live}${
+        stale ? `, приходит но не меняется ${stale}` : ''}, не поступает ${silent}.
       Без станка ${unbound}, без названия ${unnamed}.
       ${canEditRegisters ? 'Привязка к станку не угадывается — назначайте сами.'
                          : 'Править может главный инженер.'}
@@ -327,7 +333,10 @@ function regRow(r){
         <div class="reg-name">${edEscT(r.register)}</div>
         <div class="reg-sub">
           <span class="badge ${state.cls}" style="font-size:10px">${state.text}</span>
-          последний раз ${edEscT(seen)}${r.unit ? ' · ' + edEscT(r.unit) : ''}
+          последний раз ${edEscT(seen)}${
+            r.state === 'stale'
+              ? ' · значение стоит с ' + edEscT(r.last_change_at ? String(r.last_change_at).slice(0,16) : 'начала истории')
+              : ''}${r.unit ? ' · ' + edEscT(r.unit) : ''}
         </div>
         ${r.note ? `<div class="reg-note">${edEscT(r.note)}</div>` : ''}
       </div>

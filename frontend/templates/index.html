@@ -41,6 +41,7 @@
 .ss-row + .ss-row{border-top:1px solid var(--border);padding-top:8px;}
 .ss-group{font-size:11px;color:var(--text-dim);flex-shrink:0;}
 .ss-item{display:flex;align-items:center;gap:6px;}
+.ss-stale{font-size:10px;color:var(--warn);white-space:nowrap;}
 .ss-label{font-size:11px;color:var(--text-dim);}
 .ss-val{font-family:var(--mono);font-size:13px;font-weight:700;}
 .ss-bar{width:48px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
@@ -214,7 +215,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=3"></script>
+<script src="/static/sensor-names.js?v=4"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
@@ -556,6 +557,7 @@ function renderSensors(lv){
       ${p?`<div class="ss-bar"><div class="ss-fill" style="width:${p}%;background:${c}"></div></div>`:''}
       <span class="ss-label">${LABELS[k]}</span>
       <span class="ss-val" style="color:${c}">${text}</span>
+      ${ACAISensors.staleNote(k)?`<span class="ss-stale">${ACAISensors.staleNote(k)}</span>`:''}
     </div>`;
   };
 

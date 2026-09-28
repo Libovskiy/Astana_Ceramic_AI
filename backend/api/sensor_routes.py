@@ -225,6 +225,7 @@ def sensors_outages(days: int = 30, limit: int = 50,
 class HealthSettings(BaseModel):
     silence_minutes: int | None = None
     push_after_minutes: int | None = None
+    stale_hours: int | None = None
     alert_roles: list[str] | None = None
     alert_users: list[str] | None = None
 
@@ -244,6 +245,7 @@ def save_health_settings(request: HealthSettings,
         changes = sensor_health.save_settings(
             silence_minutes=request.silence_minutes,
             push_after_minutes=request.push_after_minutes,
+            stale_hours=request.stale_hours,
             alert_roles=request.alert_roles,
             alert_users=request.alert_users,
             who=user["username"],

@@ -38,7 +38,7 @@
     // прячем. Молча пропасть с экрана он не должен — иначе никто не
     // узнает, что панель шлёт что-то незнакомое.
     return {
-      title: key, short: key, unit: "", state: "unknown",
+      title: key, short: key, unit: "", state: "unknown", lastChange: null,
       equipment_id: null, equipment_name: null, zone: null, note: "",
     };
   }
@@ -63,6 +63,7 @@
               short: (row.short_title || "").trim() || title,
               unit: row.unit || "",
               state: row.state,
+              lastChange: row.last_change_at || null,
               equipment_id: row.equipment_id,
               equipment_name: row.equipment_name,
               zone: row.zone || null,
@@ -183,6 +184,33 @@
 
       return { text: one(number) + (guessed ? " " + guessed : ""),
                percent: null, bogus: false, kind: "number" };
+    },
+
+    /**
+     * «не меняется 3 дня» — если регистр приходит, но стоит на месте.
+     *
+     * Панель шлёт только изменившиеся регистры, а расширение досылает
+     * последнее известное значение каждую секунду, чтобы после
+     * перезапуска экран не пустовал. Из-за этого замерший регистр
+     * выглядит живым: 28.09.2026 из пятнадцати «живых» менялись
+     * четыре, частоты приводов стояли трое суток, моточасы замерли с
+     * утра при работающей печи.
+     *
+     * Пустая строка — значение свежее, писать нечего.
+     */
+    staleNote(key) {
+      const info = this.info(key);
+      if (info.state !== "stale") return "";
+      if (!info.lastChange) return "не менялось ни разу";
+
+      const at = new Date(String(info.lastChange).replace(" ", "T"));
+      if (isNaN(at.getTime())) return "не меняется";
+
+      const minutes = Math.round((Date.now() - at.getTime()) / 60000);
+      if (minutes < 60) return `не меняется ${minutes} мин`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 48) return `не меняется ${hours} ч`;
+      return `не меняется ${Math.round(hours / 24)} сут`;
     },
 
     info(key) { return (cache && cache[key]) || empty(key); },

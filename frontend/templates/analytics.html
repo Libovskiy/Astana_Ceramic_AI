@@ -171,7 +171,7 @@
 </div>
 
 <script src="/static/icons.js?v=4"></script>
-<script src="/static/sensor-names.js?v=3"></script>
+<script src="/static/sensor-names.js?v=4"></script>
 <script src="/static/acai_layout.js?v=63"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script src="/static/xls-report.js?v=3"></script>
@@ -747,6 +747,7 @@ async function renderSensorsNow(lv){
         <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:${color}">${
           shown.text}${shown.bogus?' <span data-icon=alert></span>':''}</div>
         ${shown.bogus?`<div style="font-size:10px;color:var(--warn);margin-top:4px">датчик врёт</div>`:''}
+        ${!shown.bogus&&ACAISensors.staleNote(k)?`<div style="font-size:10px;color:var(--warn);margin-top:4px">${ACAISensors.staleNote(k)}</div>`:''}
         ${shown.percent!=null?`<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden"><div style="width:${shown.percent}%;height:100%;background:${color};border-radius:2px"></div></div>`:''}
       </div>`;
     }).join('')+`</div>`;
