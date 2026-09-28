@@ -28,25 +28,47 @@ from pathlib import Path
 
 from sandbox import Sandbox, check, finish, ROOT
 
-# Берём последнюю ПОЛНУЮ копию: ту, рядом с которой лежит и история
-# датчиков. Раньше брался просто последний файл по имени, и ручная
-# копия, сделанная перед правкой данных (одна factory.db, без
-# monitoring.db), роняла учение — не потому, что восстановление
-# сломано, а потому что рядом не было пары. Ручные копии теперь живут
-# в backups/ручные/, но правило всё равно надёжнее оставить здесь.
+# Берём последнюю НОЧНУЮ копию, и непременно полную — ту, рядом с
+# которой лежит история датчиков.
+#
+# Здесь были две ошибки сразу. Во-первых, копии сортировались по имени,
+# а ручные называются словами: «factory_before_reimport_...» по алфавиту
+# оказывается позже, чем «factory_20260928_...». Учение полгода
+# разворачивало копию недельной давности, думая, что берёт свежую.
+# Во-вторых, ручная копия бывает без пары monitoring.db, и тогда учение
+# падало не по делу.
+#
+# Ночная копия называется строго датой: factory_ГГГГММДД_ЧЧММСС.db —
+# по ней и отбираем, а время берём из имени, а не из файловой системы:
+# файл могли скопировать позже, чем он сделан.
+import re
+
+NIGHTLY = re.compile(r"^factory_(\d{8}_\d{6})\.db$")
+
+
 def _stamp(path):
     return path.stem.replace("factory_", "")
 
 
-nightly = [p for p in sorted((ROOT / "backups").glob("factory_*.db"))
-           if (ROOT / "backups" / f"monitoring_{_stamp(p)}.db").exists()]
+def _pair(path):
+    return (ROOT / "backups" / f"monitoring_{_stamp(path)}.db").exists()
+
+
+all_copies = list((ROOT / "backups").glob("factory_*.db"))
+nightly = sorted((p for p in all_copies if NIGHTLY.match(p.name) and _pair(p)),
+                 key=lambda p: NIGHTLY.match(p.name).group(1))
 
 if not nightly:
-    lonely = sorted((ROOT / "backups").glob("factory_*.db"))
-    print("  Полных ночных копий нет — учение провести не на чем.")
-    check("есть ночная копия с историей датчиков рядом", False,
-          f"копий базы {len(lonely)}, но ни к одной нет monitoring_*.db")
-    finish("Восстановление из бэкапа")
+    # Ночных нет — разворачиваем хотя бы последнюю полную ручную, но
+    # говорим об этом прямо: это другое учение.
+    manual = sorted((p for p in all_copies if _pair(p)), key=lambda p: p.stat().st_mtime)
+    if not manual:
+        print("  Полных копий нет — учение провести не на чем.")
+        check("есть копия базы с историей датчиков рядом", False,
+              f"копий базы {len(all_copies)}, но ни к одной нет monitoring_*.db")
+        finish("Восстановление из бэкапа")
+    print("  Ночной копии нет — учение идёт на ручной.")
+    nightly = manual
 
 source = nightly[-1]
 print(f"\nКопия: {source.name}")
