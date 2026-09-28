@@ -8,7 +8,12 @@
   ],
   "host_permissions": [
     "http://192.168.1.74/*",
+    "https://91-147-113-239.sslip.io/*",
     "http://localhost:8000/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"

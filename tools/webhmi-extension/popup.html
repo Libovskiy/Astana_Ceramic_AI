@@ -1,22 +1,63 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 240px; padding: 12px; font-family: Arial, sans-serif; font-size: 13px; }
-    h3 { margin: 0 0 8px; font-size: 14px; }
-    .status { padding: 6px 10px; border-radius: 6px; background: #eee; color: #444; }
+    body { width: 320px; margin: 0; padding: 14px;
+           font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 13px; color: #222; }
+    h3 { margin: 0 0 10px; font-size: 14px; }
+    .status { padding: 7px 10px; border-radius: 6px; background: #eee; color: #444; line-height: 1.35; }
     .ok  { background: #e8f5e9; color: #2e7d32; }
     .bad { background: #fdecea; color: #c62828; }
-    .note { color: #666; font-size: 11px; margin-top: 8px; }
+    .warn { background: #fff8e1; color: #8a6100; }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 12px 0 0; padding: 10px 10px 12px; }
+    legend { font-size: 11px; color: #666; padding: 0 4px; }
+    label { display: block; margin-top: 8px; font-size: 11px; color: #555; }
+    input { width: 100%; box-sizing: border-box; padding: 6px 7px; font-size: 13px;
+            border: 1px solid #ccc; border-radius: 5px; }
+    input:focus { outline: none; border-color: #1976d2; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button { flex: 1; padding: 8px; font-size: 13px; border-radius: 6px; cursor: pointer;
+             border: 1px solid #1976d2; background: #1976d2; color: #fff; }
+    button.ghost { background: #fff; color: #1976d2; }
+    button:disabled { opacity: .6; cursor: default; }
+    .note { color: #666; font-size: 11px; margin-top: 10px; line-height: 1.4; }
+    .saved { color: #2e7d32; font-size: 11px; margin-top: 8px; min-height: 14px; }
   </style>
 </head>
 <body>
-  <h3>⚙️ ACAI Collector v5</h3>
+  <h3>⚙️ ACAI Collector v6</h3>
+
   <div class="status" id="status">Проверяю…</div>
-  <div class="note" id="note">
-    Показания идут, пока открыта вкладка WebHMI (192.168.1.74) и выполнен вход в панель.
+
+  <fieldset>
+    <legend>Куда отправлять</legend>
+    <label for="server">Адрес системы ACAI</label>
+    <input id="server" type="text" placeholder="https://91-147-113-239.sslip.io" autocomplete="off">
+    <label for="key">Ключ датчиков</label>
+    <input id="key" type="password" placeholder="выдаёт администратор ACAI" autocomplete="off">
+  </fieldset>
+
+  <fieldset>
+    <legend>Вход в панель WebHMI (для автовхода)</legend>
+    <label for="login">Логин панели</label>
+    <input id="login" type="text" placeholder="логин WebHMI" autocomplete="off">
+    <label for="pass">Пароль панели</label>
+    <input id="pass" type="password" placeholder="пароль WebHMI" autocomplete="off">
+  </fieldset>
+
+  <div class="row">
+    <button id="save">Сохранить</button>
+    <button id="test" class="ghost">Проверить связь</button>
   </div>
+  <div class="saved" id="saved"></div>
+
+  <div class="note" id="note">
+    Показания идут, пока на этом компьютере открыта вкладка с панелью WebHMI.
+    Логин и пароль хранятся только на этом компьютере и никуда не отправляются,
+    кроме самой панели.
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

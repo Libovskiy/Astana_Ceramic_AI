@@ -21,34 +21,56 @@ router = APIRouter(prefix="/api/sensors", tags=["sensors"])
 # ── Ключ приёма показаний ────────────────────────────────
 # Без проверки в историю производства мог писать кто угодно из сети,
 # а по этим данным считаются простои и исправность оборудования.
-# Расширение уже присылает заголовок X-Sensor-Key — просто сверяем.
+#
+# Ключей два, и это нарочно. Старый лежал прямо в коде расширения, так
+# что заменить его — значит обойти все компьютеры, где расширение
+# стоит. Пока обходят, работать должны оба:
+#
+#   SENSOR_PUSH_KEY      — новый, вводится в окне расширения (версия 6);
+#   SENSOR_PUSH_KEY_OLD  — старый, для ещё не обновлённых (версия 5).
+#
+# Каждое обращение старым ключом отмечается временем. Пока отметка
+# обновляется, где-то осталась версия 5; когда перестала — старую строку
+# из .env можно убирать, и это видно по факту, а не по памяти.
+
+def _from_env_file(name: str) -> str:
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.exists():
+        return ""
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        if line.startswith(f"{name}="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _key(name: str) -> str:
+    return (os.environ.get(name) or "").strip() or _from_env_file(name)
+
 
 def _expected_sensor_key() -> str:
-    key = (os.environ.get("SENSOR_PUSH_KEY") or "").strip()
-
-    if not key:
-        env_file = Path(__file__).resolve().parents[2] / ".env"
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                if line.startswith("SENSOR_PUSH_KEY="):
-                    key = line.split("=", 1)[1].strip()
-                    break
-
-    return key
+    return _key("SENSOR_PUSH_KEY")
 
 
 def require_sensor_key(x_sensor_key: Optional[str] = Header(None)):
-    expected = _expected_sensor_key()
+    current = _expected_sensor_key()
+    legacy = _key("SENSOR_PUSH_KEY_OLD")
 
-    if not expected:
+    if not current and not legacy:
         # Ключ не настроен — не запираем дверь, которую не на что
         # закрыть, иначе сбор данных встанет молча.
         return True
 
-    if x_sensor_key != expected:
-        raise HTTPException(status_code=403, detail="Неверный ключ датчиков.")
+    if current and x_sensor_key == current:
+        return True
 
-    return True
+    if legacy and x_sensor_key == legacy:
+        try:
+            sensor_health.note_legacy_key()
+        except Exception as error:   # отметка не должна ронять приём данных
+            print(f"[датчики] не отметил старый ключ: {error}")
+        return True
+
+    raise HTTPException(status_code=403, detail="Неверный ключ датчиков.")
 
 
 # ── Живой кэш в памяти (не пишется в БД) ─────────────────
@@ -181,6 +203,11 @@ def sensors_health(user: dict = Depends(current_user)):
     current["success"] = True
     current["settings"] = sensor_health.settings()
     current["can_edit"] = user.get("role") in HEALTH_EDIT_ROLES
+    # Пока кто-то присылает данные старым ключом, на заводе осталось
+    # расширение версии 5. В «Настройках» это видно строкой, и старый
+    # ключ убирают из .env, когда отметка перестала обновляться.
+    if current["can_edit"]:
+        current["legacy_key_seen_at"] = sensor_health.legacy_key_seen_at()
     return current
 
 

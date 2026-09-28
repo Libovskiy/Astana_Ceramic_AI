@@ -58,6 +58,9 @@ ALERT_USERS = "sensors_alert_users"              # кому слать, поим
 # Служебные, их правит не человек, а сам сбор.
 COLLECTOR_SEEN = "sensors_collector_seen_at"
 COLLECTOR_ERROR = "sensors_collector_error"
+# Когда последний раз показания пришли со старым ключом: значит,
+# где-то ещё работает расширение версии 5.
+LEGACY_KEY_SEEN = "sensors_legacy_key_seen_at"
 
 DEFAULTS = {
     SILENCE_MINUTES: 10,
@@ -159,7 +162,10 @@ def note_collector(error: str | None = None, now: datetime = None) -> None:
     error = (error or "").strip()
 
     previous = settings_store.get(COLLECTOR_SEEN)
-    if previous and not error:
+    # Текст ошибки сравниваем: пока он тот же, писать нечего. Иначе при
+    # долгом молчании панели расширение писало бы в базу каждую секунду
+    # — за сутки это 86 тысяч записей ради одной и той же строки.
+    if previous and error == (settings_store.get(COLLECTOR_ERROR) or "").strip():
         try:
             if (now - datetime.fromisoformat(previous)).total_seconds() < 60:
                 return
@@ -168,6 +174,30 @@ def note_collector(error: str | None = None, now: datetime = None) -> None:
 
     settings_store.set_value(COLLECTOR_SEEN, now.isoformat(timespec="seconds"), "сбор")
     settings_store.set_value(COLLECTOR_ERROR, error or None, "сбор")
+
+
+def note_legacy_key(now: datetime = None) -> None:
+    """
+    Показания пришли со старым ключом — где-то осталась версия 5.
+
+    Пишем не чаще раза в минуту, как и остальные отметки сбора. Нужна
+    она для одного: увидеть, что старый ключ больше никем не
+    используется, и убрать его из .env по факту, а не по памяти.
+    """
+    now = now or datetime.now()
+    previous = settings_store.get(LEGACY_KEY_SEEN)
+    if previous:
+        try:
+            if (now - datetime.fromisoformat(previous)).total_seconds() < 60:
+                return
+        except ValueError:
+            pass
+    settings_store.set_value(LEGACY_KEY_SEEN, now.isoformat(timespec="seconds"), "сбор")
+
+
+def legacy_key_seen_at() -> str | None:
+    """Когда последний раз приходили данные со старым ключом."""
+    return settings_store.get(LEGACY_KEY_SEEN) or None
 
 
 def _last_reading_at() -> datetime | None:

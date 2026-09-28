@@ -259,7 +259,7 @@ const WATCH_ROLE_LABELS = {
   chief_mechanic:'главный механик', chief_electrician:'главный энергетик',
   production_chief:'начальник производства', shift_supervisor:'мастер смены',
 };
-let watchConf=null, watchUsers=[];
+let watchConf=null, watchUsers=[], watchLegacy=null;
 
 async function loadSensorsWatch(role){
   const card=document.getElementById('sensorsWatchCard');
@@ -271,6 +271,7 @@ async function loadSensorsWatch(role){
 
   card.style.display='';
   watchConf=health.settings;
+  watchLegacy=health.legacy_key_seen_at||null;
 
   try{
     const r=await ACAI.get('/api/settings/users');
@@ -346,7 +347,29 @@ function renderSensorsWatch(){
       </div>
     </div>
     <div id="sw-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
-    <button class="btn primary" onclick="saveSensorsWatch()">Сохранить</button>`;
+    <button class="btn primary" onclick="saveSensorsWatch()">Сохранить</button>
+    ${legacyNote()}`;
+}
+
+// Старый ключ датчиков. Пока им кто-то пользуется, на заводе осталось
+// расширение версии 5: оно не умеет отличать «панель молчит» от
+// «расширение не на связи», и любой перерыв подпишет вторым. Строка
+// исчезает сама, когда старым ключом перестали присылать.
+function legacyNote(){
+  if(!watchLegacy) return '';
+  const at=new Date(watchLegacy.replace(' ','T'));
+  const mins=Math.round((Date.now()-at.getTime())/60000);
+  const when=at.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const live=mins<10;
+  return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;
+      background:var(--surface-2);border-left:3px solid var(--${live?'warn':'border'});font-size:12px">
+      <b>Старый ключ датчиков ${live?'ещё в ходу':'больше не используется'}</b><br>
+      <span style="color:var(--text-dim)">Последний раз данные приходили старым ключом ${when}
+      (${mins<60?mins+' мин':Math.round(mins/60)+' ч'} назад).
+      ${live
+        ? 'Значит, где-то работает расширение версии 5 — его надо переустановить, иначе перерывы будут подписаны неверно.'
+        : 'Строку SENSOR_PUSH_KEY_OLD можно убирать из .env сервера.'}</span>
+    </div>`;
 }
 
 async function saveSensorsWatch(){
