@@ -12,6 +12,23 @@ const STAGE_LABELS = {
 let equipmentData = [];
 
 
+/**
+ * Показывать ли станок на странице своей службы.
+ *
+ * «both» видно с обеих сторон — станок затрагивает оба направления.
+ * А вот ПУСТАЯ служба — это не «чужой станок», а незаполненное поле, и
+ * прятать его с обеих страниц нельзя: на боевой базе так выпали пять
+ * станков массаподготовки (Дробилка DTE 117, Дезинтегратор PL 601,
+ * Смеситель СМК 126, Экструдер MAGNA 575, Генератор тепла 1500) — их
+ * не видел ни механик, ни энергетик. Показываем обоим с пометкой
+ * «служба не указана»: угадывать службу нельзя, скрывать — тем более.
+ */
+function inDiscipline(item, lock) {
+    const value = (item.discipline || "").trim();
+    return value === lock || value === "both" || !value;
+}
+
+
 document.addEventListener("DOMContentLoaded", function () {
 
     updateDateTime();
@@ -358,11 +375,10 @@ async function loadEquipment() {
         // "Механика"/"Электрика" цифры сверху будут врать (считать
         // весь завод, а не только свою часть).
         const summaryData = window.DISCIPLINE_LOCK
-            ? equipmentData.filter(item =>
-                item.discipline === window.DISCIPLINE_LOCK || item.discipline === "both"
-              )
+            ? equipmentData.filter(item => inDiscipline(item, window.DISCIPLINE_LOCK))
             : equipmentData;
 
+        fillStageOptions();
         updateSummary(summaryData);
 
         applyFilters();
@@ -377,6 +393,33 @@ async function loadEquipment() {
 
     }
 
+}
+
+
+/**
+ * Дополнить отбор по этапам теми этапами, что есть в данных.
+ *
+ * В HTML список этапов зашит ключами (mass, forming, …), а у восьми
+ * станков на боевой базе этап записан словами: «Массаподготовка»,
+ * «Формовка». Такой станок не совпадал ни с одним пунктом отбора и при
+ * выборе этапа просто исчезал. Ключи не переписываем — это данные, их
+ * правит человек, — но в отборе показываем как есть.
+ */
+function fillStageOptions() {
+    const select = document.getElementById("stageFilter");
+    if (!select) return;
+
+    const known = new Set(Array.from(select.options).map(o => o.value));
+
+    for (const item of equipmentData) {
+        const stage = (item.stage || "").trim();
+        if (!stage || known.has(stage)) continue;
+        known.add(stage);
+        const option = document.createElement("option");
+        option.value = stage;
+        option.textContent = STAGE_LABELS[stage] || stage;
+        select.appendChild(option);
+    }
 }
 
 
@@ -436,9 +479,7 @@ function applyFilters() {
     // с обеих сторон, раз станок затрагивает оба направления).
     if (window.DISCIPLINE_LOCK) {
 
-        filtered = filtered.filter(item =>
-            item.discipline === window.DISCIPLINE_LOCK || item.discipline === "both"
-        );
+        filtered = filtered.filter(item => inDiscipline(item, window.DISCIPLINE_LOCK));
 
     }
 
@@ -508,6 +549,12 @@ function createEquipmentRow(item) {
 
     const stageLabel = STAGE_LABELS[item.stage] || item.stage || "—";
 
+    // Служба не заполнена — станок показан и механику, и энергетику.
+    // Пометка говорит, почему он тут и что надо поправить.
+    const noDiscipline = !(item.discipline || "").trim()
+        ? ` · <span style="color:var(--warn)">служба не указана</span>`
+        : "";
+
     return `
         <div class="diagnostic-equipment-row">
 
@@ -517,7 +564,7 @@ function createEquipmentRow(item) {
 
                 <div>
                     <div class="diagnostic-equipment-name">${escapeHtml(item.name)}</div>
-                    <div class="diagnostic-equipment-type">${escapeHtml(item.type)} · ${escapeHtml(stageLabel)}</div>
+                    <div class="diagnostic-equipment-type">${escapeHtml(item.type)} · ${escapeHtml(stageLabel)}${noDiscipline}</div>
                     <div class="diagnostic-equipment-location">${escapeHtml(item.location || "—")}</div>
                 </div>
 

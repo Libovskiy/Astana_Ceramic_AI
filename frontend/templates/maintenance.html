@@ -132,6 +132,12 @@
         </table>
       </div>
 
+      <!-- Станки, которых в графике нет вовсе. Раньше страница
+           строилась только по работам: станок без ТО не показывался
+           нигде, и «ничего не просрочено» читалось как «всё в
+           порядке». -->
+      <div id="noScheduleBox" style="margin-top:16px"></div>
+
     </div>
   </div>
 </div>
@@ -148,6 +154,8 @@ const TYPE_LABELS={capital:'Капремонт',monthly:'Ежемесячно',w
 const TYPE_COLORS={capital:'type-capital',monthly:'type-monthly',weekly:'type-weekly',quarterly:'type-quarterly',annual:'type-capital'};
 
 let schedule=[];let logs=[];let allEquipment=[];let currentUser=null;
+// Станки без единой работы в графике на выбранный год.
+let noSchedule=[];
 const now=new Date();const curMonth=now.getMonth()+1;
 
 async function loadSchedule(){
@@ -159,16 +167,62 @@ async function loadSchedule(){
   ]);
   schedule=sr.schedule||[];
   logs=sr.logs||[];
+  noSchedule=sr.no_schedule||[];
   allEquipment=er.equipment||er||[];
   await loadReportPlanned();
   await loadPending();
   renderMetrics();
   renderTable();
+  renderNoSchedule();
+}
+
+/**
+ * «Без графика ТО» — станки, по которым работ не заведено ни одной.
+ *
+ * Показываем списком, а не числом: чтобы завести работы, надо знать,
+ * какому станку их не хватает. Кнопка ведёт в то же окно добавления
+ * работы, уже с выбранным станком — иначе главный механик ищет его
+ * среди 49 строк заново.
+ */
+function renderNoSchedule(){
+  const box=document.getElementById('noScheduleBox');
+  if(!box) return;
+  if(!noSchedule.length){ box.innerHTML=''; return; }
+
+  const canEdit=currentUser&&['admin','director','chief_engineer',
+    'chief_mechanic','chief_electrician'].includes(currentUser.role);
+  const year=document.getElementById('yearSelect').value;
+
+  box.innerHTML=`
+    <div class="card">
+      <div class="card-head">
+        <h2>Без графика ТО <span style="font-size:11px;color:var(--text-dim)">${noSchedule.length}</span></h2>
+        <span style="font-size:11px;color:var(--text-dim)">работ на ${year} год не заведено ни одной</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        ${noSchedule.map(e=>`
+          <div style="display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600">${mEsc(e.name)}</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
+                ${mEsc(e.location||'участок не указан')}
+                · ${e.discipline==='mechanical'?'механика'
+                   :e.discipline==='electrical'?'электрика'
+                   :e.discipline==='both'?'механика и электрика'
+                   :'<span style="color:var(--warn)">служба не указана</span>'}
+              </div>
+            </div>
+            ${canEdit?`<button class="btn secondary sm" style="flex-shrink:0"
+              onclick="openAddWork(${e.id})">Завести работы</button>`:''}
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 
 // С какого месяца считаем просрочку. График внесли в сентябре, а работы
 // в нём расписаны с января — без отсечки весь год сразу красный.
-// Значение задаётся на сервере, в .env: ACAI_MAINTENANCE_START=2026-09
+// Дату начала учёта задаёт человек (кнопка «Изменить» у строки над
+// метриками), она лежит в настройках; .env остался запасным значением.
 let toStart={year:null,month:null};
 
 async function loadToSettings(){
@@ -238,7 +292,8 @@ function renderToVerdict(m){
   const rows=[];
   if(!m.total){
     ACAI.verdict('toVerdict', {title:'График ТО не заведён',
-      sub:'Нажмите «+ Работа» и внесите первые работы — без графика просрочку считать не по чему.'});
+      sub:`Нажмите «+ Работа» и внесите первые работы — без графика просрочку считать не по чему.`
+          + (noSchedule.length?` Станков без работ: ${noSchedule.length}.`:'')});
     return;
   }
   // Ноль отметок — всегда отклонение, даже если просрочки по отсечке
@@ -261,6 +316,14 @@ function renderToVerdict(m){
   if(m.dueMonth && left > 0) rows.push({level: m.doneMonth ? 'warning' : 'critical',
     what:`В этом месяце осталось ${left} из ${m.dueMonth}`,
     where:`отмечено ${m.doneMonth} — остальные работы месяца ещё не закрыты`});
+
+  // Станки без графика — отклонение того же рода, что просрочка: по
+  // ним просрочки не бывает никогда, потому что работ нет. «Ничего не
+  // просрочено» по такому станку — не «всё в порядке», а «мы про него
+  // не знаем». Молчать об этом нельзя.
+  if(noSchedule.length) rows.push({level:'warning',
+    what:`Без графика ТО: ${noSchedule.length} ${noSchedule.length===1?'станок':noSchedule.length<5?'станка':'станков'}`,
+    where:'работ не заведено ни одной, поэтому по ним не бывает ни плана, ни просрочки — список внизу страницы'});
 
   // Плановые остановки из отчёта — отдельной строкой в любом случае:
   // они не отметка о выполнении, но показывают, что работы идут.
@@ -634,9 +697,9 @@ async function deleteWork(id){
   }catch(e){ACAI.toast(e.message,'danger');}
 }
 
-function openAddWork(){
+function openAddWork(preselectId){
   const year=document.getElementById('yearSelect').value;
-  const eqOpts=allEquipment.map(e=>`<option value="${e.id}">${e.name} · ${e.location||'—'}</option>`).join('');
+  const eqOpts=allEquipment.map(e=>`<option value="${e.id}"${e.id===preselectId?' selected':''}>${e.name} · ${e.location||'—'}</option>`).join('');
   // чекбоксы месяцев
   const monthChecks=MONTHS.map((m,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
     <input type="checkbox" value="${i+1}" checked style="cursor:pointer"> ${m}

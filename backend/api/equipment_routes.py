@@ -316,15 +316,27 @@ def update_equipment_route(
 
     before = _snapshot()
 
+    # Поле, которого в запросе нет (None), остаётся прежним; пустая
+    # строка — это «очистить», человек выбрал «— не указано —».
+    #
+    # Раньше правка перезаписывала все поля тем, что пришло, а страница
+    # «Оборудование» службу не передавала вовсе — каждое «Сохранить»
+    # МОЛЧА СТИРАЛО службу станка. Отсюда пять станков на боевой базе,
+    # которых не видел ни механик, ни энергетик.
+    def keep(value, field):
+        if value is None:
+            return before.get(field)
+        return value.strip() or None if isinstance(value, str) else value
+
     try:
 
         update_equipment_details(
             equipment_id,
             request.name,
-            request.type,
-            request.stage,
-            request.discipline,
-            request.location
+            keep(request.type, "type"),
+            keep(request.stage, "stage"),
+            keep(request.discipline, "discipline"),
+            keep(request.location, "location"),
         )
 
     except ValueError as error:

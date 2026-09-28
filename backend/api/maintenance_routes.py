@@ -22,8 +22,32 @@ def get_maintenance_schedule(year: int = 2026, user: dict = Depends(get_current_
     conn = _sq.connect(DB_NAME); conn.row_factory = _sq.Row
     rows = conn.execute("SELECT ms.*, e.name as equipment_name, e.location FROM maintenance_schedule ms LEFT JOIN equipment e ON e.id=ms.equipment_id WHERE ms.year=? ORDER BY e.location, e.name, ms.work_name", (year,)).fetchall()
     logs = conn.execute("SELECT * FROM maintenance_log WHERE year=?", (year,)).fetchall()
+
+    # Станки, которых в графике нет вовсе.
+    #
+    # Страница строилась только по работам, и станок без работ не
+    # появлялся на ней нигде: ни в таблице, ни в счётчиках. Заведи
+    # новый станок — и он молча остаётся без ТО навсегда, потому что
+    # «ничего не просрочено» выглядит как «всё в порядке». Пустого
+    # места на экране мало: нужен список, который видно.
+    missing = conn.execute(
+        """
+        SELECT e.id, e.name, e.location, e.stage, e.discipline
+        FROM equipment e
+        WHERE COALESCE(e.is_active, 1) = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM maintenance_schedule ms
+              WHERE ms.equipment_id = e.id AND ms.year = ?
+          )
+        ORDER BY e.location, e.name
+        """,
+        (year,),
+    ).fetchall()
+
     conn.close()
-    return {"success": True, "schedule": [dict(r) for r in rows], "logs": [dict(l) for l in logs]}
+    return {"success": True, "schedule": [dict(r) for r in rows],
+            "logs": [dict(l) for l in logs],
+            "no_schedule": [dict(r) for r in missing]}
 
 @router.post("/api/maintenance/schedule")
 def create_maintenance_schedule(request: dict, user: dict = Depends(require_roles("admin","director","chief_engineer","chief_mechanic","chief_electrician"))):
@@ -33,15 +57,70 @@ def create_maintenance_schedule(request: dict, user: dict = Depends(require_role
         (request["equipment_id"], request["work_name"], request.get("work_type","monthly"),
          request.get("months","1,2,3,4,5,6,7,8,9,10,11,12"), request.get("duration_hours",0.5),
          request.get("responsible"), request.get("year",2026), user["username"]))
+    schedule_id = cur.lastrowid
+
+    # Имя станка, а не его номер: «станок 292» через полгода не скажет
+    # ничего, «Экструдер шнековый MAGNA 575» — скажет.
+    eq = conn.execute("SELECT name FROM equipment WHERE id = ?",
+                      (request["equipment_id"],)).fetchone()
+    equipment_name = eq[0] if eq else f"станок {request['equipment_id']}"
+
     conn.commit(); conn.close()
-    return {"success": True, "id": cur.lastrowid}
+
+    log_action(
+        username=user["username"], role=user["role"],
+        action="maintenance_work_added",
+        target=f"maintenance_schedule:{schedule_id}",
+        details=f"{request.get('work_name')} — {equipment_name}, "
+                f"месяцы {request.get('months','весь год')}, год {request.get('year', 2026)}",
+        after={"work_name": request.get("work_name"),
+               "months": request.get("months"),
+               "responsible": request.get("responsible")},
+    )
+
+    return {"success": True, "id": schedule_id}
+
+# Убрать работу из графика — то же по последствиям, что снять отметку:
+# работы больше нет, и просрочки по ней тоже. Главный энергетик в этом
+# списке был пропущен — свою часть графика он вести не мог.
+SCHEDULE_EDIT_ROLES = ("admin", "director", "chief_engineer",
+                       "chief_mechanic", "chief_electrician")
+
 
 @router.delete("/api/maintenance/schedule/{schedule_id}")
-def delete_maintenance_schedule(schedule_id: int, user: dict = Depends(require_roles("admin","director","chief_engineer","chief_mechanic"))):
+def delete_maintenance_schedule(schedule_id: int, user: dict = Depends(require_roles(*SCHEDULE_EDIT_ROLES))):
     import sqlite3 as _sq
     conn = _sq.connect(DB_NAME)
+    conn.row_factory = _sq.Row
+
+    # Читаем до удаления: «удалили работу №31» через полгода не значит
+    # ничего, а «проточка валков СМК-102, 4 раза в год» — значит.
+    was = conn.execute(
+        "SELECT ms.*, e.name AS equipment_name FROM maintenance_schedule ms "
+        "LEFT JOIN equipment e ON e.id = ms.equipment_id WHERE ms.id = ?",
+        (schedule_id,),
+    ).fetchone()
+
+    marks = conn.execute(
+        "SELECT COUNT(*) FROM maintenance_log WHERE schedule_id = ?", (schedule_id,)
+    ).fetchone()[0]
+
     conn.execute("DELETE FROM maintenance_schedule WHERE id=?", (schedule_id,))
     conn.commit(); conn.close()
+
+    if was:
+        log_action(
+            username=user["username"], role=user["role"],
+            action="maintenance_work_deleted",
+            target=f"maintenance_schedule:{schedule_id}",
+            details=f"{was['work_name']} — {was['equipment_name'] or 'станок не указан'}, "
+                    f"месяцы {was['months']}, год {was['year']}"
+                    + (f"; вместе с ней перестали считаться {marks} отметок" if marks else ""),
+            before={"work_name": was["work_name"], "months": was["months"],
+                    "responsible": was["responsible"], "year": was["year"]},
+            after=None,
+        )
+
     return {"success": True}
 
 @router.post("/api/maintenance/log")

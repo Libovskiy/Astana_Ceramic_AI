@@ -33,6 +33,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import pathlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,8 +54,14 @@ def _copy_db(src: Path, dst: Path):
     target.close()
 
 
-_copy_db(ROOT / "factory.db", _TMP / "factory.db")
-_copy_db(ROOT / "monitoring.db", _TMP / "monitoring.db")
+# Откуда брать копию. По умолчанию — база рядом с проектом. Для
+# разбора боевых случаев можно указать свежую копию боевой базы:
+#     ACAI_SANDBOX_SOURCE=/путь/к/папке python3 проверка.py
+# Пишется всё равно во временную папку: боевой файл только читается.
+_SOURCE = pathlib.Path(os.environ.get("ACAI_SANDBOX_SOURCE") or ROOT)
+
+_copy_db(_SOURCE / "factory.db", _TMP / "factory.db")
+_copy_db(_SOURCE / "monitoring.db", _TMP / "monitoring.db")
 
 # Свои папки для файлов: загрузки, удаления и бэкапы в проверках не
 # должны касаться живых вложений, фото обходов, документов и копий базы.

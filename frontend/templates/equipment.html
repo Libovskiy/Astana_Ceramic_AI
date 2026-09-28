@@ -74,6 +74,40 @@ let allEquipment=[];let currentUser=null;
 let activeFilter = new URLSearchParams(location.search).get('zone') || 'all';
 const ZONES=['Массаподготовка','Формовка','Сушка / Углесушка','Обжиг','Упаковка'];
 
+// Этапы производства — с сервера, ключами. Форма раньше писала в поле
+// «этап» НАЗВАНИЕ ЦЕХА (stage: location), и на боевой базе у восьми
+// станков этап оказался словами: «Массаподготовка» вместо «mass». Такой
+// станок выпадал из отбора по этапу и из «Структуры»: в «Массоподготовке»
+// показывалось 2 станка из 7. Ключ подставлять по названию нельзя —
+// «Сушка / Углесушка» это два разных этапа, — поэтому этап выбирает
+// человек, а пустое значение остаётся пустым.
+let STAGES=[];
+
+async function loadStages(){
+  try{
+    const r=await ACAI.get('/api/structure/stages');
+    STAGES=(r.stages||[]).map(s=>({key:s.stage_key,name:s.name}));
+  }catch{ STAGES=[]; }
+}
+
+function stageOptions(current){
+  const known=STAGES.some(s=>s.key===current);
+  return `<option value=""${current?'':' selected'}>— не указан —</option>`
+    + STAGES.map(s=>`<option value="${s.key}"${s.key===current?' selected':''}>${edEsc(s.name)}</option>`).join('')
+    + (current&&!known?`<option value="${edEsc(current)}" selected>${edEsc(current)} (записан словами)</option>`:'');
+}
+
+// Служба: механика, электрика или обе. Форма её не спрашивала совсем, и
+// пять станков остались с пустой службой — их не видел ни механик, ни
+// энергетик, потому что обе страницы отбирают по этому полю.
+const DISCIPLINES=[['mechanical','механика'],['electrical','электрика'],
+                   ['both','механика и электрика']];
+
+function disciplineOptions(current){
+  return `<option value=""${current?'':' selected'}>— не указана —</option>`
+    + DISCIPLINES.map(([v,label])=>`<option value="${v}"${v===current?' selected':''}>${label}</option>`).join('');
+}
+
 // В правках карточки печатаются имена людей и значения полей из
 // базы — экранируем, а не вставляем как есть.
 function edEsc(v){const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML;}
@@ -340,6 +374,14 @@ async function openDetail(id){
         <select class="input" id="ed-status" ${canEdit?'':'disabled'}>
           ${['Работает','Внимание','Ошибка'].map(s=>`<option ${(e.status||'')==s?'selected':''}>${s}</option>`).join('')}
         </select>
+      </div>
+      <div class="field"><label>Этап</label>
+        <select class="input" id="ed-stage" ${canEdit?'':'disabled'}>${stageOptions(e.stage||'')}</select>
+      </div>
+      <div class="field"><label>Служба</label>
+        <select class="input" id="ed-discipline" ${canEdit?'':'disabled'}>${disciplineOptions(e.discipline||'')}</select>
+        ${(e.discipline||'').trim()?'':`<div style="font-size:11px;color:var(--warn);margin-top:4px">
+          Пока не указана, станок показан и механику, и энергетику с пометкой.</div>`}
       </div>
     </div>
 
@@ -631,10 +673,14 @@ async function saveEquipment(id){
   const type=document.getElementById('ed-type')?.value.trim();
   const location=document.getElementById('ed-location')?.value;
   const status=document.getElementById('ed-status')?.value;
+  // Пустая строка = «не указано» и уходит на сервер как есть: там она
+  // означает «очистить», а отсутствие поля — «оставить как было».
+  const stage=document.getElementById('ed-stage')?.value ?? null;
+  const discipline=document.getElementById('ed-discipline')?.value ?? null;
   const errEl=document.getElementById('ed-err');
   if(!name){errEl.textContent='Введите название';return;}
   try{
-    const r=await fetch(`/api/settings/equipment/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,stage:location,location})});
+    const r=await fetch(`/api/settings/equipment/${id}`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,stage,location,discipline})});
     const problem=await explain(r);
     if(problem){errEl.textContent=problem;return;}
     const eq=allEquipment.find(e=>e.id===id);
@@ -658,6 +704,15 @@ function openAddEquipment(){
       <div class="field"><label>Цех *</label>
         <select class="input" id="ae-location">${ZONES.map(z=>`<option>${z}</option>`).join('')}</select>
       </div>
+      <div class="field"><label>Этап</label>
+        <select class="input" id="ae-stage">${stageOptions('')}</select>
+      </div>
+      <div class="field"><label>Служба *</label>
+        <select class="input" id="ae-discipline">${disciplineOptions('')}</select>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          Без службы станок не появится в работе ни у механика, ни у энергетика.
+        </div>
+      </div>
       <div class="field"><label>Интервал ТО (дней)</label><input class="input" id="ae-to" type="number" value="30" min="1"></div>
     </div>
     <div id="ae-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
@@ -672,11 +727,14 @@ async function submitAddEquipment(){
   const name=document.getElementById('ae-name')?.value.trim();
   const type=document.getElementById('ae-type')?.value.trim();
   const location=document.getElementById('ae-location')?.value;
+  const stage=document.getElementById('ae-stage')?.value||null;
+  const discipline=document.getElementById('ae-discipline')?.value||null;
   const days=parseInt(document.getElementById('ae-to')?.value||30);
   const errEl=document.getElementById('ae-err');
   if(!name){errEl.textContent='Введите название';return;}
+  if(!discipline){errEl.textContent='Выберите службу: механика, электрика или обе';return;}
   try{
-    const r=await fetch('/api/settings/equipment',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type:type||null,stage:location,location,maintenance_interval_days:days})});
+    const r=await fetch('/api/settings/equipment',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type:type||null,stage,location,discipline,maintenance_interval_days:days})});
     const rd=await r.json();if(!rd.success){errEl.textContent=rd.message||'Ошибка';return;}
     ACAI.toast('Оборудование добавлено ✓','ok');ACAI.closeModal();await loadEquipment();
   }catch(e){errEl.textContent=e.message;}
@@ -685,7 +743,7 @@ async function submitAddEquipment(){
 async function init(){
   const ctx=await initLayout();currentUser=ctx?.user;
   if(['admin','director','chief_engineer'].includes(currentUser?.role||''))document.getElementById('addEqBtn').style.display='block';
-  await loadEquipment();
+  await Promise.all([loadStages(), loadEquipment()]);
 }
 init();
 
