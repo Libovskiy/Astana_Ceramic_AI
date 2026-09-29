@@ -20,6 +20,7 @@
 Запуск (из корня проекта): python tests/test_help_guide.py
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -62,7 +63,8 @@ for section in GUIDE:
     )
     check(
         f"{section['id']}: есть текст",
-        bool(section.get("steps") or section.get("notes")),
+        bool(section.get("steps") or section.get("notes")
+             or section.get("warn") or section.get("table")),
     )
 
 # ─────────────────────────────────────────────────────────
@@ -120,16 +122,23 @@ check(
     "for section in sections" in TEMPLATE,
 )
 
+# Служебные блоки прятать стилем можно (строка «ничего не нашлось»),
+# а разделы руководства — нельзя: спрятанный виден в исходном коде
+# страницы, и запрет становится видимостью запрета.
+SECTION_TAGS = [line for line in TEMPLATE.splitlines() if "collapsible collapsed" in line]
 check(
-    "в шаблоне нет разделов, спрятанных стилем",
-    "display:none" not in TEMPLATE.replace(" ", ""),
-    "спрятанный блок видно в исходном коде страницы",
+    "разделы не прячутся стилем",
+    all("display" not in line for line in SECTION_TAGS),
+    SECTION_TAGS,
 )
 
 for section in GUIDE:
     if section["roles"] == "*":
         continue
-    first = (section.get("steps") or section.get("notes"))[0][:24]
+    source = (section.get("steps") or section.get("notes")
+              or section.get("warn")
+              or [cell for row in section["table"]["rows"] for cell in row])
+    first = source[0][:24]
     check(
         f"{section['id']}: текст не вшит в шаблон",
         first not in TEMPLATE,
@@ -142,6 +151,70 @@ check('"/help" открыт всем на сервере', '"/help": "*"' in MAI
 
 LAYOUT_JS = (ROOT / "frontend" / "static" / "acai_layout.js").read_text()
 check("ссылка на руководство есть в меню", "'/help'" in LAYOUT_JS)
+
+# ─────────────────────────────────────────────────────────
+# Оформление: шаги, врезки, таблицы
+# ─────────────────────────────────────────────────────────
+# Вид у шага и у предупреждения должен быть один на всю систему.
+# Если предупреждение рисуется как обычное пояснение, человек его
+# и прочтёт как пояснение — а это те строки, где ошибка дорогая.
+
+check("шаги — карточками с номером",
+      "help-step-num" in TEMPLATE and "{{ loop.index }}" in TEMPLATE)
+check("предупреждения — врезкой со значком",
+      "help-warn" in TEMPLATE and "data-icon=alert" in TEMPLATE)
+check("таблицы — общим стилем .table",
+      'class="table stacked"' in TEMPLATE,
+      "stacked — чтобы на телефоне не мотать вбок")
+check("раскрытый раздел отличается не только стрелкой",
+      ".collapsible:not(.collapsed)" in TEMPLATE
+      and "background: var(--surface-2)" in TEMPLATE)
+check("карточка раздела берёт общий .card, а не чужой dashboard-card",
+      'class="card collapsible' in TEMPLATE
+      and 'class="dashboard-card' not in TEMPLATE,
+      "dashboard-card живёт в equipment-page.css, который тут не подключён")
+
+WARNED = [s for s in GUIDE if s.get("warn")]
+check("врезки есть хотя бы в трети разделов", len(WARNED) >= 5, len(WARNED))
+for section in GUIDE:
+    for item in section.get("warn") or []:
+        check(f"{section['id']}: врезка не пустая", bool(item.strip()))
+    table = section.get("table")
+    if not table:
+        continue
+    check(f"{section['id']}: у таблицы есть подпись и шапка",
+          bool(table.get("caption")) and len(table["head"]) >= 2)
+    check(f"{section['id']}: ячеек столько же, сколько столбцов",
+          all(len(row) == len(table["head"]) for row in table["rows"]),
+          [len(row) for row in table["rows"]])
+
+# ─────────────────────────────────────────────────────────
+# Поиск, разворот и прямые ссылки
+# ─────────────────────────────────────────────────────────
+
+check("поиск по руководству есть", "helpSearch" in TEMPLATE and "filterHelp" in TEMPLATE)
+check("поиск идёт по всему тексту раздела, а не по заголовку",
+      "data-find" in TEMPLATE)
+check("кнопка «развернуть всё»", "helpToggleAll" in TEMPLATE and "toggleAll" in TEMPLATE)
+check("кнопка печати раздела", "printSection" in TEMPLATE and "help-print-target" in TEMPLATE)
+check("при печати остаётся один раздел",
+      "body.help-printing .collapsible:not(.help-print-target)" in TEMPLATE)
+check("ссылка на раздел копируется", "copyLink" in TEMPLATE)
+
+# Якорь — часть договорённости с людьми: ссылку разошлют, и она должна
+# пережить правку заголовка. Поэтому он задан в данных, а не считается
+# из названия.
+for section in GUIDE:
+    anchor = section.get("anchor", "")
+    check(f"{section['id']}: якорь латиницей и без пробелов",
+          bool(re.fullmatch(r"[a-z0-9-]+", anchor)), anchor)
+
+check("якоря не повторяются",
+      len({s["anchor"] for s in GUIDE}) == len(GUIDE))
+check("раздел на странице стоит под своим якорем",
+      'id="{{ section.anchor }}"' in TEMPLATE)
+check("пришли по ссылке — раздел раскрывается",
+      "openFromHash" in TEMPLATE and "hashchange" in TEMPLATE)
 
 # ─────────────────────────────────────────────────────────
 # Итог

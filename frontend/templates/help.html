@@ -8,29 +8,107 @@
 <link rel="stylesheet" href="/static/fonts.css?v=1">
 <link rel="stylesheet" href="/static/acai.css?v=63">
 <style>
-/* Руководство — текст, а не таблицы: узкая колонка, крупная строка. */
-.help-col { max-width: 820px; }
-/* Заголовки здесь крупнее, чем на рабочих страницах, и общий
-   значок сворачивания уезжал под верх строки. Ставим его на
-   базовую линию заголовка. */
+/* Руководство — текст, а не сводка: узкая колонка, крупная строка. */
+.help-col { max-width: 860px; }
+
+/* Карточка раздела. Общий .card из acai.css даёт рамку и фон, но
+   рассчитан на таблицу внутри: отступов у него нет, их задаём здесь.
+   Класс .dashboard-card не берём намеренно — он живёт в
+   equipment-page.css, который эта страница не подключает, и раздел
+   оставался бы вовсе без рамки: заголовок, серая строка, и так по
+   кругу. */
+.help-col .collapsible {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  overflow: visible;
+  transition: background .15s, border-color .15s;
+}
+.help-col .collapsible h2 { font-size: 17px; font-weight: 600; line-height: 1.25; }
+.help-col .collapsible .collapse-head p {
+  font-size: 13px; color: var(--text-dim); margin: 3px 0 0;
+}
+
+/* Заголовки здесь крупнее, чем на рабочих страницах, и общий значок
+   сворачивания уезжал под верх строки. Ставим его на базовую линию. */
 .help-col .collapse-title { align-items: baseline; }
 .help-col .collapse-chevron { font-size: 15px; line-height: 1; }
-.help-lead { font-size: 13px; color: var(--text-dim); margin: 0; }
-.help-steps { margin: 0; padding-left: 22px; }
-.help-steps li { font-size: 14px; line-height: 1.55; margin-bottom: 8px; }
-.help-steps li:last-child { margin-bottom: 0; }
+
+/* Раскрытый раздел отличается не только поворотом стрелки: на длинной
+   странице человек должен видеть, где он, не вчитываясь. */
+.help-col .collapsible:not(.collapsed) {
+  background: var(--surface-2);
+  border-color: var(--accent-solid);
+}
+
+/* ── ШАГИ ── Как в «Знаниях»: кружок с номером и действие рядом.
+   Один вид шага на всю систему: два разных на соседних страницах —
+   и человек перестаёт узнавать, что перед ним порядок действий. */
+.help-step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.help-step:last-child { border-bottom: none; padding-bottom: 0; }
+.help-step-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-solid); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.help-step-text { font-size: 14px; line-height: 1.5; min-width: 0; }
+
+/* ── ВРЕЗКА ── Дорогая ошибка не должна читаться как ещё одно
+   пояснение. Рамка слева, значок и цвет предупреждения. */
+.help-warn {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px; padding: 11px 14px; margin-top: 12px;
+}
+.help-warn + .help-warn { margin-top: 8px; }
+.help-warn-icon { color: var(--warn); flex-shrink: 0; line-height: 1.45; }
+.help-warn-text { font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--text); }
+
+/* ── ЗАМЕТКИ ── Обычные пояснения, тоном ниже основного текста. */
 .help-notes { margin: 14px 0 0; padding: 0; list-style: none; }
-.help-steps + .help-notes { border-top: 1px solid var(--border); padding-top: 12px; }
+.help-steps-box + .help-notes,
+.help-table-box + .help-notes { border-top: 1px solid var(--border); padding-top: 12px; }
 .help-notes li {
   font-size: 13px; line-height: 1.55; color: var(--text-dim);
   padding-left: 14px; position: relative; margin-bottom: 8px;
 }
 .help-notes li:last-child { margin-bottom: 0; }
-.help-notes li::before {
-  content: "—"; position: absolute; left: 0; color: var(--text-dim);
+.help-notes li::before { content: "—"; position: absolute; left: 0; }
+
+.help-table-box { margin-top: 14px; }
+.help-steps-box + .help-table-box { border-top: 1px solid var(--border); padding-top: 12px; }
+.help-table-cap { font-size: 12px; font-weight: 600; color: var(--text-dim);
+                  text-transform: uppercase; margin-bottom: 8px; }
+.help-col .table td { font-size: 13px; line-height: 1.5; }
+.help-col .table td:first-child { font-weight: 600; white-space: nowrap; }
+
+/* Шапка раздела: ссылка и печать появляются, когда до них дотянулись. */
+.help-tools { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; }
+.help-tools .btn { opacity: .55; }
+.help-tools .btn:hover, .help-tools .btn:focus-visible { opacity: 1; }
+.help-role { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
+.help-empty { font-size: 13px; color: var(--text-dim); padding: 16px 0; }
+
+/* Телефон: карточка шага не должна разъезжаться, а кнопки в шапке
+   раздела — уезжать за край. Правило одно на весь сайт: вбок не мотаем. */
+@media (max-width: 560px) {
+  .help-col .collapse-head { flex-wrap: nowrap; align-items: flex-start; }
+  .help-step { gap: 10px; }
+  .help-step-num { width: 22px; height: 22px; font-size: 11px; }
+  .help-step-text { font-size: 13px; }
+  .help-col .table td:first-child { white-space: normal; }
 }
-.help-role {
-  font-size: 13px; color: var(--text-dim); margin-bottom: 14px;
+
+/* ── ПЕЧАТЬ ── Один раздел на лист: инструкцию вывешивают в цехе,
+   и меню с шапкой на ней только мешают. */
+@media print {
+  .sidebar, .topbar, .help-role, .help-tools, .mobile-nav { display: none !important; }
+  .help-col { max-width: none; }
+  .collapsible { break-inside: avoid; border: none !important; background: none !important; }
+  .collapse-chevron { display: none; }
+  body.help-printing .collapsible:not(.help-print-target) { display: none; }
+  body.help-printing .collapse-body { display: block !important; }
 }
 </style>
 </head>
@@ -44,6 +122,10 @@
         <div class="topbar-sub">Как пользоваться системой</div>
       </div>
       <div class="topbar-right">
+        <input class="input" id="helpSearch" type="search"
+               placeholder="Поиск по руководству…" style="width:220px"
+               oninput="filterHelp()">
+        <button class="btn secondary sm" id="helpToggleAll" onclick="toggleAll()">Развернуть всё</button>
         <span class="topbar-clock" id="topbarClock"></span>
       </div>
     </header>
@@ -55,8 +137,15 @@
       </p>
 
       {% for section in sections %}
-      <section class="dashboard-card collapsible collapsed" id="{{ section.id }}">
-        <div class="card-header collapse-head" onclick="toggleSection('{{ section.id }}', event)">
+      <section class="card collapsible collapsed" id="{{ section.anchor }}"
+               data-help-section
+               data-find="{{ section.title }} {{ section.lead or '' }}
+                          {{ (section.steps or []) | join(' ') }}
+                          {{ (section.notes or []) | join(' ') }}
+                          {{ (section.warn or []) | join(' ') }}
+                          {% if section.table %}{{ section.table.caption }}
+                          {% for row in section.table.rows %}{{ row | join(' ') }}{% endfor %}{% endif %}">
+        <div class="card-header collapse-head" onclick="toggleSection('{{ section.anchor }}', event)">
           <div class="collapse-title">
             <span class="collapse-chevron">▸</span>
             <div>
@@ -64,21 +153,59 @@
               {% if section.lead %}<p>{{ section.lead }}</p>{% endif %}
             </div>
           </div>
+          <div class="collapse-tools help-tools" onclick="event.stopPropagation()">
+            <button class="btn secondary sm" title="Скопировать ссылку на раздел"
+                    onclick="copyLink('{{ section.anchor }}')">#</button>
+            <button class="btn secondary sm" title="Распечатать этот раздел"
+                    onclick="printSection('{{ section.anchor }}')">
+              <span data-icon=print></span></button>
+          </div>
         </div>
         <div class="collapse-body">
           {% if section.steps %}
-          <ol class="help-steps">
-            {% for step in section.steps %}<li>{{ step }}</li>{% endfor %}
-          </ol>
+          <div class="help-steps-box">
+            {% for step in section.steps %}
+            <div class="help-step">
+              <div class="help-step-num">{{ loop.index }}</div>
+              <div class="help-step-text">{{ step }}</div>
+            </div>
+            {% endfor %}
+          </div>
           {% endif %}
+
+          {% if section.table %}
+          <div class="help-table-box">
+            <div class="help-table-cap">{{ section.table.caption }}</div>
+            <table class="table stacked">
+              <thead><tr>{% for head in section.table.head %}<th>{{ head }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in section.table.rows %}
+                <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+
           {% if section.notes %}
           <ul class="help-notes">
             {% for note in section.notes %}<li>{{ note }}</li>{% endfor %}
           </ul>
           {% endif %}
+
+          {% for item in section.warn or [] %}
+          <div class="help-warn">
+            <span class="help-warn-icon" data-icon=alert></span>
+            <span class="help-warn-text">{{ item }}</span>
+          </div>
+          {% endfor %}
         </div>
       </section>
       {% endfor %}
+
+      <div class="help-empty" id="helpEmpty" style="display:none">
+        По этим словам в вашем руководстве ничего нет.
+      </div>
     </div>
   </div>
 </div>
@@ -91,18 +218,114 @@
 <script src="/static/acai_layout.js?v=64"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script>
-// Первый раздел раскрыт: страницу открывают, чтобы читать, а не чтобы
-// смотреть на список заголовков. Остальное — по памяти браузера.
+const sections = () => Array.from(document.querySelectorAll('[data-help-section]'));
+
+// ── ПОИСК ── Ищем по всему тексту раздела, а не по заголовку: человек
+// помнит «Ctrl+Shift+R», а не то, что это «Если не открывается».
+// Найденные сразу раскрываем: иначе поиск отдаёт список заголовков,
+// по которым опять надо кликать.
+function filterHelp() {
+  const q = (document.getElementById('helpSearch').value || '').trim().toLowerCase();
+  let shown = 0;
+  sections().forEach(card => {
+    const hit = !q || (card.dataset.find || '').toLowerCase().includes(q);
+    card.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+    if (q && hit) card.classList.remove('collapsed');
+  });
+  document.getElementById('helpEmpty').style.display = shown ? 'none' : '';
+  if (!q) restoreSections();
+  syncToggleAll();
+}
+
+// ── РАЗВЕРНУТЬ ВСЁ ── Когда ищут глазами, а название раздела не помнят.
+function toggleAll() {
+  const open = sections().filter(c => !c.style.display && !c.classList.contains('collapsed'));
+  const expand = open.length < sections().length;
+  sections().forEach(card => {
+    if (card.style.display === 'none') return;
+    if (expand) expandSection(card.id); else toggleSectionClosed(card);
+  });
+  syncToggleAll();
+}
+
+// toggleSection переключает, а здесь нужно именно закрыть — иначе
+// уже закрытые разделы открылись бы обратно.
+function toggleSectionClosed(card) {
+  if (!card.classList.contains('collapsed')) toggleSection(card.id);
+}
+
+function syncToggleAll() {
+  const visible = sections().filter(c => c.style.display !== 'none');
+  const open = visible.filter(c => !c.classList.contains('collapsed')).length;
+  const btn = document.getElementById('helpToggleAll');
+  btn.textContent = (open === visible.length && visible.length) ? 'Свернуть всё' : 'Развернуть всё';
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('.collapse-head')) setTimeout(syncToggleAll, 0);
+});
+
+// ── ССЫЛКА НА РАЗДЕЛ ── Чтобы отправить «вот это», а не «открой и найди».
+async function copyLink(anchor) {
+  const url = location.origin + location.pathname + '#' + anchor;
+  try {
+    await navigator.clipboard.writeText(url);
+    ACAI.toast('Ссылка скопирована');
+  } catch (e) {
+    // Без разрешения на буфер обмена показываем адрес: переписать
+    // руками неудобно, но лучше, чем молчаливый отказ.
+    ACAI.toast(url, 'warn');
+  }
+  location.hash = anchor;
+}
+
+// ── ПЕЧАТЬ ОДНОГО РАЗДЕЛА ── Инструкцию вывешивают в цехе на стену.
+function printSection(anchor) {
+  const card = document.getElementById(anchor);
+  if (!card) return;
+  const wasCollapsed = card.classList.contains('collapsed');
+  card.classList.remove('collapsed');
+  card.classList.add('help-print-target');
+  document.body.classList.add('help-printing');
+  const done = () => {
+    document.body.classList.remove('help-printing');
+    card.classList.remove('help-print-target');
+    if (wasCollapsed) card.classList.add('collapsed');
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  window.print();
+  setTimeout(done, 1000);
+}
+
+// Пришли по ссылке — раскрываем нужный раздел и подводим к нему.
+function openFromHash() {
+  const anchor = decodeURIComponent((location.hash || '').replace('#', ''));
+  if (!anchor) return false;
+  const card = document.getElementById(anchor);
+  if (!card) return false;
+  expandSection(anchor);
+  card.scrollIntoView({block: 'start'});
+  return true;
+}
+
 async function init() {
   await initLayout();
   restoreSections();
-  const first = document.querySelector('.page .collapsible');
-  if (first) {
-    let saved = null;
-    try { saved = localStorage.getItem('acai_section_' + first.id); } catch (e) {}
-    if (saved === null) first.classList.remove('collapsed');
+  if (!openFromHash()) {
+    // Первый раздел раскрыт: страницу открывают, чтобы читать, а не
+    // чтобы смотреть на список заголовков.
+    const first = sections()[0];
+    if (first) {
+      let saved = null;
+      try { saved = localStorage.getItem('acai_section_' + first.id); } catch (e) {}
+      if (saved === null) first.classList.remove('collapsed');
+    }
   }
+  syncToggleAll();
 }
+window.addEventListener('hashchange', openFromHash);
 init();
 </script>
 </body>
