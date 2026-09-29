@@ -265,11 +265,19 @@ check("гл. механик видит только слесарей и себя
 check("и роли менять ему нечем",
       users["chief_mechanic"].get("/api/settings/users").json().get("full_access") is False)
 
-# Выдавать доступ людям директору и гл. инженеру разрешено решением заказчика
-# (backend/api/admin_routes.py) — но стать через это администратором нельзя.
+# Выдавать доступ людям разрешено директору решением заказчика
+# (backend/api/admin_routes.py) — но стать через это администратором
+# нельзя. Гл. инженер эту дверь потерял 29.09.2026: он меняет пароли,
+# но учётки не заводит (tests/test_chief_engineer_accounts.py).
 owner = sb.db().execute("SELECT id FROM users WHERE username = 'alibek'").fetchone()
 admin_target = sb.user("admin", login=False)
-for role in ("director", "chief_engineer"):
+
+r = users["chief_engineer"].post(
+    "/api/admin/users",
+    json={"username": "ce-op", "full_name": "Новый оператор", "role": "worker"})
+check("гл. инженер рабочего не заводит", r.status_code == 403, r.status_code)
+
+for role in ("director",):
     boss = users[role]
     r = boss.post("/api/admin/users", json={"username": f"new-op-{role}", "full_name": "Новый оператор", "role": "worker"})
     check(f"{role}: заводит рабочего (разрешено)", r.status_code == 200 and r.json().get("success"), r.text[:150])

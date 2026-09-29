@@ -94,15 +94,15 @@ on_page = set(re.findall(r"'([a-z_]+)'", block))
 check("кнопка «Загрузить файл отчёта» показана ровно тем, кого пустит сервер",
       on_page == set(REPORT_IMPORT_ROLES), (sorted(on_page), sorted(REPORT_IMPORT_ROLES)))
 
-from backend.api.common import SETTINGS_ALLOWED_ROLES, SETTINGS_PAGE_ROLES
+from backend.api.common import SETTINGS_PAGE_ROLES, USER_ADMIN_ROLES
 from backend.services.staff_rbac import FULL_ACCESS_ROLES, SUBORDINATE_ROLES
 
 check("«Настройки» открыты всем, у кого есть подчинённые",
       set(SETTINGS_PAGE_ROLES) == set(SUBORDINATE_ROLES),
       (sorted(SETTINGS_PAGE_ROLES), sorted(SUBORDINATE_ROLES)))
 check("заводить и удалять людей может тот же круг, что назван в staff_rbac",
-      set(SETTINGS_ALLOWED_ROLES) == set(FULL_ACCESS_ROLES),
-      (sorted(SETTINGS_ALLOWED_ROLES), sorted(FULL_ACCESS_ROLES)))
+      set(USER_ADMIN_ROLES) == set(FULL_ACCESS_ROLES),
+      (sorted(USER_ADMIN_ROLES), sorted(FULL_ACCESS_ROLES)))
 
 settings_page = Path("frontend/templates/settings.html").read_text()
 check("кнопки «Изменить», «Закрыть доступ» и «Удалить» спрятаны от начальника участка",

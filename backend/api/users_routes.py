@@ -21,7 +21,7 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from backend.api.common import (
-    SETTINGS_ALLOWED_ROLES,
+    USER_ADMIN_ROLES,
     SETTINGS_PAGE_ROLES,
     require_roles,
 )
@@ -94,7 +94,7 @@ def get_users_route(
 @router.post("/api/settings/users")
 def create_user_route(
     request: CreateUserRequest,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
 
     try:
@@ -133,7 +133,7 @@ def create_user_route(
 def update_user_role_route(
     user_id: int,
     request: UpdateUserRoleRequest,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
 
     # Подстраховка — админ не должен случайно снять роль admin
@@ -222,7 +222,7 @@ def revoke_user_sessions_route(
 @router.get("/api/settings/users/{user_id}/traces")
 def user_traces_route(
     user_id: int,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
     """
     Что останется без автора, если удалить учётку навсегда.
@@ -245,7 +245,7 @@ def user_traces_route(
 def delete_user_route(
     user_id: int,
     force: bool = False,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
 
     # Та же подстраховка, что и при смене роли — нельзя случайно
@@ -300,7 +300,7 @@ def delete_user_route(
 def set_user_active_route(
     user_id: int,
     request: dict,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
     """
     Закрыть или вернуть доступ. Это правильный способ проводить
@@ -346,7 +346,7 @@ def set_user_active_route(
 def assign_user_equipment_route(
     user_id: int,
     request: AssignEquipmentRequest,
-    user: dict = Depends(require_roles(*SETTINGS_ALLOWED_ROLES))
+    user: dict = Depends(require_roles(*USER_ADMIN_ROLES))
 ):
 
     assign_equipment(user_id, request.equipment_ids)
