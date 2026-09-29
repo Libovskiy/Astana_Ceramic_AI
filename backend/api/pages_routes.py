@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 
 from backend.api.common import (
     DASHBOARD_ALLOWED_ROLES,
+    get_current_user,
     require_roles,
     templates,
 )
@@ -188,6 +189,31 @@ def knowledge_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="knowledge.html"
+    )
+
+
+# =========================================
+# РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ
+# =========================================
+# Страница открыта всем, но содержимое режет сервер: оператору не
+# показывают разделы директора, и их нет даже в исходном коде
+# страницы. Спрятать блок разметкой было бы видимостью запрета.
+
+@router.get("/help")
+def help_page(request: Request, user: dict = Depends(get_current_user)):
+
+    from backend.api.main import ROLE_LABELS
+    from backend.services.help_service import sections_for
+
+    role = (user or {}).get("role", "")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="help.html",
+        context={
+            "sections": sections_for(role),
+            "role_label": ROLE_LABELS.get(role, role or "без роли"),
+        },
     )
 
 

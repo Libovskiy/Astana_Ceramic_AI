@@ -329,6 +329,9 @@ const NAV_ITEMS = [
   { section: 'Нормы и знания' },
   { icon: 'regulations', label: 'Регламенты',    href: '/regulations',  roles: '*' },
   { icon: 'knowledge', label: 'Знания',        href: '/knowledge',    roles: '*' },
+  // Руководство по самой системе. Открыто всем, но внутри человек
+  // видит только свои разделы: отбор делает сервер.
+  { icon: 'help', label: 'Руководство',   href: '/help',         roles: '*' },
   { section: 'Производство' },
   { icon: 'lab', label: 'Лаборатория',   href: '/lab',          roles: ['admin','director','chief_engineer','analyst','technologist','lab_technician'] },
   { icon: 'parts', label: 'Запчасти',      href: '/parts',        roles: ['admin','director','chief_engineer','chief_mechanic','chief_electrician','mechanic','electrician','analyst'] },
@@ -351,22 +354,22 @@ const NAV_ITEMS = [
 // Здесь для каждой роли перечислено, в каком порядке она читает свои
 // пункты. Что не перечислено — встаёт после, в исходном порядке.
 const NAV_ORDER_BY_ROLE = {
-  worker:            ['/cases', '/production', '/chat', '/messenger', '/knowledge', '/regulations'],
-  mechanic:          ['/cases', '/mechanics', '/parts', '/chat', '/messenger', '/knowledge', '/regulations'],
-  electrician:       ['/cases', '/electrical', '/parts', '/chat', '/messenger', '/knowledge', '/regulations'],
+  worker:            ['/cases', '/production', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
+  mechanic:          ['/cases', '/mechanics', '/parts', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
+  electrician:       ['/cases', '/electrical', '/parts', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
   lab_technician:    ['/lab', '/regulations', '/knowledge', '/messenger'],
   technologist:      ['/technolog', '/lab', '/production', '/', '/regulations', '/knowledge', '/messenger'],
   shift_supervisor:  ['/production', '/checklist', '/cases', '/chat', '/equipment', '/',
-                      '/events', '/messenger', '/knowledge', '/regulations', '/settings'],
+                      '/events', '/messenger', '/knowledge', '/regulations', '/help', '/settings'],
   production_chief:  ['/production', '/', '/analytics', '/cases', '/checklist', '/maintenance',
                       '/equipment', '/reports', '/chat', '/events', '/messenger',
-                      '/knowledge', '/regulations', '/settings'],
+                      '/knowledge', '/regulations', '/help', '/settings'],
   chief_mechanic:    ['/', '/cases', '/mechanics', '/equipment', '/maintenance', '/parts',
                       '/checklist', '/analytics', '/production', '/chat', '/reports',
-                      '/events', '/messenger', '/knowledge', '/regulations', '/audit', '/settings'],
+                      '/events', '/messenger', '/knowledge', '/regulations', '/help', '/audit', '/settings'],
   chief_electrician: ['/', '/cases', '/electrical', '/equipment', '/maintenance', '/parts',
                       '/checklist', '/analytics', '/production', '/chat', '/reports',
-                      '/events', '/messenger', '/knowledge', '/regulations', '/audit', '/settings'],
+                      '/events', '/messenger', '/knowledge', '/regulations', '/help', '/audit', '/settings'],
 };
 
 // Пункты, которые открывают раз в неделю. У кого меню длинное, они

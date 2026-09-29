@@ -301,6 +301,9 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
                     "analyst"),
     "/reports": ("director", "chief_engineer", "production_chief", "analyst",
                  "chief_mechanic", "chief_electrician"),
+    # Руководство по системе открыто всем, но каждый видит только свои
+    # разделы — отбор в backend/services/help_service.sections_for.
+    "/help": "*",
     "/instructions": "*",
     "/regulations": "*",
     "/my-regulation": "*",
