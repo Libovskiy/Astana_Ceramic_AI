@@ -16,15 +16,43 @@
 показанное неверное число хуже, чем не показанное вовсе.
 
 Загрузка заменяет данные за год целиком: файл — источник правды, а
-значит его вчерашняя версия не должна оставлять следов. История самих
-загрузок (кто, когда, сколько прочиталось) остаётся в `xls_imports`.
+значит его вчерашняя версия не должна показываться на экранах.
+
+ТРЕТЬЕ ПРАВИЛО (29.09.2026): заменённое не исчезает. Раньше загрузка
+делала `DELETE`, и прежние данные пропадали без возврата — залили
+испорченный файл, и сравнить было не с чем. Теперь прошлый прогон
+уезжает в `xls_archive_*`, а прогон в `xls_imports` получает
+`status = "replaced"`. Откат — вернуть его из архива, без повторного
+разбора файла.
+
+Почему архив отдельными таблицами, а не пометкой в рабочих: рабочие
+таблицы читают из двух десятков мест, и все запросы отбирают по году,
+а не по прогону. Добавь в них второй прогон — и каждая сумма молча
+удвоится, стоит пропустить один запрос. В архиве этого произойти не
+может: в рабочих таблицах всегда ровно один прогон.
+
+Заменённые прогоны старше 20 дней чистит ночная задача (владелец,
+29.09.2026): `scripts/production/purge_xls_archive.py`. Сама по себе
+система ничего не удаляет — только по этому сроку и только архив.
 """
 
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from backend.config import DB_NAME
+
+
+# Таблицы, которые ездят в архив при замене прогона. Порядок не важен,
+# но список один: пропустишь таблицу — её данные исчезнут при загрузке,
+# а остальные останутся, и отчёт станет неполным молча.
+ARCHIVED_TABLES = ("xls_shifts", "xls_downtime", "xls_notes",
+                   "xls_problems", "xls_products",
+                   "xls_values", "xls_month_totals", "xls_unparsed")
+
+# Сколько держим заменённые прогоны. Решение владельца 29.09.2026: не
+# по счётчику, а по возрасту — двадцать дней. Чистит ночная задача.
+ARCHIVE_KEEP_DAYS = 20
 
 
 def get_connection():
@@ -132,17 +160,258 @@ def init_production_import():
     if "defect_pieces" not in columns:
         conn.execute("ALTER TABLE xls_shifts ADD COLUMN defect_pieces REAL")
 
+    # Дубль и расхождение помечаются, а не схлопываются: 30.06 записана
+    # и из «Июня», и из «Июля», а колонки A и B расходятся в строках
+    # 33, 44 и 51 на всех листах. Молча сложить — соврать в сумме и не
+    # дать это заметить. Заполняет разбор (этап 3), здесь только место.
+    if "dup_of" not in columns:
+        conn.execute("ALTER TABLE xls_shifts ADD COLUMN dup_of INTEGER")
+    if "conflict" not in columns:
+        conn.execute("ALTER TABLE xls_shifts ADD COLUMN conflict TEXT")
+
+    # Журнал загрузок: чем этот прогон отличается и что с ним стало.
+    # Старые записи получают NULL, а не значение по умолчанию: «не
+    # знаем» и «ноль» — разные вещи. Исключение — status: без него
+    # непонятно, какой прогон показывают экраны, поэтому у всех
+    # прошлых он проставляется ниже, одной сверкой с фактом.
+    imports_columns = {row[1] for row in conn.execute("PRAGMA table_info(xls_imports)")}
+    for name, kind in (("status", "TEXT"), ("checksum", "TEXT"),
+                       ("rows_total", "INTEGER"), ("rows_unparsed", "INTEGER"),
+                       ("note", "TEXT"), ("archived_at", "TEXT")):
+        if name not in imports_columns:
+            conn.execute(f"ALTER TABLE xls_imports ADD COLUMN {name} {kind}")
+
+    # ── МЕСТО ДЛЯ ТОГО, ЧТО ПОКА НЕ ПЕРЕНОСИТСЯ ──
+    #
+    # В системе 9 полей из 30 (карта колонок, 28.09.2026), и у 14 смысл
+    # неизвестен, пока начальник производства не ответил. Поэтому всё
+    # непонятное ложится как есть — с заголовком из файла, листом и
+    # строкой, — а не в именованную колонку: назвать неверно хуже, чем
+    # не назвать. Ответ придёт — поправим справочник, а не базу.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS xls_values (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            shift TEXT,
+            key TEXT NOT NULL,          -- наше короткое имя, если оно уже известно
+            title TEXT,                 -- заголовок колонки, как в файле
+            value_num REAL,             -- число, если это число
+            value_text TEXT,            -- иначе — текст, как написано
+            unit TEXT,
+            sheet TEXT, row INTEGER
+        )
+    """)
+
+    # Итоги месяца — строки 65–71 листа, не колонки: «выполнение
+    # плана», «остаток до плана», хвост со стрейч-плёнкой и остатками.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS xls_month_totals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            title TEXT,
+            value_num REAL,
+            value_text TEXT,
+            sheet TEXT, row INTEGER
+        )
+    """)
+
+    # Ответ на «не разобрано N записей»: список с листом и строкой, а
+    # не голое число. Сейчас 51 простой из 416 лежит с пустыми
+    # минутами, и какие именно — человеку узнать негде.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS xls_unparsed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            sheet TEXT, row INTEGER,
+            column TEXT, header TEXT,
+            raw TEXT,
+            reason TEXT
+        )
+    """)
+
+    # ── АРХИВ ── Структура повторяет рабочие таблицы. Создаём по их
+    # образцу, чтобы схема не разъехалась: колонку добавили в рабочую —
+    # она сама появится и здесь при следующем запуске пустого архива.
+    for table in ARCHIVED_TABLES:
+        conn.execute(
+            f"CREATE TABLE IF NOT EXISTS xls_archive_{table[4:]} "
+            f"AS SELECT * FROM {table} WHERE 0"
+        )
+
     for statement in (
         "CREATE INDEX IF NOT EXISTS idx_xls_shifts_date ON xls_shifts(date)",
         "CREATE INDEX IF NOT EXISTS idx_xls_downtime_date ON xls_downtime(date)",
         "CREATE INDEX IF NOT EXISTS idx_xls_downtime_section ON xls_downtime(section)",
         "CREATE INDEX IF NOT EXISTS idx_xls_notes_section ON xls_notes(section)",
         "CREATE INDEX IF NOT EXISTS idx_xls_products_date ON xls_products(date)",
+        "CREATE INDEX IF NOT EXISTS idx_xls_values_date ON xls_values(date)",
+        "CREATE INDEX IF NOT EXISTS idx_xls_unparsed_run ON xls_unparsed(run_id)",
     ):
         conn.execute(statement)
 
+    # Прогоны, которые были до этой схемы. Последний по году — тот, что
+    # сейчас на экранах. Остальным ставим 'purged', и это не допущение,
+    # а факт: их строки удалил прежний код, в архиве их нет и быть не
+    # может. Писать им 'replaced' значило бы обещать откат, которого
+    # не существует.
+    if conn.execute("SELECT 1 FROM xls_imports WHERE status IS NULL LIMIT 1").fetchone():
+        for row in conn.execute(
+            "SELECT year, MAX(id) AS last FROM xls_imports GROUP BY year"
+        ).fetchall():
+            conn.execute(
+                "UPDATE xls_imports SET status = 'active' WHERE id = ? AND status IS NULL",
+                (row["last"],)
+            )
+        conn.execute("UPDATE xls_imports SET status = 'purged' WHERE status IS NULL")
+
     conn.commit()
     conn.close()
+
+
+def archive_run(conn, year: int) -> int:
+    """
+    Убрать с экранов прошлый прогон этого года, сохранив его в архиве.
+
+    Возвращает число перенесённых строк. Ноль — значит года в базе ещё
+    не было, это не ошибка.
+    """
+
+    moved = 0
+    for table in ARCHIVED_TABLES:
+        archive = f"xls_archive_{table[4:]}"
+        # id не переносим: он у каждой таблицы свой и ничему не
+        # соответствует снаружи. Перенести его значит однажды поймать
+        # «UNIQUE constraint failed» на ровном месте — нашли парной
+        # проверкой 29.09.2026.
+        columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+                   if row[1] != "id"]
+        kept = [row[1] for row in conn.execute(f"PRAGMA table_info({archive})")]
+
+        # Колонку добавили в рабочую таблицу после создания архива —
+        # добавляем и туда, иначе перенос потеряет её молча.
+        for name in columns:
+            if name not in kept:
+                kind = next(row[2] for row in conn.execute(f"PRAGMA table_info({table})")
+                            if row[1] == name) or "TEXT"
+                conn.execute(f"ALTER TABLE {archive} ADD COLUMN {name} {kind}")
+
+        fields = ", ".join(f'"{name}"' for name in columns)
+        moved += conn.execute(
+            f"INSERT INTO {archive} ({fields}) SELECT {fields} FROM {table} WHERE year = ?",
+            (year,)
+        ).rowcount
+        conn.execute(f"DELETE FROM {table} WHERE year = ?", (year,))
+
+    conn.execute(
+        "UPDATE xls_imports SET status = 'replaced', archived_at = ? "
+        "WHERE year = ? AND COALESCE(status, 'active') = 'active'",
+        (now(), year)
+    )
+    return moved
+
+
+def purge_archive(days: int = ARCHIVE_KEEP_DAYS, dry_run: bool = False) -> dict:
+    """
+    Убрать из архива прогоны, заменённые больше `days` дней назад.
+
+    Это единственное место во всей системе, где данные сменного отчёта
+    удаляются. Свежие заменённые прогоны не трогаются: срок задан
+    владельцем и меняется здесь, а не по месту вызова.
+    """
+
+    conn = get_connection()
+    try:
+        border = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        runs = [row["id"] for row in conn.execute(
+            "SELECT id FROM xls_imports "
+            "WHERE status = 'replaced' AND archived_at IS NOT NULL AND archived_at < ?",
+            (border,)
+        )]
+
+        report = {"days": days, "border": border, "runs": runs, "rows": 0, "by_table": {}}
+        if not runs or dry_run:
+            if runs:
+                marks = ",".join("?" * len(runs))
+                for table in ARCHIVED_TABLES:
+                    archive = f"xls_archive_{table[4:]}"
+                    count = conn.execute(
+                        f"SELECT COUNT(*) FROM {archive} WHERE run_id IN ({marks})", runs
+                    ).fetchone()[0]
+                    report["by_table"][archive] = count
+                    report["rows"] += count
+            return report
+
+        marks = ",".join("?" * len(runs))
+        for table in ARCHIVED_TABLES:
+            archive = f"xls_archive_{table[4:]}"
+            count = conn.execute(
+                f"DELETE FROM {archive} WHERE run_id IN ({marks})", runs
+            ).rowcount
+            report["by_table"][archive] = count
+            report["rows"] += count
+
+        # Сам прогон в журнале остаётся: кто и когда грузил файл — это
+        # история, она не устаревает. Уходят только его строки.
+        conn.execute(
+            f"UPDATE xls_imports SET status = 'purged' WHERE id IN ({marks})", runs
+        )
+        conn.commit()
+        return report
+    finally:
+        conn.close()
+
+
+def restore_run(run_id: int) -> dict:
+    """
+    Вернуть заменённый прогон на экраны: архив ↔ рабочие таблицы.
+
+    Нужен, когда залили испорченный файл. Повторно разбирать Эксель не
+    надо — данные уже разобраны, они просто лежат в архиве.
+    """
+
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM xls_imports WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            return {"success": False, "message": "Такой загрузки нет."}
+        if row["status"] == "purged":
+            return {"success": False,
+                    "message": f"Строки этой загрузки убраны из архива "
+                               f"(хранение {ARCHIVE_KEEP_DAYS} дней). Загрузите файл заново."}
+        if row["status"] == "active":
+            return {"success": False, "message": "Эта загрузка и так показана на экранах."}
+
+        year = row["year"]
+        archive_run(conn, year)          # текущий прогон уезжает в архив
+
+        moved = 0
+        for table in ARCHIVED_TABLES:
+            archive = f"xls_archive_{table[4:]}"
+            columns = [item[1] for item in conn.execute(f"PRAGMA table_info({table})")
+                       if item[1] != "id"]
+            have = {item[1] for item in conn.execute(f"PRAGMA table_info({archive})")}
+            shared = [name for name in columns if name in have]
+            fields = ", ".join(f'"{name}"' for name in shared)
+            moved += conn.execute(
+                f"INSERT INTO {table} ({fields}) SELECT {fields} FROM {archive} WHERE run_id = ?",
+                (run_id,)
+            ).rowcount
+            conn.execute(f"DELETE FROM {archive} WHERE run_id = ?", (run_id,))
+
+        conn.execute(
+            "UPDATE xls_imports SET status = 'active', archived_at = NULL WHERE id = ?",
+            (run_id,)
+        )
+        conn.commit()
+        return {"success": True, "run_id": run_id, "rows": moved, "year": year}
+    finally:
+        conn.close()
 
 
 def compare_with_saved(data: dict) -> dict:
@@ -241,6 +510,15 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
 
     conn = get_connection()
     try:
+        # Прошлая версия этого года уходит с экранов целиком, иначе
+        # удалённая из Экселя строка осталась бы жить на сайте. Но
+        # уходит она в архив, а не в никуда: залитый по ошибке файл
+        # больше не стирает прежние данные.
+        #
+        # Делается ДО записи нового прогона: иначе пометка «заменён»
+        # догонит и его самого — он на этот момент тоже «рабочий».
+        archive_run(conn, year)
+
         cursor = conn.execute(
             """
             INSERT INTO xls_imports
@@ -252,11 +530,7 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
              len(shifts), len(downtime), len(notes), len(problems), minutes)
         )
         run_id = cursor.lastrowid
-
-        # Файл — источник правды: прошлая версия этого года уходит целиком,
-        # иначе удалённая из Экселя строка осталась бы жить на сайте.
-        for table in ("xls_shifts", "xls_downtime", "xls_notes", "xls_problems", "xls_products"):
-            conn.execute(f"DELETE FROM {table} WHERE year = ?", (year,))
+        conn.execute("UPDATE xls_imports SET status = 'active' WHERE id = ?", (run_id,))
 
         conn.executemany(
             """
