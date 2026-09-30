@@ -503,6 +503,14 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
     shifts = [{**item, "sheet": item.get("sheet") or month.get("sheet")}
               for month in months for item in month.get("shifts") or []]
     downtime = [item for month in months for item in month.get("downtime") or []]
+
+    # Значения колонок, которых разбор не знает, и брак по каждой
+    # колонке отдельно. Ложатся как есть — с заголовком из файла,
+    # листом и строкой. Имя получат, когда начальник производства
+    # скажет, что это; назвать раньше — значит угадать.
+    values = [{**item, "date": shift["date"], "shift": shift["shift"],
+               "sheet": item.get("sheet") or shift.get("sheet")}
+              for shift in shifts for item in shift.get("values") or []]
     notes = [item for month in months for item in month.get("notes") or []]
     problems = data.get("problems") or []
 
@@ -531,6 +539,20 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
         )
         run_id = cursor.lastrowid
         conn.execute("UPDATE xls_imports SET status = 'active' WHERE id = ?", (run_id,))
+
+        conn.executemany(
+            """
+            INSERT INTO xls_values
+                (run_id, year, date, shift, key, title,
+                 value_num, value_text, unit, sheet, row)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(run_id, year, item["date"], item.get("shift"),
+              item.get("key") or "new", item.get("title"),
+              item.get("value_num"), item.get("value_text"),
+              item.get("unit"), item.get("sheet"), item.get("row"))
+             for item in values]
+        )
 
         conn.executemany(
             """

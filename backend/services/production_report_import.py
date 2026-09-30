@@ -177,6 +177,18 @@ PRODUCT_HEADER = re.compile(r"\bнф\b|\d\s*[,.]?\d*\s*нф", re.I)
 DEFECT_HEADER = re.compile(r"брак", re.I)
 
 
+def defect_columns(headers: dict) -> dict:
+    """
+    ВСЕ колонки «Брак и отстрел», а не первая попавшаяся.
+
+    До 30.09.2026 брался `find_column(headers, "брак")` — первая. В
+    сентябре таких колонок пять: «Брак и отстрел 1,4 НФ полнател»,
+    «Брак и отстрел 1,4 НФ пустотел» и три просто «Брак и отстрел».
+    Система показывала 8 164 штуки из 17 016 — половину, и молча.
+    """
+    return {col: name for col, name in headers.items() if DEFECT_HEADER.search(name)}
+
+
 def product_columns(headers: dict) -> dict:
     """Колонки выпуска: номер → как подписан столбец в файле."""
     return {
@@ -192,6 +204,18 @@ def unit_of(header: str) -> str:
     if "м3" in low or "м³" in low or "куб" in low:
         return "м3"
     return "шт"
+
+
+def known_columns(headers, downtime_cols, plan_fact, products_cols, defect_cols) -> set:
+    """Колонки, смысл которых разбор знает. Всё остальное — новое."""
+    known = {1, 2, 3}                       # смена, номер смены, начальник
+    for mins, why in downtime_cols.values():
+        known.update(x for x in (mins, why) if x)
+    for plan, fact in plan_fact.values():
+        known.update(x for x in (plan, fact) if x)
+    known.update(products_cols)
+    known.update(defect_cols)
+    return known
 
 
 def read_month(ws, year: int, month: int) -> dict:
@@ -212,17 +236,30 @@ def read_month(ws, year: int, month: int) -> dict:
     }
 
     products_cols = product_columns(headers)
-    defect_col = find_column(headers, "брак")
+    defect_cols = defect_columns(headers)
+    known = known_columns(headers, downtime_cols, plan_fact, products_cols, defect_cols)
 
     shifts, downtime, notes, problems = [], [], [], []
     first_row = True
+    totals_row = None
 
     for row in range(3, ws.max_row + 1):
         label = _clean(ws.cell(row, 1).value)
         if label.lower().startswith("средн"):
+            totals_row = row            # сумма по листу, сверяемся с ней ниже
             break                       # дальше итоги с #NUM! и заметки
         shift = parse_shift(label)
         if not shift:
+            # Метку не узнали. Если в строке есть данные — это потеря, и
+            # о ней надо сказать вслух: в июне–сентябре так молча
+            # пропадала строка 21 с меткой «№53,» — целая смена с
+            # выпуском (нашла сверка с итогом листа 30.09.2026).
+            if label and row_has_values(ws, row):
+                problems.append({
+                    "sheet": ws.title, "row": row,
+                    "what": f"строка с данными, но метку «{label[:20]}» "
+                            f"не разобрал — это смена или что-то другое?",
+                })
             continue
 
         # Строка со сменой, но без единого показателя — заготовка на
@@ -275,6 +312,26 @@ def read_month(ws, year: int, month: int) -> dict:
                                          "what": f"{SECTION_TITLES[key]}, {tag}: «{_clean(v)[:40]}» не число"})
         # Выпуск по видам продукции и брак — как записано в файле,
         # вместе с единицей из заголовка. Пересчёт не здесь.
+        # Колонка, которую разбор не узнал: ни простой, ни план, ни
+        # выпуск, ни брак. Раньше она просто не читалась — вставили в
+        # Экселе графу, и её как не бывало. Теперь значение ложится как
+        # есть, с заголовком из файла, и помечается «новое, смысл не
+        # определён»: назвать неверно хуже, чем не назвать.
+        record["values"] = []
+        for col, header in headers.items():
+            if col in known:
+                continue
+            value = ws.cell(row, col).value
+            if not _clean(value):
+                continue
+            item = {"key": None, "title": header, "unit": unit_of(header),
+                    "sheet": ws.title, "row": row, "status": "new"}
+            if isinstance(value, (int, float)):
+                item["value_num"] = float(value)
+            else:
+                item["value_text"] = _clean(value)
+            record["values"].append(item)
+
         record["products"] = []
         for col, header in products_cols.items():
             value = ws.cell(row, col).value
@@ -289,13 +346,25 @@ def read_month(ws, year: int, month: int) -> dict:
                 problems.append({"sheet": ws.title, "row": row,
                                  "what": f"{header}: «{_clean(value)[:30]}» не число"})
 
-        if defect_col:
-            value = ws.cell(row, defect_col).value
+        # Брак: складываем все колонки смены и тут же кладём каждую
+        # отдельно. Сумма нужна экранам, отдельные — чтобы разбивку
+        # можно было собрать потом, когда начальник производства
+        # скажет, к каким видам относятся безымянные колонки.
+        defect_total = None
+        for col, header in defect_cols.items():
+            value = ws.cell(row, col).value
             if isinstance(value, (int, float)):
-                record["defect_pieces"] = float(value)
+                defect_total = (defect_total or 0) + float(value)
+                record["values"].append({
+                    "key": "defect", "title": header,
+                    "value_num": float(value), "unit": unit_of(header),
+                    "sheet": ws.title, "row": row, "status": "known",
+                })
             elif _clean(value):
                 problems.append({"sheet": ws.title, "row": row,
                                  "what": f"брак: «{_clean(value)[:30]}» не число"})
+        if defect_total is not None:
+            record["defect_pieces"] = defect_total
 
         shifts.append(record)
 
@@ -329,10 +398,57 @@ def read_month(ws, year: int, month: int) -> dict:
                 problems.append({"sheet": ws.title, "row": row,
                                  "what": f"{SECTION_TITLES[key]}: время «{_clean(raw)[:40]}» — {err}"})
 
+    # ── СВЕРКА С ИТОГОМ ЛИСТА ──
+    #
+    # В файле есть строка «Средние значения» — на деле суммы по
+    # колонкам. Сравниваем с тем, что сложили сами. Разошлось — значит
+    # мы что-то не прочитали: появился новый вид изделия, строка ушла
+    # за границу разбора, число записано текстом. Молча закруглить
+    # такое — соврать в отчёте и не дать это заметить.
+    if totals_row:
+        for col, header in {**products_cols, **defect_cols}.items():
+            expected = ws.cell(totals_row, col).value
+            if not isinstance(expected, (int, float)) or not expected:
+                continue
+            # Складываем то, что РАЗОБРАЛИ, а не колонку из файла.
+            # Иначе сверка сходится всегда и не ловит ничего: потеря
+            # происходит при разборе, а не в Экселе.
+            got = 0.0
+            for record in shifts:
+                for item in record.get("products") or []:
+                    if item["column"] == header:
+                        got += item["value"]
+                for item in record.get("values") or []:
+                    if item.get("key") == "defect" and item["title"] == header:
+                        got += item.get("value_num") or 0
+            # Допуск — десятая процента: в файле встречаются дроби,
+            # и ловить их округление незачем.
+            if abs(got - expected) > max(0.5, abs(expected) * 0.001):
+                problems.append({
+                    "sheet": ws.title, "row": totals_row,
+                    "what": f"«{header}»: в итоге листа {expected:,.0f}, "
+                            f"сложилось {got:,.0f} — расхождение "
+                            f"{abs(got - expected):,.0f}".replace(",", " "),
+                })
+
     missing = [SECTION_TITLES[k] for k in SECTIONS if k not in downtime_cols]
     if missing:
         problems.append({"sheet": ws.title, "row": 1,
                          "what": "не нашёл колонки простоя: " + ", ".join(missing)})
+
+    # Новые колонки перечисляем один раз на лист, а не на каждую
+    # строку: человеку нужен список граф, а не пятьсот повторов.
+    fresh = {}
+    for record in shifts:
+        for item in record.get("values") or []:
+            if item.get("status") == "new":
+                fresh[item["title"]] = fresh.get(item["title"], 0) + 1
+    for title, count in sorted(fresh.items()):
+        problems.append({
+            "sheet": ws.title, "row": 1,
+            "what": f"новая графа «{title}»: {count} значений сохранены, "
+                    f"смысл не определён — нужна привязка",
+        })
 
     return {"sheet": ws.title, "shifts": shifts, "downtime": downtime,
             "notes": notes, "problems": problems}
