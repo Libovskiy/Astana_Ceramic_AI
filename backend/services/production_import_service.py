@@ -486,6 +486,73 @@ def compare_with_saved(data: dict) -> dict:
     }
 
 
+def reconciliation(data: dict) -> dict:
+    """
+    Отчёт сверки: что прочиталось, что сошлось, чего не хватает.
+
+    Показывается человеку ДО сохранения. Правило простое: цифры,
+    которые не сошлись, называются вслух — с листом, строкой и
+    разницей. Молча закруглить проще всего, но тогда отчёт на экране
+    будет ровным и неверным, а это хуже, чем не показать ничего.
+    """
+
+    months = data.get("months") or []
+    shifts = [item for month in months for item in month.get("shifts") or []]
+    downtime = [item for month in months for item in month.get("downtime") or []]
+    notes = [item for month in months for item in month.get("notes") or []]
+    problems = data.get("problems") or []
+    totals = data.get("month_totals") or []
+    values = [item for shift in shifts for item in shift.get("values") or []]
+
+    dups = [item for item in shifts if item.get("dup_of")]
+    counted = [item for item in shifts if not item.get("dup_of")]
+
+    by_month = {}
+    for item in counted:
+        key = item["date"][:7]
+        box = by_month.setdefault(key, {"shifts": 0, "forming": 0.0,
+                                        "packing": 0.0, "defect": 0.0, "minutes": 0})
+        box["shifts"] += 1
+        box["forming"] += item.get("forming_fact") or 0
+        box["packing"] += item.get("packing_fact") or 0
+        box["defect"] += item.get("defect_pieces") or 0
+    for item in downtime:
+        key = item["date"][:7]
+        if key in by_month:
+            by_month[key]["minutes"] += item.get("minutes") or 0
+
+    kinds = {"расхождение": [], "метку": [], "новая графа": [], "прочее": []}
+    for item in problems:
+        text = item.get("what") or ""
+        for kind in ("расхождение", "метку", "новая графа"):
+            if kind in text:
+                kinds[kind].append(item)
+                break
+        else:
+            kinds["прочее"].append(item)
+
+    return {
+        "year": data.get("year"),
+        "sheets": [month["sheet"] for month in months],
+        "shifts": len(shifts),
+        "counted": len(counted),
+        "duplicates": [{"date": item["date"], "shift": item["shift"],
+                        "sheet": item.get("sheet"), "row": item.get("row"),
+                        "conflict": item.get("conflict")} for item in dups],
+        "downtime": len(downtime),
+        "downtime_unparsed": len([x for x in downtime if x.get("minutes") is None]),
+        "notes": len(notes),
+        "values": len(values),
+        "new_values": len([x for x in values if x.get("status") == "new"]),
+        "month_totals": len(totals),
+        "by_month": dict(sorted(by_month.items())),
+        "mismatches": kinds["расхождение"],
+        "unknown_labels": kinds["метку"],
+        "new_columns": kinds["новая графа"],
+        "other_problems": kinds["прочее"],
+    }
+
+
 def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
     """
     Сохранить прочитанный файл, заменив данные за этот год.
@@ -516,6 +583,24 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
 
     minutes = sum(int(item.get("minutes") or 0) for item in downtime)
 
+    totals = data.get("month_totals") or []
+
+    # Непрочитанное — списком со ссылкой на лист и строку, а не числом
+    # «не разобрано N». Сюда же простои, у которых время в ячейке есть,
+    # а минут из него не вышло: 51 такой на сегодня.
+    unparsed = [
+        {"sheet": item.get("sheet"), "row": item.get("row"),
+         "column": None, "header": f"простой, {item.get('section_title') or ''}".strip(", "),
+         "raw": item.get("interval"),
+         "reason": "время не разобрано: длительность это или момент — неизвестно"}
+        for item in downtime if item.get("minutes") is None
+    ]
+    unparsed += [
+        {"sheet": item.get("sheet"), "row": item.get("row"),
+         "column": None, "header": None, "raw": None, "reason": item.get("what")}
+        for item in problems
+    ]
+
     conn = get_connection()
     try:
         # Прошлая версия этого года уходит с экранов целиком, иначе
@@ -542,6 +627,28 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
 
         conn.executemany(
             """
+            INSERT INTO xls_month_totals
+                (run_id, year, month, key, title, value_num, value_text, sheet, row)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(run_id, year, item["month"], item.get("key") or "new", item.get("title"),
+              item.get("value_num"), item.get("value_text"),
+              item.get("sheet"), item.get("row")) for item in totals]
+        )
+
+        conn.executemany(
+            """
+            INSERT INTO xls_unparsed
+                (run_id, year, sheet, row, column, header, raw, reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(run_id, year, item.get("sheet"), item.get("row"), item.get("column"),
+              item.get("header"), item.get("raw"), item.get("reason"))
+             for item in unparsed]
+        )
+
+        conn.executemany(
+            """
             INSERT INTO xls_values
                 (run_id, year, date, shift, key, title,
                  value_num, value_text, unit, sheet, row)
@@ -559,14 +666,15 @@ def save_workbook(data: dict, filename: str, uploaded_by: str) -> dict:
             INSERT INTO xls_shifts
                 (run_id, year, date, shift, master,
                  forming_plan, forming_fact, packing_plan, packing_fact,
-                 defect_pieces, sheet, row)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 defect_pieces, sheet, row, dup_of, conflict)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [(run_id, year, item["date"], item["shift"], item.get("master"),
               item.get("forming_plan"), item.get("forming_fact"),
               item.get("packing_plan"), item.get("packing_fact"),
               item.get("defect_pieces"),
-              item.get("sheet"), item.get("row")) for item in shifts]
+              item.get("sheet"), item.get("row"),
+              item.get("dup_of"), item.get("conflict")) for item in shifts]
         )
 
         conn.executemany(

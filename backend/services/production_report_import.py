@@ -468,4 +468,169 @@ def read_workbook(path, year: int) -> dict:
         months.append(result)
         problems.extend(result["problems"])
 
-    return {"year": year, "months": months, "problems": problems}
+    mark_duplicates(months, problems)
+    totals = read_month_totals(wb, year, problems)
+
+    return {"year": year, "months": months, "problems": problems,
+            "month_totals": totals}
+
+
+def mark_duplicates(months: list, problems: list) -> None:
+    """
+    Одна и та же смена на двух листах.
+
+    Первая строка листа — последняя ночь прошлого месяца, и в июне
+    30-е записано дважды: строкой 63 «Июня» и строкой 3 «Июля».
+    Схлопнуть молча — значит соврать в июньской сумме и не дать это
+    заметить.
+
+    Главной считается запись с «своего» листа: дата 30.06 принадлежит
+    июню, значит июньская строка основная, июльская — повтор. Она
+    остаётся в базе с пометкой, но в суммы не идёт.
+    """
+
+    seen = {}
+    for month in months:
+        sheet = month["sheet"]
+        native = _clean(sheet).capitalize()
+        native_index = MONTHS.index(native) + 1 if native in MONTHS else None
+
+        for record in month["shifts"]:
+            key = (record["date"], record["shift"])
+            own = int(record["date"][5:7]) == native_index
+
+            if key not in seen:
+                seen[key] = (sheet, record, own)
+                continue
+
+            first_sheet, first_record, first_own = seen[key]
+
+            # Повтором помечаем ту запись, чей лист «не свой». Если обе
+            # свои или обе чужие — вторую по порядку: выбор должен быть
+            # один и тот же при каждом разборе.
+            loser = record if (first_own or not own) else first_record
+            winner_sheet = first_sheet if loser is record else sheet
+            if loser is first_record:
+                seen[key] = (sheet, record, own)
+
+            loser["dup_of"] = f"{winner_sheet}"
+            loser["conflict"] = (f"эта смена есть и на листе «{winner_sheet}» — "
+                                 f"в суммы идёт та запись")
+            problems.append({
+                "sheet": loser.get("sheet") or sheet, "row": loser.get("row"),
+                "what": f"смена {record['date']} "
+                        f"({'день' if record['shift'] == 'day' else 'ночь'}) "
+                        f"записана дважды: листы «{first_sheet}» и «{sheet}» — "
+                        f"в суммы идёт «{winner_sheet}»",
+            })
+
+
+def read_month_totals(wb, year: int, problems: list) -> list:
+    """
+    Итоги месяца — хвост листа ниже «Средних значений».
+
+    Устроен он так: подпись в одной колонке («выполнение плана»),
+    число правее, единица за числом («%», «штук», «дней»). В крайней
+    правой колонке — заметки одной ячейкой: «Стреч пленка мессерси-
+    11943». Раньше не переносилось ничего из этого.
+
+    Кладём как есть. Числа разносим по колонкам: в сентябре у одной
+    подписи их два, и какое к чему относится — вопрос к начальнику
+    производства, а не повод выбрать первое.
+
+    Строку «Средние значения» не берём: это суммы по колонкам, с ними
+    сверяется разбор смен, и как «итог месяца» они бы дублировались.
+    """
+
+    totals = []
+    for ws in wb.worksheets:
+        name = _clean(ws.title).capitalize()
+        if name not in MONTHS:
+            continue
+        month = MONTHS.index(name) + 1
+
+        start_row = None
+        for row in range(3, ws.max_row + 1):
+            if _clean(ws.cell(row, 1).value).lower().startswith("средн"):
+                start_row = row
+                break
+        if not start_row:
+            continue
+
+        for row in range(start_row + 1, ws.max_row + 1):
+            # Собираем строку целиком: ячейку за ячейкой, правее первой
+            # колонки — в ней под «Средними значениями» идёт
+            # вертикальный список скоростей печи, а не подписи.
+            # Ноль — это значение, а не пустая ячейка: «выполнение
+            # плана 0 %» значит ровно то, что написано. _clean(0) даёт
+            # пустую строку, поэтому числа проверяем отдельно.
+            cells = [(col, value)
+                     for col in range(2, ws.max_column + 1)
+                     if _is_number(value := ws.cell(row, col).value)
+                     or _clean(value)]
+            if not cells:
+                continue
+
+            label = None
+            label_col = None
+            used_as_unit = set()
+
+            for index, (col, value) in enumerate(cells):
+                if _is_number(value):
+                    if label is None:
+                        continue            # число без подписи — не итог
+                    unit = ""
+                    following = cells[index + 1] if index + 1 < len(cells) else None
+                    if following and not _is_number(following[1]) \
+                            and following[0] == col + 1 and len(_clean(following[1])) <= 12:
+                        unit = _clean(following[1])
+                        used_as_unit.add(following[0])
+                    totals.append({"year": year, "month": month, "key": "new",
+                                   "title": label, "value_num": float(value),
+                                   "unit": unit, "column": _letter(col),
+                                   "sheet": ws.title, "row": row})
+                    continue
+
+                if col in used_as_unit:
+                    continue
+
+                text = _clean(value)
+                if label is None:
+                    label, label_col = text, col
+                    continue
+
+                # Вторая подпись в строке — это заметка из крайней
+                # колонки: «Остаток сырца 1,4 НФ в 1С- 4 500». По дефису
+                # не режем, он встречается и внутри названия. Кладём
+                # целиком: человек прочтёт, система не соврёт.
+                totals.append({"year": year, "month": month, "key": "new",
+                               "title": text, "value_text": text,
+                               "column": _letter(col),
+                               "sheet": ws.title, "row": row})
+
+            # Подпись без единого числа — тоже запись: «Брак сырца 1,4НФ»
+            # стоит в файле, значит должен стоять и у нас.
+            if label is not None and not any(
+                    item["row"] == row and item["column"] == _letter(label_col)
+                    for item in totals):
+                if not any(item["row"] == row and "value_num" in item for item in totals):
+                    totals.append({"year": year, "month": month, "key": "new",
+                                   "title": label, "value_text": label,
+                                   "column": _letter(label_col),
+                                   "sheet": ws.title, "row": row})
+
+    if totals:
+        problems.append({
+            "sheet": "", "row": 0,
+            "what": f"итоги месяцев: перенесено {len(totals)} строк, "
+                    f"смысл части из них не определён — нужна привязка",
+        })
+    return totals
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _letter(col: int) -> str:
+    return openpyxl.utils.get_column_letter(col)
