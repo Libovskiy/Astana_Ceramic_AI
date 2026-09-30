@@ -316,6 +316,45 @@ def archive_run(conn, year: int) -> int:
     return moved
 
 
+def expiring_soon(days: int = ARCHIVE_KEEP_DAYS, warn: int = 2) -> list:
+    """
+    Заменённые прогоны, которым до чистки осталось `warn` дней и меньше.
+
+    Считается на лету, поэтому предупреждение нельзя «забыть
+    отправить»: пока срок не наступил, оно есть; после чистки его нет.
+    """
+
+    border = (datetime.now() - timedelta(days=days))
+    soon = (datetime.now() - timedelta(days=days - warn))
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, year, filename, shifts, archived_at FROM xls_imports "
+            "WHERE status = 'replaced' AND archived_at IS NOT NULL "
+            "AND archived_at <= ? AND archived_at > ? ORDER BY archived_at",
+            (soon.strftime("%Y-%m-%d %H:%M:%S"), border.strftime("%Y-%m-%d %H:%M:%S"))
+        ).fetchall()
+    finally:
+        conn.close()
+
+    out = []
+    for row in rows:
+        try:
+            gone = datetime.strptime(row["archived_at"], "%Y-%m-%d %H:%M:%S") \
+                   + timedelta(days=days)
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "id": row["id"], "year": row["year"],
+            "filename": row["filename"] or "—", "shifts": row["shifts"] or 0,
+            "archived_at": row["archived_at"],
+            "gone": gone.strftime("%d.%m.%Y"),
+            "left": max(0, (gone.date() - datetime.now().date()).days),
+        })
+    return out
+
+
 def purge_archive(days: int = ARCHIVE_KEEP_DAYS, dry_run: bool = False) -> dict:
     """
     Убрать из архива прогоны, заменённые больше `days` дней назад.

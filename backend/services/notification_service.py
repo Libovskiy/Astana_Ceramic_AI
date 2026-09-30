@@ -120,6 +120,77 @@ def _report_import_notifications(user):
     }]
 
 
+# Кому говорить про архив отчёта: тем, кто решает, грузить ли файл
+# заново. Механик с этим ничего сделать не может.
+ARCHIVE_ROLES = ("director", "admin", "chief_engineer", "production_chief")
+
+# За сколько дней предупреждать. Владелец просил за два (30.09.2026):
+# «хочу знать заранее, а не постфактум».
+ARCHIVE_WARN_DAYS = 2
+
+
+def _xls_archive_notifications(user):
+    """
+    Заменённая загрузка отчёта скоро уйдёт из архива.
+
+    Архив держит прошлый прогон 20 дней — этого хватает, чтобы
+    откатиться, если залили не тот файл. Но срок тихий: он наступает
+    ночью, и узнать о нём постфактум нельзя никак.
+
+    Поэтому за два дня до чистки говорим вслух. Уведомление считается
+    на лету, а не рассылается по расписанию: пока срок не наступил,
+    оно висит, после чистки исчезает само. Забыть его отправить
+    нельзя, потому что отправлять нечего.
+    """
+    if user.get("role") not in ARCHIVE_ROLES:
+        return []
+
+    from datetime import datetime, timedelta
+
+    from backend.services.production_import_service import (
+        ARCHIVE_KEEP_DAYS, get_connection,
+    )
+
+    soon = (datetime.now() - timedelta(days=ARCHIVE_KEEP_DAYS - ARCHIVE_WARN_DAYS)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+    border = (datetime.now() - timedelta(days=ARCHIVE_KEEP_DAYS)
+              ).strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, year, filename, shifts, archived_at FROM xls_imports "
+            "WHERE status = 'replaced' AND archived_at IS NOT NULL "
+            "AND archived_at <= ? AND archived_at > ? ORDER BY archived_at",
+            (soon, border)
+        ).fetchall()
+    except Exception:
+        return []                      # схема старее — молчим, а не падаем
+    finally:
+        conn.close()
+
+    out = []
+    for row in rows:
+        try:
+            gone = (datetime.strptime(row["archived_at"], "%Y-%m-%d %H:%M:%S")
+                    + timedelta(days=ARCHIVE_KEEP_DAYS))
+        except (TypeError, ValueError):
+            continue
+        left = max(0, (gone.date() - datetime.now().date()).days)
+        out.append({
+            "type": "xls_archive",
+            "severity": "warning",
+            "icon": "reports",
+            "title": f"Откат загрузки отчёта пропадёт через {left} дн.",
+            "subtitle": f"«{row['filename'] or '—'}», {row['shifts'] or 0} смен, "
+                        f"заменена {str(row['archived_at'])[:10]}. "
+                        f"Архив чистится {gone.strftime('%d.%m')}. "
+                        "Если откат не нужен — ничего делать не надо.",
+            "url": "/production",
+        })
+    return out
+
+
 # Кому напоминать про обход — тем, кто его проводит (ROUND_ROLES в
 # checklist_routes).
 ROUND_ROLES = ("director", "chief_engineer", "production_chief", "shift_supervisor",
@@ -355,6 +426,7 @@ def get_notifications(user):
 
     try:
         notifications.extend(_report_import_notifications(user))
+        notifications.extend(_xls_archive_notifications(user))
     except Exception as error:
         print(f"[notification_service] Отчёт из Экселя пропущен: {error}")
 

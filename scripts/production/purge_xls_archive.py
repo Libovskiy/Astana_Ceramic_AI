@@ -65,6 +65,15 @@ def main() -> int:
     if backup is not None:
         print(f"  копия базы за сегодня: {backup.name}")
 
+    # Предупреждение за два дня — в лог. То же самое видно в
+    # колокольчике на сайте (notification_service), но лог читают
+    # постфактум, а колокольчик — вовремя. Пусть будет и там, и там.
+    soon = store.expiring_soon(days=days)
+    for item in soon:
+        print(f"  ВНИМАНИЕ: загрузка {item['id']} «{item['filename']}» "
+              f"({item['shifts']} смен) уйдёт из архива {item['gone']} — "
+              f"осталось {item['left']} дн.")
+
     report = store.purge_archive(days=days, dry_run=dry_run)
 
     if not report["runs"]:
