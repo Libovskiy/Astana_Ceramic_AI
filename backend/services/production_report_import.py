@@ -484,9 +484,13 @@ def mark_duplicates(months: list, problems: list) -> None:
     Схлопнуть молча — значит соврать в июньской сумме и не дать это
     заметить.
 
-    Главной считается запись с «своего» листа: дата 30.06 принадлежит
-    июню, значит июньская строка основная, июльская — повтор. Она
-    остаётся в базе с пометкой, но в суммы не идёт.
+    Главной считается ЗАПОЛНЕННАЯ запись, и только при равенстве — та,
+    что со «своего» листа (дата 30.06 принадлежит июню). Порядок
+    именно такой: в живом файле июньская строка 63 пустая, а смену
+    занесли строкой 3 «Июля» — правило «своего листа» в одиночку
+    выбросило бы из сумм восемь вагонеток формовки и упаковки.
+
+    Повтор остаётся в базе с пометкой, но в суммы не идёт.
     """
 
     seen = {}
@@ -505,10 +509,17 @@ def mark_duplicates(months: list, problems: list) -> None:
 
             first_sheet, first_record, first_own = seen[key]
 
-            # Повтором помечаем ту запись, чей лист «не свой». Если обе
-            # свои или обе чужие — вторую по порядку: выбор должен быть
-            # один и тот же при каждом разборе.
-            loser = record if (first_own or not own) else first_record
+            first_filled = _has_data(first_record)
+            filled = _has_data(record)
+
+            # Пустая строка проигрывает заполненной всегда: она шаблон,
+            # а не смена. При равенстве решает «свой» лист, при полном
+            # равенстве — первая по порядку, чтобы разбор одного и того
+            # же файла давал один и тот же ответ.
+            if first_filled != filled:
+                loser = record if first_filled else first_record
+            else:
+                loser = record if (first_own or not own) else first_record
             winner_sheet = first_sheet if loser is record else sheet
             if loser is first_record:
                 seen[key] = (sheet, record, own)
@@ -523,6 +534,15 @@ def mark_duplicates(months: list, problems: list) -> None:
                         f"записана дважды: листы «{first_sheet}» и «{sheet}» — "
                         f"в суммы идёт «{winner_sheet}»",
             })
+
+
+def _has_data(record: dict) -> bool:
+    """Есть ли в смене хоть одно число. Пустая строка — заготовка."""
+    for field in ("forming_plan", "forming_fact", "packing_plan",
+                  "packing_fact", "defect_pieces"):
+        if record.get(field) is not None:
+            return True
+    return bool(record.get("products") or record.get("values"))
 
 
 def read_month_totals(wb, year: int, problems: list) -> list:

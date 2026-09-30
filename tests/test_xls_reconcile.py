@@ -89,7 +89,7 @@ def sheet_for(book, title, rows, tail=None, first=None):
 def build(path):
     book = openpyxl.Workbook()
     book.remove(book.active)
-    # Июнь: 29 и 30 числа. 30 ночь — «своя».
+    # Июнь: 30 ночь — «своя» и заполненная.
     sheet_for(book, "Июнь", [("1 день", 100), ("30 день", 200), ("30 ночь", 300)],
               tail=[("выполнение плана", 0, "%"), ("Остаток сырца 1,4 НФ в 1С-", None, None)])
     # Июль: первой строкой та же «30 ночь» июня — дубль.
@@ -136,6 +136,56 @@ conn.close()
 # из файла — потеряна.
 check("в базе обе записи", kept == 2, kept)
 check("помечена ровно одна", marked == 1, marked)
+
+# ─────────────────────────────────────────────────────────
+print("\n1б. Пустая строка проигрывает заполненной")
+
+# В живом файле июньская строка 30.06 пустая, а смену занесли строкой
+# «Июля». Правило «главная — со своего листа» в одиночку выбросило бы
+# из июньской суммы восемь вагонеток: на боевом июнь даёт 448, а такой
+# разбор давал 440. Проверка именно про это.
+empty = openpyxl.Workbook()
+empty.remove(empty.active)
+june = empty.create_sheet("Июнь")
+for index, (top, sub) in enumerate(HEAD, start=1):
+    june.cell(1, index, top)
+    if sub:
+        june.cell(2, index, sub)
+june.cell(3, 1, "1 день");  june.cell(3, 3, "Иванов")
+june.cell(3, 5, 100);       june.cell(3, 14, 100)
+june.cell(4, 1, "30 день"); june.cell(4, 3, "Иванов")
+june.cell(4, 5, 200);       june.cell(4, 14, 200)
+june.cell(5, 1, "30 ночь")                    # строка есть, чисел нет
+june.cell(5, 2, "30Н")
+# В живом файле в такой строке выпуск записан текстом — «114.704».
+# Числом он не становится, но строку «непустой» делает.
+june.cell(5, 14, "114.704")
+june.cell(6, 1, "Средние значения"); june.cell(6, 14, 300)
+sheet_for(empty, "Июль", [("1 день", 400)], first=("30 ночь", 300))
+empty.save(folder / "empty_twin.xlsx")
+
+twin = read_workbook(str(folder / "empty_twin.xlsx"), YEAR)
+pair = [item for month in twin["months"] for item in month["shifts"]
+        if item["date"].endswith("-06-30") and item["shift"] == "night"]
+kept_row = [item for item in pair if not item.get("dup_of")]
+check("обе записи на месте", len(pair) == 2, pair)
+check("в суммы идёт заполненная",
+      len(kept_row) == 1 and kept_row[0].get("forming_fact") == 300, kept_row)
+
+twin_report = reconciliation(twin)
+june_box = twin_report["by_month"].get(f"{YEAR}-06") or {}
+check("июньская сумма не потеряла смену",
+      june_box.get("forming") == 600.0, june_box)
+
+# Парная сторона: когда заполнены обе, решает «свой» лист — иначе
+# правило «берём заполненную» стало бы «берём последнюю попавшуюся».
+both = [item for item in pair if item.get("dup_of")]
+check("незаполненная помечена повтором",
+      len(both) == 1 and both[0].get("forming_fact") is None, both)
+check("а при двух заполненных главной остаётся своя",
+      (report["duplicates"][0]["sheet"] or "") != "Июнь"
+      if report["duplicates"] else False,
+      report["duplicates"])
 
 # ─────────────────────────────────────────────────────────
 print("\n2. Простой без минут — в «не разобрано», а не в ноль")
