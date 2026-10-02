@@ -151,10 +151,49 @@ class Sandbox:
         self.equipment_id, self.equipment_name = eq[0]["id"], eq[0]["name"]
         self.other_equipment_id = eq[1]["id"]
 
+        # Отсечка журнала. Копия боевой базы приходит не пустой: смены
+        # на заводе открывают каждый день, нормы правят, станки заводят.
+        # Проверка, которая считает строки «по всей таблице», зелёная
+        # только на чистой базе разработчика — на боевой копии она
+        # падает от чужой работы. Трижды за две недели ловили это
+        # руками (сменный отчёт, регламенты, нормы технолога), поэтому
+        # запоминаем номер последней строки ДО проверок, а смотрим
+        # только на то, что появилось после.
+        self.journal_base = self.db().execute(
+            "SELECT COALESCE(MAX(id), 0) FROM audit_log"
+        ).fetchone()[0]
+
     def db(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def journal(self, action=None, newest_first=True):
+        """
+        Записи журнала, появившиеся ПОСЛЕ старта песочницы.
+
+        Это и есть «что сделала проверка»: чужие строки из копии боевой
+        базы сюда не попадают. Отбирать по имени автора нельзя — часть
+        записей подписана логином, часть полным именем человека.
+
+            sb.journal("shift_report_opened")   # свои строки по действию
+            sb.journal()                        # всё, что натворила проверка
+        """
+        where = "id > ?"
+        args = [self.journal_base]
+
+        if action is not None:
+            where += " AND action = ?"
+            args.append(action)
+
+        order = "DESC" if newest_first else "ASC"
+
+        conn = self.db()
+        rows = conn.execute(
+            f"SELECT * FROM audit_log WHERE {where} ORDER BY id {order}", args
+        ).fetchall()
+        conn.close()
+        return rows
 
     def user(self, role, equipment=None, login=True, active=True, brigade=None, username=None):
         from backend.services.auth_service import create_user, assign_equipment, get_user_by_username

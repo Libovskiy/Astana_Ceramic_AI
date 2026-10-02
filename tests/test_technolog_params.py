@@ -28,22 +28,11 @@ worker = sb.user("worker")
 mech = sb.user("mechanic")
 
 
-# В копии боевой базы журнал не пуст: нормы правят и на заводе (гл.
-# инженер менял «Длину кирпича-сырца» 02.10.2026). Считать строки по
-# всей таблице нельзя — проверка падала бы от чужой работы. Берём
-# только то, что появилось после её начала.
-conn = sb.db()
-JOURNAL_BASE = conn.execute("SELECT COALESCE(MAX(id), 0) FROM audit_log").fetchone()[0]
-conn.close()
-
-
+# Только свои строки: нормы правят и на заводе (гл. инженер менял
+# «Длину кирпича-сырца» 02.10.2026), а sb.journal смотрит на то, что
+# появилось после старта проверки.
 def journal(action):
-    conn = sb.db()
-    rows = conn.execute(
-        "SELECT * FROM audit_log WHERE action = ? AND id > ? ORDER BY id DESC",
-        (action, JOURNAL_BASE)).fetchall()
-    conn.close()
-    return rows
+    return sb.journal(action)
 
 
 # ── Стартовый набор: не всякому вошедшему ───────────────────────────

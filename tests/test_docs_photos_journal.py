@@ -34,12 +34,9 @@ def count(action):
     return len(journal(action))
 
 
+# Своё, а не всё подряд: в копии боевой базы журнал уже не пуст.
 def journal(action):
-    conn = sb.db()
-    rows = conn.execute("SELECT * FROM audit_log WHERE action=? ORDER BY id DESC",
-                        (action,)).fetchall()
-    conn.close()
-    return rows
+    return sb.journal(action)
 
 
 # ── Документ станка: загрузка ───────────────────────────────────────
