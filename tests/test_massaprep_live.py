@@ -1,0 +1,212 @@
+"""
+3D-карта массаподготовки: показания с панели ложатся на узлы верно.
+
+Привязаны четыре регистра — те, что назвал владелец 02.10.2026:
+загрузка PL024-1/2 это бункеры, частоты питателей — песок и глина.
+Проверяются две вещи, и обе обязательны:
+
+  «показывает по правде» — узел красится по тем же порогам, что и
+  «Главная»: загрузка ниже 50 % критична, ниже 80 % — внимание,
+  нулевая частота это «стоит», а не поломка и не «нет данных»;
+
+  парная проверка «не выдумывает» — узлы без регистра остаются серыми
+  с надписью «регистр не назначен», а когда сбор стоит, с карты
+  пропадают ВСЕ числа. Без этой пары первая проверка зелёная и на
+  карте, которая красит всё зелёным всегда.
+
+Браузер настоящий: сцену строит Three.js, и состояние узлов видно
+только после отрисовки. Сервер не нужен — страница отдаётся файловым
+сервером, а три ответа панели подменяются. Боевые данные не
+затрагиваются вовсе.
+
+Запуск (из корня проекта): python tests/test_massaprep_live.py
+"""
+
+import http.server
+import json
+import socketserver
+import sys
+import threading
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PAGE = ROOT / "frontend" / "templates" / "massaprep_map.html"
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    print("ПРОПУЩЕНО: playwright не установлен, браузерная проверка не шла")
+    sys.exit(0)
+
+
+def three_js():
+    local = ROOT / "theme" / "three.min.js"
+    if local.exists():
+        return local.read_text(encoding="utf-8")
+    try:
+        import urllib.request
+        src = urllib.request.urlopen(
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+            timeout=20).read().decode("utf-8")
+    except Exception:
+        return None
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(src, encoding="utf-8")
+    return src
+
+
+LIBRARY = three_js()
+if not LIBRARY:
+    print("ПРОПУЩЕНО: нет theme/three.min.js и нет интернета — сцену не построить")
+    sys.exit(0)
+
+
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(PAGE.parent), **kw)
+
+    def log_message(self, *a):
+        pass
+
+
+httpd = socketserver.TCPServer(("127.0.0.1", 0), Quiet)
+threading.Thread(target=httpd.serve_forever, daemon=True).start()
+URL = f"http://127.0.0.1:{httpd.server_address[1]}/{PAGE.name}"
+
+passed, failed = [], []
+
+
+def check(name, condition, detail=""):
+    if condition:
+        passed.append(name)
+        print(f"  OK   {name}")
+    else:
+        failed.append(f"{name}: {detail}")
+        print(f"  СБОЙ {name}  {str(detail)[:300]}")
+
+
+NOW = "2026-10-02T13:40:00"
+
+REGISTERS = {"success": True, "registers": [
+    {"register": "pl024_1_загрузка_проц", "title": "Загрузка бункера 1 (PL024-1)",
+     "short_title": "Бункер 1", "unit": "%", "state": "live"},
+    {"register": "pl024_2_загрузка_проц", "title": "Загрузка бункера 2 (PL024-2)",
+     "short_title": "Бункер 2", "unit": "%", "state": "live"},
+    {"register": "питатель_1_гц", "title": "Частота питателя №1 (песок)",
+     "short_title": "Питатель №1 — Песок", "unit": "Гц", "state": "live"},
+    {"register": "питатель_2_гц", "title": "Частота питателя №2 (глина)",
+     "short_title": "Питатель №2 — Глина", "unit": "Гц", "state": "live"},
+    {"register": "конвейер_1_гц", "title": "Частота конвейера №1",
+     "short_title": "Конв. 1", "unit": "Гц", "state": "live"},
+    {"register": "авария_флаг", "title": "Сигнал панели (регистр 1658)",
+     "short_title": "Сигнал панели", "unit": "", "state": "live"},
+]}
+
+LIVE = {
+    "pl024_1_загрузка_проц": {"value": "82.4", "at": NOW},   # норма
+    "pl024_2_загрузка_проц": {"value": "47.1", "at": NOW},   # критично
+    "питатель_1_гц": {"value": "38.2", "at": NOW},           # работает
+    "питатель_2_гц": {"value": "0", "at": NOW},              # стоит
+    "конвейер_1_гц": {"value": "49.5", "at": NOW},
+    "авария_флаг": {"value": "0", "at": NOW},
+}
+
+
+SENSOR_NAMES = (ROOT / "frontend" / "static" / "sensor-names.js").read_text(encoding="utf-8")
+
+
+def open_map(browser, health, live=LIVE):
+    page = browser.new_page()
+    # Справочник имён — настоящий файл системы: проверяем тот же путь,
+    # которым страница ходит на сервере.
+    page.route("**/static/sensor-names.js", lambda route: route.fulfill(
+        status=200, content_type="application/javascript", body=SENSOR_NAMES))
+    page.route("**/three*.js", lambda route: route.fulfill(
+        status=200, content_type="application/javascript", body=LIBRARY))
+    page.route("**/api/sensor-registers", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(REGISTERS)))
+    page.route("**/api/sensors/health", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(health)))
+    page.route("**/api/sensors/live", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(live)))
+    page.goto(URL)
+    page.wait_for_selector("body[data-live-ready='1']", timeout=20000)
+    return page
+
+
+def states(page):
+    return page.evaluate(
+        """() => Object.fromEntries((window.acaiMapStations || []).map(s =>
+             [s.name, {state: s.state, status: s.statusText,
+                       chip: s.label.textContent, bound: !!s.register}]))""")
+
+
+try:
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch()
+        except Exception as exc:
+            print(f"ПРОПУЩЕНО: Chromium не запускается ({str(exc)[:120]})")
+            sys.exit(0)
+
+        # ── 1. сбор идёт: показания ложатся на узлы ──────────────
+        page = open_map(browser, {"ok": True, "state": "live", "last_data_at": NOW})
+        got = states(page)
+
+        check("узлов на схеме десять", len(got) == 10, sorted(got))
+        check("привязаны ровно четыре",
+              sum(1 for v in got.values() if v["bound"]) == 4,
+              [k for k, v in got.items() if v["bound"]])
+
+        check("бункер 82,4 % — норма", got["Бункер 1"]["state"] == "ok", got.get("Бункер 1"))
+        check("бункер 47,1 % — критично", got["Бункер 2"]["state"] == "crit", got.get("Бункер 2"))
+        check("питатель 38,2 Гц — работает",
+              got["Питатель №1 — Песок"]["state"] == "ok", got.get("Питатель №1 — Песок"))
+        check("нулевая частота — «стоит», а не поломка",
+              got["Питатель №2 — Глина"]["state"] == "idle"
+              and "стоит" in got["Питатель №2 — Глина"]["chip"].lower(),
+              got.get("Питатель №2 — Глина"))
+
+        check("число видно прямо на подписи",
+              "82,4" in got["Бункер 1"]["chip"], got["Бункер 1"]["chip"])
+        check("в статусе сказано, когда снято",
+              "снято в" in got["Бункер 1"]["status"], got["Бункер 1"]["status"])
+
+        # Парная: узлы без регистра не притворяются работающими.
+        for name in ("Дробилка ДТЕ117", "PL 601", "Камневыделитель",
+                     "СМК-102", "УСМ-40", "СМК 126"):
+            check(f"{name}: регистра нет — и цифр нет",
+                  got[name]["state"] == "nodata" and not got[name]["bound"]
+                  and got[name]["chip"].strip() == name
+                  and "не назначен" in got[name]["status"],
+                  got[name])
+
+        strip = page.locator("#liveStrip").inner_text()
+        check("конвейеры переехали в карту", "Конв. 1" in strip and "49,5" in strip, strip)
+        check("сигнал панели тоже здесь", "Сигнал панели" in strip, strip)
+        page.close()
+
+        # ── 2. парная: сбор стоит — на карте ни одного числа ─────
+        page = open_map(browser, {"ok": False, "state": "collector",
+                                  "since": NOW, "last_data_at": NOW})
+        got = states(page)
+        check("сбор стоит: все узлы «нет данных»",
+              all(v["state"] == "nodata" for v in got.values()),
+              {k: v["state"] for k, v in got.items() if v["state"] != "nodata"})
+        # В имени узла цифра есть и своя («Бункер 1»), поэтому смотрим на
+        # приписку с показанием: её быть не должно.
+        check("сбор стоит: показаний на подписях нет",
+              all(v["chip"].strip() == name for name, v in got.items()),
+              {n: v["chip"] for n, v in got.items() if v["chip"].strip() != n})
+        check("сбор стоит: сказано, с какого времени",
+              "13:40" in page.locator("#liveStrip").inner_text(),
+              page.locator("#liveStrip").inner_text())
+        page.close()
+        browser.close()
+finally:
+    httpd.shutdown()
+
+print(f"\nПоказания на карте: проверок {len(passed) + len(failed)}, сбоев {len(failed)}")
+for item in failed:
+    print("  -", item[:400])
+sys.exit(1 if failed else 0)

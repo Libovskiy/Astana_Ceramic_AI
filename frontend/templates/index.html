@@ -571,10 +571,13 @@ function renderSensors(lv){
   // загрузки питателей тоже — панель отдаёт их только по одному, и
   // рядом с частотами они путали. Поэтому бункеры — именно PL024, а
   // не «всё, что в процентах».
+  // Решение владельца 02.10.2026: на «Главной» остаются только бункеры
+  // (PL024-1/2) и два питателя — песок и глина. Конвейеры и сигнал
+  // панели переехали в развёрнутую 3D-карту: на сводке они занимали
+  // вторую строку, а решения по ним не принимают.
   const known = Object.keys(lv || {});
   const BUNKERS = known.filter(k => k.startsWith('pl024') && k.endsWith('загрузка_проц'));
   const FEEDERS = known.filter(k => k.startsWith('питатель_') && k.endsWith('_гц'));
-  const BELTS   = known.filter(k => k.startsWith('конвейер_') && k.endsWith('_гц'));
   const LABELS  = Object.fromEntries(known.map(k => [k, ACAISensors.short(k)]));
   const item=k=>{
     const v=parseFloat(lv[k].value);
@@ -618,9 +621,8 @@ function renderSensors(lv){
 
   const line = keys => keys.filter(k => lv[k]).map(item).join('<div class="ss-sep"></div>');
 
-  const top = [line(BUNKERS), line(FEEDERS), lv['авария_флаг'] ? item('авария_флаг') : '']
+  const top = [line(BUNKERS), line(FEEDERS)]
     .filter(Boolean).join('<div class="ss-sep"></div>');
-  const belts = line(BELTS);
 
   // Время СНЯТИЯ данных, а не текущее: если сбор отстал на минуту,
   // человек должен видеть минуту, а не «сейчас».
@@ -632,8 +634,7 @@ function renderSensors(lv){
        <span class="ss-group">Бункеры и питатели</span>
        <div class="ss-sep"></div>${top}
        <span style="margin-left:auto;font-size:10px;color:var(--text-dim);font-family:var(--mono)">${now}</span>
-     </div>
-     ${belts ? `<div class="ss-row"><span class="ss-group">Конвейеры</span><div class="ss-sep"></div>${belts}</div>` : ''}`;
+     </div>`;
 }
 
 // ── 3D-КАРТА МАССАПОДГОТОВКИ ──────────────────────────────

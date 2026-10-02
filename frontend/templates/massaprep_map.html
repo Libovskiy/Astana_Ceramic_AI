@@ -35,6 +35,7 @@
     document.documentElement.style.colorScheme = theme;
   })();
 </script>
+<script src="/static/sensor-names.js"></script>
 <style>
 :root{
   --bg:#EEF1F6; --panel:#FFFFFF; --border:#DCE2EE; --text:#14213D; --muted:#64748B;
@@ -91,6 +92,13 @@ footer{flex:none;padding:10px 20px 16px;display:flex;flex-wrap:wrap;gap:16px;ali
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 footer .note{font-size:12px;color:var(--muted);max-width:640px;flex:1 1 260px}
+/* Конвейеры и сигнал панели живут здесь: с «Главной» они убраны по
+   решению владельца 02.10.2026, там остались бункеры и питатели. */
+.liveStrip{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+  font-size:12px;color:var(--muted)}
+.liveStrip b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.liveStrip .group{font-weight:600;color:var(--text)}
+.liveStrip .warnText{color:var(--orange)}
 @media (max-width:600px){
   header{padding:10px 14px 6px}
   header p{font-size:12px}
@@ -108,7 +116,7 @@ footer .note{font-size:12px;color:var(--muted);max-width:640px;flex:1 1 260px}
 <body>
 <div id="app">
   <header>
-    <p class="clamp">Поток по заводской схеме: питатель песка и питатель глины выдают шихту на конвейер, она идёт вниз через ДТЕ-117 и Дезинтегратор PL 601, поворачивает и проходит Камневыделитель → СМК-102 → УСМ-40 → СМК 126, а дальше конвейер расходится на Бункер 1 и Бункер 2. Схема потока, не физический план цеха — реальных расстояний у меня нет. Тащите мышью или пальцем, чтобы повернуть; колесо или щипок — приблизить; нажмите на узел — внизу откроется карточка с его статусом.</p>
+    <p class="clamp">Линия массаподготовки: питатели → дробилки и мельницы → бункеры. Тащите мышью или пальцем — повернуть, колесо или щипок — зум, клик по узлу — статус внизу.</p>
   </header>
   <div id="stage">
     <canvas id="c" aria-label="3D карта линии массаподготовки"></canvas>
@@ -144,13 +152,15 @@ footer .note{font-size:12px;color:var(--muted);max-width:640px;flex:1 1 260px}
     </div>
   </div>
   <footer>
+    <div class="liveStrip" id="liveStrip"></div>
     <div class="legend">
       <span><i class="dot" style="background:var(--green)"></i>Норма</span>
       <span><i class="dot" style="background:var(--orange)"></i>Внимание</span>
       <span><i class="dot" style="background:var(--red)"></i>Критично</span>
+      <span><i class="dot" style="background:var(--accent)"></i>Стоит</span>
       <span><i class="dot" style="background:var(--grey)"></i>Нет данных</span>
     </div>
-    <div class="note clamp">Порядок потока: питатель песка / глины → ДТЕ-117 → Дезинтегратор PL 601 → Камневыделитель → СМК-102 → УСМ-40 → СМК 126 → Бункер 1 / Бункер 2. В боевой версии узлы подсвечиваются по настоящим показаниям из sensor_registers, а станки без пунктира станут сплошными, как только главный инженер привяжет их регистры.</div>
+    <div class="note clamp">Серые узлы — регистр датчика ещё не привязан. Появятся живые показания, как только главный инженер подключит их в sensor_registers.</div>
   </footer>
 </div>
 <script>
@@ -216,7 +226,8 @@ function startMap(){
   grid.position.set(-12.5, 0, -4);
   scene.add(grid);
 
-  var statusColor = {ok:'#15803D', warn:'#B45309', crit:'#B91C1C', nodata:'#94A3B8'};
+  var statusColor = {ok:'#15803D', warn:'#B45309', crit:'#B91C1C',
+                   idle:'#2F5BE0', nodata:'#94A3B8'};
 
   var labelsLayer = document.createElement('div');
   labelsLayer.style.position = 'absolute';
@@ -233,10 +244,11 @@ function startMap(){
     el.innerHTML = html;
     labelsLayer.appendChild(el);
     trackedLabels.push({pos: worldPos, el: el});
+    return el;
   }
 
   // --- станция: цветной индикатор + компактная подпись + невидимый хитбокс для клика ---
-  var pickables = [];
+  var pickables = [], stations = [];
   function addStation(opts){
     // opts: {x,y,z, name, state, statusText, note, footprint:{w,h,d}, footprintY, pending}
     var color = statusColor[opts.state] || statusColor.nodata;
@@ -247,8 +259,10 @@ function startMap(){
     opts.puck = puck;
     opts.puckBaseY = opts.y;
 
-    addLabel(new THREE.Vector3(opts.x, opts.y+0.34, opts.z),
+    opts.label = addLabel(new THREE.Vector3(opts.x, opts.y+0.34, opts.z),
       '<div class="chip'+(opts.pending?' pending':'')+'">'+opts.name+'</div>');
+    opts.baseNote = opts.note;
+    stations.push(opts);
 
     var fp = opts.footprint || {w:2.2,h:2.2,d:2.2};
     var hit = new THREE.Mesh(new THREE.BoxGeometry(fp.w, fp.h, fp.d), new THREE.MeshBasicMaterial({visible:false}));
@@ -596,17 +610,19 @@ function startMap(){
 
   // --- два питателя на входе ---
   var feeders = [
-    {name:'Питатель №1 — Песок', x:-1.5, val:'[XX,X %]', sub:'[XX,X Гц]', body:'#1E8A54', rim:'#146140'},
-    {name:'Питатель №2 — Глина', x:1.5,  val:'[XX,X %]', sub:'[XX,X Гц]', body:'#D97706', rim:'#9A530A'}
+    {name:'Питатель №1 — Песок', x:-1.5, body:'#1E8A54', rim:'#146140', reg:'питатель_1_гц',
+      desc:'Дозирует песок на приёмный конвейер — первый компонент шихты.'},
+    {name:'Питатель №2 — Глина', x:1.5,  body:'#D97706', rim:'#9A530A', reg:'питатель_2_гц',
+      desc:'Дозирует глину вторым компонентом в ту же шихту — пропорцию задаёт частота привода.'}
   ];
   var feederZ = -11, mergeZ = -8.5;
   feeders.forEach(function(f){
     box(0.5, 0.3, mergeZ - feederZ, '#434B57', f.x, 0.15, (feederZ + mergeZ)/2, {roughness:0.55, metalness:0.3});
     buildFeederModel(f.x, feederZ, f.body, f.rim);
     addStation({
-      x:f.x, y:1.95, z:feederZ, name:f.name, state:'nodata',
+      x:f.x, y:1.95, z:feederZ, name:f.name, state:'nodata', register:f.reg,
       statusText:'Нет данных · регистр не назначен',
-      note:'Заглушка: '+f.val+', '+f.sub+' — это макет формата, не текущее значение.',
+      note:f.desc,
       footprint:{w:2.4,h:2.6,d:2.4}, footprintY:1.1
     });
   });
@@ -624,7 +640,7 @@ function startMap(){
       addStation({
         x:0, y:1.95, z:s.z, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Первая дробилка линии — дробит крупные куски сырья перед дальнейшей переработкой. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:3.2,h:1.8,d:1.6}, footprintY:0.85
       });
     } else if(s.name === 'PL 601'){
@@ -632,7 +648,7 @@ function startMap(){
       addStation({
         x:0, y:top2+1.0, z:s.z, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Дезинтегратор — измельчает массу после ДТЕ-117 до более мелкой фракции. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:2.0,h:2.4,d:2.0}, footprintY:1.2
       });
     }
@@ -658,7 +674,7 @@ function startMap(){
       addStation({
         x:s.x, y:kvTop+0.85, z:turnZ, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Отделяет камни и твёрдые включения от массы перед помолом. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:2.0,h:1.8,d:2.0}, footprintY:0.9
       });
     } else if(s.name === 'СМК-102'){
@@ -666,7 +682,7 @@ function startMap(){
       addStation({
         x:s.x, y:smkTop+0.65, z:turnZ, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Измельчает и перемешивает массу дальше по линии. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:2.0,h:2.2,d:2.0}, footprintY:1.1
       });
     } else if(s.name === 'УСМ-40'){
@@ -674,7 +690,7 @@ function startMap(){
       addStation({
         x:s.x, y:usmTop+0.95, z:turnZ, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Домалывает массу барабаном до нужной тонкости помола. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:2.6,h:2.2,d:2.2}, footprintY:1.1
       });
     } else if(s.name === 'СМК 126'){
@@ -682,7 +698,7 @@ function startMap(){
       addStation({
         x:s.x, y:1.5, z:turnZ, name:s.name, state:'nodata',
         statusText:'Нет данных · регистр не назначен',
-        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        note:'Финально перемешивает массу лопастным валом перед подачей в бункеры. Появится, когда главный инженер привяжет регистр.',
         footprint:{w:2.2,h:1.6,d:1.2}, footprintY:0.8
       });
     } else {
@@ -706,17 +722,17 @@ function startMap(){
   box(Math.abs(mergeX - riseX) - 0.9, 0.3, 0.6, '#434B57', (riseX + mergeX)/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
 
   var bunkers = [
-    {name:'Бункер 1', x:mergeX - 2, z:turnZ - 2.5, val:'[XX,X %]'},
-    {name:'Бункер 2', x:mergeX - 2, z:turnZ + 2.5, val:'[XX,X %]'}
+    {name:'Бункер 1', x:mergeX - 2, z:turnZ - 2.5, reg:'pl024_1_загрузка_проц'},
+    {name:'Бункер 2', x:mergeX - 2, z:turnZ + 2.5, reg:'pl024_2_загрузка_проц'}
   ];
   bunkers.forEach(function(b){
     box(Math.abs(b.x - mergeX), 0.3, 0.6, '#434B57', (mergeX + b.x)/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
     box(0.6, 0.3, Math.abs(b.z - turnZ) - 1.1, '#434B57', b.x, 0.15, (turnZ + b.z)/2, {roughness:0.55, metalness:0.3});
     var bTop = buildBunker(b.x, b.z);
     addStation({
-      x:b.x, y:bTop+0.35, z:b.z, name:b.name, state:'nodata',
+      x:b.x, y:bTop+0.35, z:b.z, name:b.name, state:'nodata', register:b.reg,
       statusText:'Нет данных · регистр не назначен',
-      note:'Заглушка: '+b.val+' — это макет формата, не текущее значение.',
+      note:'Накопительный бункер готовой массы — отсюда она уходит на формовку.',
       footprint:{w:2.0,h:3.6,d:2.0}, footprintY:1.8
     });
   });
@@ -901,6 +917,131 @@ function startMap(){
   animate();
 
   document.getElementById('loadNote').hidden = true;
+
+  // ── Живые показания с панели WebHMI ───────────────────────────
+  // Привязаны четыре регистра — те, что назвал владелец 02.10.2026:
+  // загрузка PL024-1/2 это бункеры, частоты питателей — песок и глина.
+  // Остальные узлы остаются серыми и честно говорят «регистр не
+  // назначен»: привязать неверно хуже, чем не привязать.
+  //
+  // Имена берём из справочника регистров (sensor_registers), а не
+  // отсюда: иначе они разъедутся с «Главной», «Аналитикой» и
+  // «Отчётами», как это уже было.
+  var liveStrip = document.getElementById('liveStrip');
+
+  function stateFor(key, raw){
+    var shown = ACAISensors.value(key, raw);
+    var number = parseFloat(raw);
+    if (shown.kind === 'percent') {
+      // Вне 0–100 % — врёт датчик. Красить такое зелёным нельзя.
+      if (shown.bogus) return {state:'nodata', chip: shown.text,
+                               text: shown.text + ' — значение вне 0–100 %, датчик врёт'};
+      if (number < 50) return {state:'crit', chip: shown.text, text: shown.text};
+      if (number < 80) return {state:'warn', chip: shown.text, text: shown.text};
+      return {state:'ok', chip: shown.text, text: shown.text};
+    }
+    // Нулевая частота — привод стоит. Это не поломка и не «нет данных».
+    if (number === 0) return {state:'idle', chip:'стоит',
+                              text:'Стоит · 0 ' + (ACAISensors.unit(key) || '')};
+    return {state:'ok', chip: shown.text, text: shown.text};
+  }
+
+  function paint(station, state, statusText, extraNote){
+    station.state = state;
+    station.statusText = statusText;
+    station.note = extraNote || station.baseNote;
+    var color = statusColor[state] || statusColor.nodata;
+    station.puck.material.color.setHex(parseInt(color.slice(1), 16));
+    station.puck.material.emissive.setHex(parseInt(color.slice(1), 16));
+    if (selectedStation === station) showDetail(station);
+  }
+
+  function chip(station, suffix){
+    station.label.innerHTML = '<div class="chip">' + station.name +
+      (suffix ? ' · <b>' + suffix + '</b>' : '') + '</div>';
+  }
+
+  async function refreshLive(){
+    var registry = null, health = null, live = null;
+    try { registry = await ACAISensors.load(); } catch (e) {}
+    try { health = await ACAISensors.health(); } catch (e) {}
+
+    // Сбор стоит — показаний не рисуем вовсе. Лучше честное «нет
+    // данных с 14:32», чем старые цифры, выданные за живые. Это то же
+    // правило, что на «Главной».
+    if (health && !health.ok && health.state !== 'never') {
+      var since = (health.since || '').slice(11, 16);
+      var why = health.state === 'panel' ? 'панель не отвечает'
+              : health.state === 'collector' ? 'расширение не на связи'
+              : 'сбор остановлен';
+      stations.forEach(function(st){
+        if (!st.register) return;
+        chip(st, '');
+        paint(st, 'nodata', 'Нет данных с ' + since + ' — ' + why, st.baseNote);
+      });
+      liveStrip.innerHTML = '<span class="warnText">Показаний нет с ' + since +
+        ' — ' + why + '</span>';
+      return;
+    }
+
+    try {
+      var response = await fetch('/api/sensors/live', {credentials:'include'});
+      live = response.ok ? await response.json() : null;
+    } catch (e) { live = null; }
+    if (!live) return;
+
+    var takenAt = health && health.last_data_at
+      ? new Date(health.last_data_at).toLocaleTimeString('ru-RU',
+          {hour:'2-digit', minute:'2-digit', second:'2-digit'})
+      : '';
+
+    stations.forEach(function(st){
+      if (!st.register) return;
+      var reading = live[st.register];
+      if (!reading) {
+        chip(st, '');
+        paint(st, 'nodata', 'Нет данных · регистр не назначен', st.baseNote);
+        return;
+      }
+      var got = stateFor(st.register, reading.value);
+      var stale = ACAISensors.staleNote(st.register);
+      chip(st, got.chip);
+      paint(st, got.state,
+            got.text + (takenAt ? ' · снято в ' + takenAt : '') + (stale ? ' · ' + stale : ''),
+            st.baseNote);
+    });
+
+    // Конвейеры и сигнал панели — здесь, а не на «Главной».
+    var belts = Object.keys(live).filter(function(key){
+      return key.indexOf('конвейер_') === 0 && key.slice(-3) === '_гц';
+    }).sort();
+    var parts = [];
+    if (belts.length) {
+      parts.push('<span class="group">Конвейеры</span>' + belts.map(function(key){
+        var shown = ACAISensors.value(key, live[key].value);
+        var text = parseFloat(live[key].value) === 0 ? 'стоит' : shown.text;
+        return ACAISensors.short(key) + ' <b>' + text + '</b>';
+      }).join(' · '));
+    }
+    if (live['авария_флаг']) {
+      // Что значит регистр 1658, не подтверждено: за сутки поднят 785
+      // раз из 2807. Поэтому показываем как есть и не красим красным.
+      parts.push('<span title="Регистр 1658 панели WebHMI. Что он означает — не ' +
+        'подтверждено. Ни на какие расчёты и на «Аварии» в меню не влияет.">' +
+        ACAISensors.short('авария_флаг') + ' <b>' +
+        ACAISensors.value('авария_флаг', live['авария_флаг'].value).text + '</b></span>');
+    }
+    if (takenAt) parts.push('снято в <b>' + takenAt + '</b>');
+    liveStrip.innerHTML = parts.join('<span>·</span>');
+  }
+
+  // Состояние узлов наружу — для проверок (tests/test_massaprep_live.py).
+  // Это те же данные, что уже видны на экране, ничего скрытого.
+  window.acaiMapStations = stations;
+  window.acaiMapRefresh = refreshLive;
+
+  refreshLive().then(function(){ document.body.dataset.liveReady = '1'; });
+  setInterval(function(){ if (!document.hidden) refreshLive(); }, 30000);
 }
 
 // ── Загрузка библиотеки: экран не должен оставаться пустым ───────
