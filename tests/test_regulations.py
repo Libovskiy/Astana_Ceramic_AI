@@ -349,14 +349,21 @@ def main():
 
     conn = sq.connect(temp_db)
     conn.row_factory = sq.Row
+    # Берём свою, только что написанную строку. Просто «WHERE plan_id = ?»
+    # мало: в тот же столбец пишет «График ТО», и там plan_id — это номер
+    # работы из графика, другой счёт. В копии боевой базы такие строки
+    # есть (plan_id 3, планов с таким номером нет вовсе), и fetchone()
+    # возвращал чужую запись без was_due_at.
     late_log = conn.execute(
-        "SELECT * FROM maintenance_log WHERE plan_id = ?", (date_plan,)
+        "SELECT * FROM maintenance_log WHERE plan_id = ? AND done_by = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (date_plan, "Слесарь"),
     ).fetchone()
     conn.close()
 
     check("опоздание видно: плановая дата сохранена как 2026-09-01",
-          late_log["was_due_at"] == "2026-09-01",
-          str(late_log["was_due_at"]))
+          late_log is not None and late_log["was_due_at"] == "2026-09-01",
+          "записи о работе нет вовсе" if late_log is None else str(late_log["was_due_at"]))
 
     # =====================================================
     print("\nДополнительно. Типы параметров")

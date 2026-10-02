@@ -41,10 +41,23 @@ prod = sb.user("production_chief")
 chief = sb.user("chief_engineer")
 
 
+# Журнал в копии боевой базы не пуст: смены на заводе открывают каждый
+# день, и к 02.10.2026 строк «открытие смены» там было восемь. Считать
+# по всей таблице нельзя — проверка падала бы от чужой работы, а не от
+# поломки. Запоминаем последнюю строку журнала ДО проверок и смотрим
+# только то, что появилось после. Отбирать по имени автора нельзя: часть
+# записей подписана логином, часть — полным именем человека.
+conn = sb.db()
+JOURNAL_BASE = conn.execute("SELECT COALESCE(MAX(id), 0) FROM audit_log").fetchone()[0]
+conn.close()
+
+
 def journal(action):
     conn = sb.db()
-    rows = conn.execute("SELECT * FROM audit_log WHERE action=? ORDER BY id DESC",
-                        (action,)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM audit_log WHERE action=? AND id > ? ORDER BY id DESC",
+        (action, JOURNAL_BASE),
+    ).fetchall()
     conn.close()
     return rows
 
