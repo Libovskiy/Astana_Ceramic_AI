@@ -98,6 +98,10 @@ REGISTERS = {"success": True, "registers": [
      "short_title": "Питатель №2 — Глина", "unit": "Гц", "state": "live"},
     {"register": "конвейер_1_гц", "title": "Частота конвейера №1",
      "short_title": "Конв. 1", "unit": "Гц", "state": "live"},
+    {"register": "конвейер_2_гц", "title": "Частота конвейера №2",
+     "short_title": "Конв. 2", "unit": "Гц", "state": "live"},
+    {"register": "конвейер_5_гц", "title": "Частота конвейера №5",
+     "short_title": "Конв. 5", "unit": "Гц", "state": "live"},
     {"register": "авария_флаг", "title": "Сигнал панели (регистр 1658)",
      "short_title": "Сигнал панели", "unit": "", "state": "live"},
 ]}
@@ -107,7 +111,9 @@ LIVE = {
     "pl024_2_загрузка_проц": {"value": "47.1", "at": NOW},   # критично
     "питатель_1_гц": {"value": "38.2", "at": NOW},           # работает
     "питатель_2_гц": {"value": "0", "at": NOW},              # стоит
-    "конвейер_1_гц": {"value": "49.5", "at": NOW},
+    "конвейер_1_гц": {"value": "32.0", "at": NOW},   # идёт с питателем песка
+    "конвейер_5_гц": {"value": "8.0", "at": NOW},    # идёт с питателем глины
+    "конвейер_2_гц": {"value": "21.1", "at": NOW},   # место на линии неизвестно
     "авария_флаг": {"value": "0", "at": NOW},
 }
 
@@ -181,9 +187,39 @@ try:
                   and "не назначен" in got[name]["status"],
                   got[name])
 
+        # ── частота там, где она относится к делу ────────────────
+        belts = page.locator(".belt").evaluate_all(
+            """els => els.map(e => { const r = e.getBoundingClientRect();
+                 return {t: e.textContent.trim(), shown: r.width > 0,
+                         l: r.left, r: r.right, top: r.top, bot: r.bottom}; })""")
+        shown = [b["t"] for b in belts if b["shown"]]
+
+        check("частоты стоят на самих лентах", len(shown) == 2, shown)
+        check("на ленте песка — 32,0 Гц", any("32,0" in t for t in shown), shown)
+        check("на ленте глины — 8,0 Гц", any("8,0" in t for t in shown), shown)
+        check("и помечены как неподтверждённые",
+              all("?" in t for t in shown), shown)
+
+        chips = page.locator(".chip").evaluate_all(
+            """els => els.map(e => { const r = e.getBoundingClientRect();
+                 return {t: e.textContent.trim(), l: r.left, r: r.right,
+                         top: r.top, bot: r.bottom}; })""")
+        clash = [(b["t"], c["t"]) for b in belts if b["shown"] for c in chips
+                 if b["l"] < c["r"] and c["l"] < b["r"]
+                 and b["top"] < c["bot"] and c["top"] < b["bot"]]
+        check("подписи лент не налезают на подписи станций", not clash, clash)
+
         strip = page.locator("#liveStrip").inner_text()
-        check("конвейеры переехали в карту", "Конв. 1" in strip and "49,5" in strip, strip)
-        check("сигнал панели тоже здесь", "Сигнал панели" in strip, strip)
+        # Парная: переехавшие ушли со строки, а те, чьё место неизвестно,
+        # остались — молча пропасть с экрана они не должны.
+        check("переехавшие цифры ушли из строки внизу",
+              "Конв. 1" not in strip and "Конв. 5" not in strip, strip)
+        check("остальные конвейеры внизу остались",
+              "Конв. 2" in strip and "21,1" in strip, strip)
+        check("и сказано, почему они не на схеме",
+              "без места на схеме" in strip, strip)
+        check("сигнал панели и время на месте",
+              "Сигнал панели" in strip and "снято в" in strip, strip)
         page.close()
 
         # ── 2. парная: сбор стоит — на карте ни одного числа ─────
@@ -198,6 +234,9 @@ try:
         check("сбор стоит: показаний на подписях нет",
               all(v["chip"].strip() == name for name, v in got.items()),
               {n: v["chip"] for n, v in got.items() if v["chip"].strip() != n})
+        check("сбор стоит: на лентах тоже пусто",
+              not any(page.locator(".belt").all_inner_texts()),
+              page.locator(".belt").all_inner_texts())
         check("сбор стоит: сказано, с какого времени",
               "13:40" in page.locator("#liveStrip").inner_text(),
               page.locator("#liveStrip").inner_text())

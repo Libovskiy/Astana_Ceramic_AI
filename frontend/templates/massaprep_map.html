@@ -58,6 +58,12 @@ canvas:active{cursor:grabbing}
 .chip{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:3px 10px;
   font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.16);opacity:.94}
 .chip.pending{border-color:var(--accent);color:var(--accent)}
+/* Подпись прямо на ленте конвейера: только число, без рамки — рамок
+   на схеме и так хватает, их уже разводили. Читаемость даёт обводка
+   текста, а не плашка. */
+.belt{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;
+  text-shadow:0 0 3px var(--bg),0 0 3px var(--bg),0 0 6px var(--bg)}
+.belt .guess{font-weight:600;color:var(--accent);margin-left:2px}
 .controls{position:absolute;top:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px)}
 .btn{border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px}
 .btn[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -160,7 +166,7 @@ footer .note{font-size:12px;color:var(--muted);max-width:640px;flex:1 1 260px}
       <span><i class="dot" style="background:var(--accent)"></i>Стоит</span>
       <span><i class="dot" style="background:var(--grey)"></i>Нет данных</span>
     </div>
-    <div class="note clamp">Серые узлы — регистр датчика ещё не привязан. Появятся живые показания, как только главный инженер подключит их в sensor_registers.</div>
+    <div class="note clamp">Серые узлы — регистр датчика ещё не привязан. Появятся живые показания, как только главный инженер подключит их в sensor_registers. Цифра прямо на ленте со знаком «?» — привязка выведена из показаний (частота совпадает с питателем час в час), но главным инженером не подтверждена.</div>
   </footer>
 </div>
 <script>
@@ -237,6 +243,23 @@ function startMap(){
   stage.appendChild(labelsLayer);
 
   var trackedLabels = [];
+  var beltLabels = [];
+
+  // Подпись на середине перегона: какой регистр к какому куску ленты
+  // относится. Привязок всего две, и обе — не из догадки о порядке
+  // номеров, а из данных: ряды «конвейер_1» и «питатель_1» совпали
+  // час в час за 219 часов, «конвейер_5» и «питатель_2» — за 220.
+  // Остальные пять номеров своего места на линии пока не имеют:
+  // в справочнике регистров привязки нет, и угадывать её нельзя.
+  function addBeltLabel(worldPos, register, hint){
+    var el = document.createElement('div');
+    el.className = 'label';
+    el.innerHTML = '<div class="belt"></div>';
+    el.title = hint || '';
+    labelsLayer.appendChild(el);
+    beltLabels.push({pos: worldPos, el: el, register: register,
+                     box: el.firstChild});
+  }
 
   function addLabel(worldPos, html){
     var el = document.createElement('div');
@@ -611,13 +634,22 @@ function startMap(){
   // --- два питателя на входе ---
   var feeders = [
     {name:'Питатель №1 — Песок', x:-1.5, body:'#1E8A54', rim:'#146140', reg:'питатель_1_гц',
-      desc:'Дозирует песок на приёмный конвейер — первый компонент шихты.'},
+      desc:'Дозирует песок на приёмный конвейер — первый компонент шихты.',
+      belt:{reg:'конвейер_1_гц',
+            hint:'Конвейер №1. Идёт час в час с питателем песка — 219 часов из 219. '
+               + 'Главный инженер этого не подтверждал.'}},
     {name:'Питатель №2 — Глина', x:1.5,  body:'#D97706', rim:'#9A530A', reg:'питатель_2_гц',
-      desc:'Дозирует глину вторым компонентом в ту же шихту — пропорцию задаёт частота привода.'}
+      desc:'Дозирует глину вторым компонентом в ту же шихту — пропорцию задаёт частота привода.',
+      belt:{reg:'конвейер_5_гц',
+            hint:'Конвейер №5. Идёт час в час с питателем глины — 220 часов из 220. '
+               + 'Главный инженер этого не подтверждал.'}}
   ];
   var feederZ = -11, mergeZ = -8.5;
   feeders.forEach(function(f){
     box(0.5, 0.3, mergeZ - feederZ, '#434B57', f.x, 0.15, (feederZ + mergeZ)/2, {roughness:0.55, metalness:0.3});
+    if(f.belt){
+      addBeltLabel(new THREE.Vector3(f.x, 0.55, (feederZ + mergeZ)/2), f.belt.reg, f.belt.hint);
+    }
     buildFeederModel(f.x, feederZ, f.body, f.rim);
     addStation({
       x:f.x, y:1.95, z:feederZ, name:f.name, state:'nodata', register:f.reg,
@@ -924,6 +956,32 @@ function startMap(){
       item.el.style.left = item.x + 'px';
       item.el.style.top = item.y + 'px';
     }
+
+    // Подписи лент — вторым слоем: они мельче и важнее станций не
+    // бывают. Если такая подпись попадает под подпись станции, прячем
+    // её, а не двигаем: уехав с середины перегона, она перестанет
+    // показывать, к какому куску ленты относится.
+    var boxes = placed.map(function(item){
+      var w = item.el.offsetWidth, h = item.el.offsetHeight;
+      return {l: item.x - w / 2, r: item.x + w / 2, t: item.y - h, b: item.y};
+    });
+
+    beltLabels.forEach(function(belt){
+      if(!belt.box.textContent){ belt.el.style.display = 'none'; return; }
+      tmpV.copy(belt.pos).project(camera);
+      if(tmpV.z >= 1){ belt.el.style.display = 'none'; return; }
+      var x = (tmpV.x * 0.5 + 0.5) * w, y = (-tmpV.y * 0.5 + 0.5) * h;
+      belt.el.style.display = 'block';
+      var bw = belt.el.offsetWidth, bh = belt.el.offsetHeight;
+      x = Math.max(bw / 2 + 4, Math.min(w - bw / 2 - 4, x));
+      var mine = {l: x - bw / 2, r: x + bw / 2, t: y - bh, b: y};
+      var hidden = boxes.some(function(other){
+        return mine.l < other.r && other.l < mine.r && mine.t < other.b && other.t < mine.b;
+      });
+      belt.el.style.display = hidden ? 'none' : 'block';
+      belt.el.style.left = x + 'px';
+      belt.el.style.top = y + 'px';
+    });
   }
 
   var clockStart = (window.performance && performance.now) ? performance.now() : Date.now();
@@ -1011,6 +1069,7 @@ function startMap(){
         chip(st, '');
         paint(st, 'nodata', 'Нет данных с ' + since + ' — ' + why, st.baseNote);
       });
+      beltLabels.forEach(function(belt){ belt.box.textContent = ''; });
       liveStrip.innerHTML = '<span class="warnText">Показаний нет с ' + since +
         ' — ' + why + '</span>';
       return;
@@ -1043,13 +1102,31 @@ function startMap(){
             st.baseNote);
     });
 
-    // Конвейеры и сигнал панели — здесь, а не на «Главной».
+    // Частота — на самой ленте, если известно, к какому перегону она
+    // относится. Знак вопроса рядом: привязка выведена из данных, а не
+    // подтверждена главным инженером.
+    var onMap = {};
+    beltLabels.forEach(function(belt){
+      var reading = live[belt.register];
+      if (!reading) { belt.box.textContent = ''; return; }
+      onMap[belt.register] = true;
+      var value = parseFloat(reading.value);
+      var text = value === 0 ? 'стоит' : ACAISensors.value(belt.register, reading.value).text;
+      belt.box.innerHTML = text + '<span class="guess" title="' +
+        'Привязка не подтверждена главным инженером">?</span>';
+    });
+
+    // Остальные конвейеры — внизу: их место на линии не установлено,
+    // в справочнике регистров привязки к станку нет. Прятать их из-за
+    // этого нельзя: показания идут, человек должен их видеть.
     var belts = Object.keys(live).filter(function(key){
-      return key.indexOf('конвейер_') === 0 && key.slice(-3) === '_гц';
+      return key.indexOf('конвейер_') === 0 && key.slice(-3) === '_гц' && !onMap[key];
     }).sort();
     var parts = [];
     if (belts.length) {
-      parts.push('<span class="group">Конвейеры</span>' + belts.map(function(key){
+      parts.push('<span class="group" title="Какому перегону линии они ' +
+        'соответствуют — не установлено, поэтому на схеме их нет">' +
+        'Конвейеры без места на схеме</span>' + belts.map(function(key){
         var shown = ACAISensors.value(key, live[key].value);
         var text = parseFloat(live[key].value) === 0 ? 'стоит' : shown.text;
         return ACAISensors.short(key) + ' <b>' + text + '</b>';
