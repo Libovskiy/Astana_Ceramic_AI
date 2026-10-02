@@ -48,6 +48,34 @@
 .ss-fill{height:100%;border-radius:2px;transition:width .5s;}
 .ss-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
 
+/* Шапка карточки: слева раздел, справа вход в 3D-карту. Кнопка живёт
+   в шапке, а показания — в #sensorStripBody, поэтому «нет данных» или
+   остановленный сбор её не стирают: карта от датчиков не зависит. */
+.ss-head{display:flex;align-items:center;gap:12px;justify-content:space-between;}
+.ss-head + #sensorStripBody{border-top:1px solid var(--border);padding-top:8px;}
+.ss-expand{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  border-radius:9px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:border-color .15s,color .15s;}
+.ss-expand:hover{border-color:var(--accent);color:var(--accent);}
+.ss-expand svg{width:16px;height:16px;}
+
+/* Развёрнутый вид — на весь экран: цех разглядывают, а не подсматривают
+   в окошко. .overlay и .hidden — общие, из acai.css. */
+.massa-overlay{padding:0;}
+/* Размер берём от .overlay (position:fixed; inset:0), а не от 100vh:
+   в мобильном Safari 100vh — это высота вместе со скрытой адресной
+   строкой, и низ карты уезжал бы под экран. requestFullscreen не
+   используем: у iframe он на телефонах работает через раз. */
+.massa-modal{display:flex;flex-direction:column;width:100%;height:100%;
+  background:var(--surface);}
+.massa-modal-head{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);flex:none;}
+.massa-modal-title{display:inline-flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:600;}
+.massa-modal-title svg{width:18px;height:18px;}
+.massa-frame{flex:1;min-height:0;width:100%;border:0;display:block;}
+
 /* КАРТА */
 .prod-map-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden;}
 .prod-map-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
@@ -148,9 +176,36 @@
         <div class="metric"><div class="metric-label">Загрузка...</div><div class="metric-value" style="color:var(--text-dim)">—</div></div>
       </div>
 
+      <!-- Массаподготовка: быстрый взгляд — те же показания, что были
+           здесь раньше, тем же способом и из того же источника. 3D-карта
+           линии лежит за кнопкой «Развернуть»: внутри карточки её нет,
+           чтобы сводка открывалась так же быстро, как раньше. -->
       <div class="sensor-strip" id="sensorStrip">
-        <span style="font-size:11px;color:var(--text-dim)"><span data-icon=gear></span> Массаподготовка · WebHMI</span>
-        <span style="font-size:11px;color:var(--text-dim)">Откройте вкладку WebHMI</span>
+        <div class="ss-head">
+          <span class="ss-group"><span data-icon=gear></span> Массаподготовка · WebHMI</span>
+          <button type="button" class="ss-expand" id="massaExpand" onclick="openMassaMap()"
+                  title="3D-карта линии массаподготовки">
+            <span data-icon=cube></span> Развернуть
+          </button>
+        </div>
+        <div id="sensorStripBody">
+          <span style="font-size:11px;color:var(--text-dim)">Откройте вкладку WebHMI</span>
+        </div>
+      </div>
+
+      <!-- Развёрнутый вид: сцена живёт отдельной страницей и грузится
+           в iframe только после нажатия. Закрыли — адрес убираем,
+           чтобы Three.js не держал видеокарту в фоне. -->
+      <div class="overlay massa-overlay hidden" id="massaOverlay">
+        <div class="massa-modal">
+          <div class="massa-modal-head">
+            <span class="massa-modal-title"><span data-icon=cube></span> Массаподготовка — 3D карта линии</span>
+            <button type="button" class="ss-expand" onclick="closeMassaMap()">
+              <span data-icon=close></span> Свернуть
+            </button>
+          </div>
+          <iframe class="massa-frame" id="massaFrame" title="3D-карта линии массаподготовки"></iframe>
+        </div>
       </div>
 
       <!-- ПРОИЗВОДСТВЕННАЯ КАРТА -->
@@ -214,7 +269,7 @@
   </div>
 </div>
 
-<script src="/static/icons.js?v=5"></script>
+<script src="/static/icons.js?v=6"></script>
 <script src="/static/sensor-names.js?v=4"></script>
 <script src="/static/acai_layout.js?v=64"></script>
 <script src="/static/mobile_nav_v2.js?v=6"></script>
@@ -489,7 +544,7 @@ function renderSensors(lv){
   // Сбор стоит — показаний не показываем вовсе. Лучше честная строка
   // «нет данных с 14:32», чем цифры, которые давно не менялись.
   if(_health && !_health.ok && _health.state!=='never'){
-    document.getElementById('sensorStrip').innerHTML =
+    document.getElementById('sensorStripBody').innerHTML =
       ACAISensors.silenceNote(_health, 'margin:0');
     return;
   }
@@ -572,14 +627,53 @@ function renderSensors(lv){
   const takenAt = _health && _health.last_data_at ? new Date(_health.last_data_at) : new Date();
   const now=takenAt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-  document.getElementById('sensorStrip').innerHTML=
+  document.getElementById('sensorStripBody').innerHTML=
     `<div class="ss-row">
-       <span class="ss-group"><span data-icon=gear></span> Массаподготовка</span>
+       <span class="ss-group">Бункеры и питатели</span>
        <div class="ss-sep"></div>${top}
        <span style="margin-left:auto;font-size:10px;color:var(--text-dim);font-family:var(--mono)">${now}</span>
      </div>
      ${belts ? `<div class="ss-row"><span class="ss-group">Конвейеры</span><div class="ss-sep"></div>${belts}</div>` : ''}`;
 }
+
+// ── 3D-КАРТА МАССАПОДГОТОВКИ ──────────────────────────────
+// Свёрнуто — карточка с цифрами, развёрнуто — страница /massaprep/3d
+// на весь экран. Адрес ставится в iframe по нажатию и снимается при
+// закрытии: пока карту не открыли, Three.js не грузится вовсе, а
+// после закрытия сцена не держит видеокарту.
+function openMassaMap(){
+  const overlay=document.getElementById('massaOverlay');
+  const frame=document.getElementById('massaFrame');
+  const theme=(window.acaiTheme&&window.acaiTheme.get())||'dark';
+  frame.src='/massaprep/3d?theme='+theme;
+  overlay.classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+
+function closeMassaMap(){
+  const overlay=document.getElementById('massaOverlay');
+  overlay.classList.add('hidden');
+  document.getElementById('massaFrame').removeAttribute('src');
+  document.body.style.overflow='';
+}
+
+function massaMapOpen(){
+  return !document.getElementById('massaOverlay').classList.contains('hidden');
+}
+
+// Esc закрывает и когда фокус на «Главной», и когда он уже внутри
+// карты: там нажатие не доходит до нас, поэтому сцена присылает
+// сообщение (см. frontend/templates/massaprep_map.html).
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&massaMapOpen())closeMassaMap();
+});
+window.addEventListener('message',e=>{
+  if(e.origin===location.origin&&e.data==='acai-massaprep-close'&&massaMapOpen())closeMassaMap();
+});
+// Тему переключили при открытой карте — перерисовываем сцену в ней же.
+document.addEventListener('acai-theme',()=>{
+  if(massaMapOpen())openMassaMap();
+});
 
 // ── ДАШБОРД ───────────────────────────────────────────────
 async function renderDashboard(){

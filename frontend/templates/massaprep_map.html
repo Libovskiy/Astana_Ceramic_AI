@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Массаподготовка — 3D карта</title>
+<!--
+  3D-карта линии массаподготовки.
+
+  Отдельная страница, а не часть «Главной»: сцену рисует Three.js, и
+  грузить её каждому, кто открыл сводку, незачем. На «Главной» стоит
+  компактная карточка показаний, а эта страница подключается в <iframe>
+  только когда человек нажал «Развернуть».
+
+  Доступ — тот же, что у блока показаний на «Главной»: PAGE_ROLES
+  в backend/api/main.py выставляет «/massaprep/3d» те же роли, что «/».
+
+  Данные на схеме — заглушки «нет данных / регистр не назначен».
+  Привязка к sensor_registers делается отдельным шагом.
+-->
+<script>
+  /* Тему берём ту же, что выбрал человек в системе: iframe с того же
+     адреса, значит и localStorage тот же. Параметр ?theme= — на случай,
+     если хранилище недоступно (приватное окно). */
+  (function () {
+    var theme = null;
+    try {
+      theme = new URLSearchParams(location.search).get('theme');
+    } catch (e) {}
+    if (theme !== 'light' && theme !== 'dark') {
+      try { theme = localStorage.getItem('acai_theme'); } catch (e) { theme = null; }
+    }
+    if (theme !== 'light' && theme !== 'dark') theme = 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+  })();
+</script>
+<style>
+:root{
+  --bg:#EEF1F6; --panel:#FFFFFF; --border:#DCE2EE; --text:#14213D; --muted:#64748B;
+  --green:#15803D; --orange:#B45309; --red:#B91C1C; --grey:#94A3B8; --accent:#2F5BE0;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+:root[data-theme="dark"]{
+  --bg:#0F1B33; --panel:#17284A; --border:#2C4170; --text:#F4F6FA; --muted:#9FB0CE;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;overflow:hidden}
+#app{position:relative;width:100%;height:100%;display:flex;flex-direction:column}
+header{padding:12px 20px 8px;flex:none}
+header p{margin:0;font-size:13px;line-height:1.4;color:var(--muted);max-width:720px}
+#stage{position:relative;flex:1;min-height:0}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.label{position:absolute;transform:translate(-50%,-100%);pointer-events:none;}
+.chip{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:3px 10px;
+  font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.16);opacity:.94}
+.chip.pending{border-color:var(--accent);color:var(--accent)}
+.controls{position:absolute;top:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 24px)}
+.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px}
+.btn[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.detailPanel{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
+  display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--border);
+  border-radius:14px;padding:12px 40px 12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.22);
+  max-width:min(92vw,440px);z-index:5}
+.detailPanel[hidden]{display:none}
+.detailDot{width:13px;height:13px;border-radius:50%;margin-top:4px;flex:none;box-shadow:0 0 0 3px rgba(0,0,0,.05)}
+.detailName{font-weight:700;font-size:15px;margin-bottom:2px}
+.detailStatus{font-weight:600;font-size:12.5px;margin-bottom:4px}
+.detailNote{font-size:12px;color:var(--muted);line-height:1.4}
+.detailClose{position:absolute;top:8px;right:10px;border:none;background:transparent;color:var(--muted);
+  font-size:16px;cursor:pointer;padding:4px;line-height:1}
+/* Пока библиотека едет с CDN — внятная строка, а не пустое поле.
+   Если не доехала, на её месте объяснение и «Повторить»: карта — это
+   единственное, что зависит от интернета, показания на «Главной»
+   работают и без него. */
+.stageNote{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:24px;text-align:center}
+.stageNote[hidden]{display:none}
+.stageNote .noteBox{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:18px 20px;max-width:min(92vw,460px);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.stageNote h2{margin:0 0 8px;font-size:15px;font-weight:700}
+.stageNote p{margin:0 0 6px;font-size:13px;line-height:1.45;color:var(--muted)}
+.stageNote .btn{margin-top:12px}
+.hint{position:absolute;left:12px;bottom:16px;font-size:11.5px;color:var(--muted);
+  background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:5px 11px;
+  box-shadow:0 2px 8px rgba(0,0,0,.1);pointer-events:none}
+footer{flex:none;padding:10px 20px 16px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;border-top:1px solid var(--border)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+footer .note{font-size:12px;color:var(--muted);max-width:640px;flex:1 1 260px}
+@media (max-width:600px){
+  header{padding:10px 14px 6px}
+  header p{font-size:12px}
+  footer{padding:8px 14px 12px;gap:10px}
+  footer .note{font-size:11px}
+  /* На телефоне пояснения занимали пол-экрана, и на саму схему
+     оставалась узкая полоса. Сворачиваем их в две строки, по нажатию
+     разворачиваются целиком — текст никуда не делся. */
+  .clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;cursor:pointer}
+  .clamp.open{-webkit-line-clamp:unset;overflow:visible}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <p class="clamp">Поток по заводской схеме: питатель песка и питатель глины выдают шихту на конвейер, она идёт вниз через ДТЕ-117 и Дезинтегратор PL 601, поворачивает и проходит Камневыделитель → СМК-102 → УСМ-40 → СМК 126, а дальше конвейер расходится на Бункер 1 и Бункер 2. Схема потока, не физический план цеха — реальных расстояний у меня нет. Тащите мышью или пальцем, чтобы повернуть; колесо или щипок — приблизить; нажмите на узел — внизу откроется карточка с его статусом.</p>
+  </header>
+  <div id="stage">
+    <canvas id="c" aria-label="3D карта линии массаподготовки"></canvas>
+    <div class="controls">
+      <button class="btn" id="btn3d" aria-pressed="true">3D вид</button>
+      <button class="btn" id="btnTop" aria-pressed="false">Вид сверху</button>
+    </div>
+    <div class="hint" id="hint">Нажмите на узел схемы, чтобы увидеть статус</div>
+    <div class="stageNote" id="loadNote">
+      <div class="noteBox">
+        <h2>Загружаю карту…</h2>
+        <p>Схему рисует библиотека Three.js, она подгружается из интернета.</p>
+      </div>
+    </div>
+    <div class="stageNote" id="loadFail" hidden>
+      <div class="noteBox">
+        <h2>Карта не открылась</h2>
+        <p id="failWhy"></p>
+        <p>Схему рисует библиотека, которая подгружается из интернета
+           (cdn.jsdelivr.net). Показания по массаподготовке от неё не
+           зависят: цифры на «Главной» те же и работают без интернета.</p>
+        <button class="btn" id="failRetry" type="button">Повторить</button>
+      </div>
+    </div>
+    <div class="detailPanel" id="detailPanel" hidden>
+      <button class="detailClose" id="detailClose" aria-label="Закрыть">✕</button>
+      <div class="detailDot" id="detailDot"></div>
+      <div class="detailBody">
+        <div class="detailName" id="detailName"></div>
+        <div class="detailStatus" id="detailStatus"></div>
+        <div class="detailNote" id="detailNote"></div>
+      </div>
+    </div>
+  </div>
+  <footer>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--green)"></i>Норма</span>
+      <span><i class="dot" style="background:var(--orange)"></i>Внимание</span>
+      <span><i class="dot" style="background:var(--red)"></i>Критично</span>
+      <span><i class="dot" style="background:var(--grey)"></i>Нет данных</span>
+    </div>
+    <div class="note clamp">Порядок потока: питатель песка / глины → ДТЕ-117 → Дезинтегратор PL 601 → Камневыделитель → СМК-102 → УСМ-40 → СМК 126 → Бункер 1 / Бункер 2. В боевой версии узлы подсвечиваются по настоящим показаниям из sensor_registers, а станки без пунктира станут сплошными, как только главный инженер привяжет их регистры.</div>
+  </footer>
+</div>
+<script>
+function startMap(){
+  var canvas = document.getElementById('c');
+  var stage = document.getElementById('stage');
+  var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true, alpha: false});
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  if(THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+  if(THREE.ACESFilmicToneMapping) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.08;
+
+  var scene = new THREE.Scene();
+  // Тему уже выставил скрипт в <head> по выбору человека в системе,
+  // поэтому смотрим на атрибут, а не на настройку операционной системы.
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+  function hex(c){ return parseInt(c.replace('#',''), 16); }
+
+  function skyTexture(topColor, bottomColor){
+    var c = document.createElement('canvas'); c.width = 8; c.height = 256;
+    var ctx = c.getContext('2d');
+    var g = ctx.createLinearGradient(0,0,0,256);
+    g.addColorStop(0, topColor); g.addColorStop(1, bottomColor);
+    ctx.fillStyle = g; ctx.fillRect(0,0,8,256);
+    var tex = new THREE.CanvasTexture(c);
+    if(THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+  var skyTop = isDark ? '#16274A' : '#F4F7FC';
+  var skyBottom = isDark ? '#0A1324' : '#DCE4F2';
+  scene.background = skyTexture(skyTop, skyBottom);
+  scene.fog = new THREE.Fog(hex(skyBottom), 34, 95);
+
+  var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+
+  var ambient = new THREE.AmbientLight(0xffffff, 0.85);
+  scene.add(ambient);
+  var sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  sun.position.set(14, 24, 12);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0025;
+  sun.shadow.camera.left = -42; sun.shadow.camera.right = 32;
+  sun.shadow.camera.top = 26; sun.shadow.camera.bottom = -18;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 70;
+  sun.target.position.set(-12.5, 0, -4);
+  scene.add(sun.target);
+  scene.add(sun);
+  var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-10, 10, -8);
+  scene.add(fillLight);
+
+  var groundMat = new THREE.MeshStandardMaterial({color: isDark ? 0x14213D : 0xF7F8FB, roughness: 1});
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.set(-12.5, -0.01, -4);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var grid = new THREE.GridHelper(80, 40, isDark ? 0x2C4170 : 0xDCE2EE, isDark ? 0x223257 : 0xE8ECF4);
+  grid.position.set(-12.5, 0, -4);
+  scene.add(grid);
+
+  var statusColor = {ok:'#15803D', warn:'#B45309', crit:'#B91C1C', nodata:'#94A3B8'};
+
+  var labelsLayer = document.createElement('div');
+  labelsLayer.style.position = 'absolute';
+  labelsLayer.style.left = '0'; labelsLayer.style.top = '0';
+  labelsLayer.style.width = '100%'; labelsLayer.style.height = '100%';
+  labelsLayer.style.pointerEvents = 'none';
+  stage.appendChild(labelsLayer);
+
+  var trackedLabels = [];
+
+  function addLabel(worldPos, html){
+    var el = document.createElement('div');
+    el.className = 'label';
+    el.innerHTML = html;
+    labelsLayer.appendChild(el);
+    trackedLabels.push({pos: worldPos, el: el});
+  }
+
+  // --- станция: цветной индикатор + компактная подпись + невидимый хитбокс для клика ---
+  var pickables = [];
+  function addStation(opts){
+    // opts: {x,y,z, name, state, statusText, note, footprint:{w,h,d}, footprintY, pending}
+    var color = statusColor[opts.state] || statusColor.nodata;
+    var puckMat = new THREE.MeshStandardMaterial({color: hex(color), roughness:0.35, metalness:0.15, emissive: hex(color), emissiveIntensity:0.35});
+    var puck = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.07,20), puckMat);
+    puck.position.set(opts.x, opts.y, opts.z);
+    scene.add(puck);
+    opts.puck = puck;
+    opts.puckBaseY = opts.y;
+
+    addLabel(new THREE.Vector3(opts.x, opts.y+0.34, opts.z),
+      '<div class="chip'+(opts.pending?' pending':'')+'">'+opts.name+'</div>');
+
+    var fp = opts.footprint || {w:2.2,h:2.2,d:2.2};
+    var hit = new THREE.Mesh(new THREE.BoxGeometry(fp.w, fp.h, fp.d), new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.set(opts.x, opts.footprintY!=null ? opts.footprintY : opts.y*0.5, opts.z);
+    hit.userData.station = opts;
+    scene.add(hit);
+    pickables.push(hit);
+    return opts;
+  }
+
+  function box(w,h,d,color,x,y,z,opts){
+    opts = opts || {};
+    var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: opts.roughness!=null?opts.roughness:0.55, metalness: opts.metalness!=null?opts.metalness:0.15});
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+    m.position.set(x,y,z);
+    scene.add(m);
+    return m;
+  }
+
+  function dashedBox(w,h,d,x,y,z){
+    var edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
+    var mat = new THREE.LineDashedMaterial({color: hex('#94A3B8'), dashSize: 0.18, gapSize: 0.14});
+    var line = new THREE.LineSegments(edges, mat);
+    line.computeLineDistances();
+    line.position.set(x,y,z);
+    scene.add(line);
+    var faceMat = new THREE.MeshStandardMaterial({color: hex('#EEF1F6'), roughness: 1, transparent: true, opacity: 0.35});
+    var face = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), faceMat);
+    face.position.set(x,y,z);
+    scene.add(face);
+    return line;
+  }
+
+  function cylinder(r,h,color,x,y,z){
+    var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.5, metalness: 0.2});
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,24), mat);
+    m.position.set(x,y,z);
+    scene.add(m);
+    return m;
+  }
+
+  // --- ДТЕ-117: дробилка с открытым верхом, рядами зубьев и маховиком — по присланным рендерам ---
+  function buildDTE117MapModel(originZ){
+    var body='#9B3A2E', bodyDark='#7A2C22', steelGrey='#8B93A0', dark='#262B33', wheelGrey='#AEB4BE', wheelDark='#5B6270';
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.55, metalness: 0.2});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.35});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||24), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+
+    var bz=originZ, bodyW=1.6, bodyH=0.8, bodyD=1.2, baseY=0.85;
+    mbox(bodyW, bodyH, bodyD, body, 0, baseY, bz);
+    // открытая тёмная полость сверху
+    mbox(bodyW-0.14, 0.08, bodyD-0.14, dark, 0, baseY+bodyH/2-0.02, bz);
+    // ряды зубьев/гребёнки, видны в открытом верхе
+    for(var i=0;i<4;i++){
+      var px = -bodyW/2 + 0.26 + i*((bodyW-0.52)/3);
+      mbox(0.06, 0.26, bodyD-0.18, dark, px, baseY+bodyH/2-0.02, bz, 0.12);
+    }
+    // 4 ножки — по всем углам, без просвета
+    var legH = baseY - bodyH/2;
+    [[-bodyW/2+0.16, bodyD/2-0.1],[bodyW/2-0.16, bodyD/2-0.1],[-bodyW/2+0.16, -bodyD/2+0.1],[bodyW/2-0.16, -bodyD/2+0.1]].forEach(function(p){
+      mbox(0.14, legH>0?legH:0.01, 0.14, steelGrey, p[0], legH/2, bz+p[1]);
+    });
+    // гребёнка-решётка на выходе внизу спереди
+    for(var t=0;t<6;t++){
+      var tx = -bodyW/2+0.28+ t*((bodyW-0.56)/5);
+      mbox(0.045, 0.26, 0.045, dark, tx, baseY-bodyH/2-0.04, bz+bodyD/2+0.04, -0.5);
+    }
+    // опорные коробки подшипников сверху по торцам
+    mbox(0.3,0.26,0.36, bodyDark, -bodyW/2+0.22, baseY+bodyH/2+0.16, bz-bodyD/2+0.26);
+    mbox(0.26,0.22,0.3, bodyDark, bodyW/2-0.22, baseY+bodyH/2+0.13, bz-bodyD/2+0.26);
+
+    // маховик на торце — вал стыкует его с корпусом без зазора
+    var wheelOffset=0.38, R=0.45, wheelThick=0.18;
+    var wheelX = -bodyW/2 - wheelOffset, wheelY = baseY;
+    var axleLen = wheelOffset - wheelThick/2 + 0.06;
+    var axleX = -bodyW/2 - axleLen/2 + 0.02;
+    mcyl(0.11,0.11,axleLen,16, steelGrey, axleX, wheelY, bz, 0,0,Math.PI/2);
+    mcyl(R,R,wheelThick,28, wheelGrey, wheelX, wheelY, bz, 0,0,Math.PI/2);
+    mcyl(R*0.2,R*0.2,wheelThick+0.03,16, wheelDark, wheelX, wheelY, bz, 0,0,Math.PI/2);
+    for(var h=0;h<5;h++){
+      var ang = h*(Math.PI*2/5);
+      mcyl(0.07,0.07,0.06,12, wheelDark, wheelX, wheelY+R*0.55*Math.cos(ang), bz+R*0.55*Math.sin(ang), 0,0,Math.PI/2);
+    }
+
+    return baseY+bodyH/2+0.4;
+  }
+
+  // --- детальная модель PL 601, собранная по фото станка ---
+  function buildPL601Model(originZ){
+    var cream='#E8E2D0', steelGrey='#8B93A0', steel='#2E5FA3', steelDark='#1F3F73', yellow='#D8CC3A', red='#B4362A';
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.55, metalness: 0.15});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x = rx; if(ry) m.rotation.y = ry; if(rz) m.rotation.z = rz;
+      scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||24), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x = rx; if(ry) m.rotation.y = ry; if(rz) m.rotation.z = rz;
+      scene.add(m); return m;
+    }
+    function mring(r,tube,color,x,y,z){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.4, metalness: 0.4});
+      var m = new THREE.Mesh(new THREE.TorusGeometry(r,tube,10,28), mat);
+      m.position.set(x,y,z); m.rotation.y = Math.PI/2;
+      scene.add(m); return m;
+    }
+
+    var bx=0, bz=originZ, baseY=0.45, baseW=1.6, baseH=0.9, baseD=1.4;
+    mbox(baseW, baseH, baseD, cream, bx, baseY, bz);
+
+    var hopperY = baseY + baseH/2 + 0.4;
+    var hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.85, 0.8, 4), new THREE.MeshStandardMaterial({color: hex(cream), roughness:0.6, metalness:0.1}));
+    hopper.position.set(bx, hopperY, bz);
+    hopper.rotation.y = Math.PI/4;
+    hopper.scale.set(1.0, 1, 1.05);
+    scene.add(hopper);
+
+    var topY = hopperY + 0.4 + 0.3;
+    mbox(1.0, 0.6, 1.0, steelGrey, bx, topY, bz);
+
+    var motorX = bx+(baseW/2+0.55), motorY = baseY, motorZ = bz;
+    mcyl(0.3,0.3,0.9,28, steel, motorX, motorY, motorZ, 0,0,Math.PI/2);
+    for(var f=0; f<5; f++){
+      mring(0.34,0.022, steel, motorX-0.36+f*0.15, motorY, motorZ);
+    }
+    mbox(0.3,0.3,0.3, steelDark, bx+baseW/2+0.05, motorY, motorZ);
+
+    var guardX = motorX+0.6;
+    var guard = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.3,6), new THREE.MeshStandardMaterial({color: hex(yellow), roughness:0.6, metalness:0.1}));
+    guard.position.set(guardX, motorY, motorZ);
+    // грань смотрит вниз (не как у ДТЕ117) — без бокового поворота
+    scene.add(guard);
+
+    var m2X = bx-baseW/2-0.35, m2Y = baseY, m2Z = bz;
+    mcyl(0.17,0.17,0.55,20, '#E9EAEC', m2X, m2Y, m2Z, 0,0,Math.PI/2);
+    mcyl(0.28,0.28,0.12,20, red, m2X+0.32, m2Y, m2Z, 0,0,Math.PI/2);
+
+    return topY+0.3;
+  }
+
+  // --- бункер: паналированный короб + коническая воронка на ножках ---
+  function buildBunker(bx, bz){
+    function mbox(w,h,d,color,x,y,z){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.6, metalness: 0.1});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z); scene.add(m); return m;
+    }
+    var legH=0.9, boxW=1.7, boxH=1.5, coneH=1.0;
+    var legOff = boxW/2-0.1;
+    [[-legOff,-legOff],[legOff,-legOff],[-legOff,legOff],[legOff,legOff]].forEach(function(p){
+      mbox(0.09, legH, 0.09, '#9AA3AF', bx+p[0], legH/2, bz+p[1]);
+    });
+    var cone = new THREE.Mesh(new THREE.CylinderGeometry(0.04, boxW/2*0.98, coneH, 4),
+      new THREE.MeshStandardMaterial({color: hex('#9AA3AF'), roughness:0.55, metalness:0.2}));
+    cone.position.set(bx, legH+coneH/2, bz); cone.rotation.y = Math.PI/4;
+    scene.add(cone);
+    mbox(0.06,0.06,0.06, '#6B7280', bx, legH-0.02, bz); // выпускной патрубок
+    mbox(boxW, boxH, boxW, '#1F6FB2', bx, legH+coneH+boxH/2, bz);
+    mbox(boxW+0.03, 0.04, boxW+0.03, '#9AA3AF', bx, legH+coneH+boxH+0.02, bz); // бортик сверху
+    for(var r=1;r<4;r++){
+      mbox(boxW+0.01, 0.015, boxW+0.01, '#BFD6EC', bx, legH+coneH+r*(boxH/4), bz);
+    }
+    for(var cx=-1;cx<=1;cx++){
+      mbox(0.015, boxH, boxW+0.01, '#BFD6EC', bx+cx*(boxW/3), legH+coneH+boxH/2, bz);
+      mbox(boxW+0.01, boxH, 0.015, '#BFD6EC', bx, legH+coneH+boxH/2, bz+cx*(boxW/3));
+    }
+    return legH+coneH+boxH;
+  }
+
+  // --- СМК-126, лопастной смеситель: жёлоб с лопастным валом ---
+  function buildSMK126Model(originX){
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.5, metalness: 0.25});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||20), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    var steel='#2E5FA3', steelDark='#1F3F73', yellow='#D8CC3A', troughColor='#0F8A72', bx=originX, by=0.75, bz=turnZ;
+    var troughLen=1.7, legY=by-0.55/2;
+    mbox(troughLen, 0.55, 0.55, troughColor, bx, by, bz);
+    mcyl(0.3,0.3,0.06,16, steelDark, bx-troughLen/2-0.02, by, bz, 0,0,Math.PI/2); // фланец
+    mcyl(0.3,0.3,0.06,16, steelDark, bx+troughLen/2+0.02, by, bz, 0,0,Math.PI/2); // фланец
+    mcyl(0.07,0.07,troughLen-0.1,16, steelDark, bx, by, bz, 0,0,Math.PI/2);
+    for(var i=0;i<9;i++){
+      var px = bx - troughLen/2 + 0.15 + i*((troughLen-0.3)/8);
+      mbox(0.05, 0.32, 0.05, yellow, px, by+ (i%2?0.12:-0.12), bz, 0,0, i%2? 0.5:-0.5);
+    }
+    [[-troughLen/2+0.2,-0.2],[troughLen/2-0.2,-0.2],[-troughLen/2+0.2,0.2],[troughLen/2-0.2,0.2]].forEach(function(p){
+      mbox(0.07, legY>0?legY:0.01, 0.07, steelDark, bx+p[0], legY/2, bz+p[1]);
+    });
+    var motorX = bx+troughLen/2+0.55;
+    mcyl(0.26,0.26,0.7,24, steel, motorX, by, bz, 0,0,Math.PI/2);
+    mbox(0.26,0.26,0.26, steelDark, bx+troughLen/2+0.1, by, bz);
+    return by+0.3;
+  }
+
+  // --- УСМ-40: корпус с рёбристым жёлтым барабаном сбоку ---
+  function buildUSM40Model(originX){
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.55, metalness: 0.15});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||24), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    function mring(r,tube,color,x,y,z){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.5, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.TorusGeometry(r,tube,10,24), mat);
+      m.position.set(x,y,z); m.rotation.y = Math.PI/2;
+      scene.add(m); return m;
+    }
+    var steelGrey='#1E7A4C', steelGreyDark='#145534', steel='#2E5FA3', yellow='#D8CC3A', bx=originX, by=0.95, bz=turnZ;
+    var bodyH=1.1;
+    mbox(1.3, bodyH, 1.2, steelGrey, bx, by, bz);
+    [[-0.55,-0.5],[0.55,-0.5],[-0.55,0.5],[0.55,0.5]].forEach(function(p){
+      mbox(0.08, by-bodyH/2, 0.08, steelGreyDark, bx+p[0], (by-bodyH/2)/2, bz+p[1]);
+    });
+    mbox(0.6, 0.4, 0.55, steelGreyDark, bx-0.1, by+bodyH/2+0.2, bz); // загрузочный короб
+    var drumX = bx+1.0;
+    mcyl(0.45,0.45,0.6,24, yellow, drumX, by, bz, 0,0,Math.PI/2);
+    for(var r=0;r<3;r++){ mring(0.46,0.025, '#B0A62A', drumX-0.2+r*0.2, by, bz); }
+    mcyl(0.22,0.22,0.55,20, steel, bx-0.1, by+bodyH/2+0.55, bz-0.3, 0,0,Math.PI/2);
+    return by+bodyH/2+0.75;
+  }
+
+  // --- питатель: бункер-воронка с коротким конвейером снизу, нейтральный металлический корпус ---
+  function buildFeederModel(bx, bz, bodyColor, rimColor){
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.4, metalness: 0.35});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    var hopperTopY = 1.5, hopperBotY = 0.55;
+    var hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.35, hopperTopY-hopperBotY, 4),
+      new THREE.MeshStandardMaterial({color: hex(bodyColor), roughness:0.4, metalness:0.35}));
+    hopper.position.set(bx, (hopperTopY+hopperBotY)/2, bz);
+    hopper.rotation.y = Math.PI/4;
+    hopper.scale.set(1.25, 1, 0.95);
+    scene.add(hopper);
+    mbox(1.9, 0.1, 1.45, rimColor, bx, hopperTopY+0.02, bz); // бортик сверху, тон темнее корпуса
+    // короткий конвейер-дозатор снизу спереди
+    var cLen=1.1, cAngle=0.12;
+    mbox(0.5, 0.22, cLen, '#1F3F73', bx, hopperBotY-0.25, bz+0.9, cAngle,0,0);
+    return hopperTopY;
+  }
+
+  // --- камневыделитель: двухвалковая дробилка ---
+  function buildKamnevydelitelModel(bx){
+    function mbox(w,h,d,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.5, metalness: 0.2});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||24), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    var steelGrey='#C2611B', steel='#2E5FA3', yellow='#D8CC3A', by=0.85, bz=turnZ;
+    mbox(1.2, 0.75, 1.1, steelGrey, bx, by, bz);
+    var wheelX = bx-0.85, R=0.42;
+    var rim = new THREE.Mesh(new THREE.TorusGeometry(R,0.07,10,24), new THREE.MeshStandardMaterial({color: hex(yellow), roughness:0.5, metalness:0.3}));
+    rim.position.set(wheelX, by, bz); rim.rotation.y = Math.PI/2;
+    scene.add(rim);
+    for(var i=0;i<6;i++){
+      var ang = i*Math.PI/3;
+      mbox(0.05, R*0.85, 0.05, yellow, wheelX, by+R*0.42*Math.cos(ang), bz+R*0.42*Math.sin(ang), ang,0,0);
+    }
+    mbox(0.08, 0.7, 0.75, yellow, bx+0.64, by, bz); // жёлтая панель с другой стороны, впритык к корпусу
+    mcyl(0.22,0.22,0.55,20, steel, bx-0.2, by+0.65, bz-0.1, 0,0,Math.PI/2);
+    return by+0.4;
+  }
+
+  // --- СМК-102: корпус с круглым фланцем и большим спицевым колесом ---
+  function buildSMK102MapModel(bx){
+    function mbox(w,h,d,color,x,y,z){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.55, metalness: 0.15});
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z); scene.add(m); return m;
+    }
+    function mcyl(r1,r2,h,segs,color,x,y,z,rx,ry,rz){
+      var mat = new THREE.MeshStandardMaterial({color: hex(color), roughness: 0.45, metalness: 0.3});
+      var m = new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segs||24), mat);
+      m.position.set(x,y,z);
+      if(rx) m.rotation.x=rx; if(ry) m.rotation.y=ry; if(rz) m.rotation.z=rz;
+      scene.add(m); return m;
+    }
+    var cream='#2457A5', creamDark='#BFD6EC', steelGrey='#8B93A0', steel='#2E5FA3', steelDark='#1F3F73', yellow='#D8CC3A';
+    var baseY=0.5, baseW=1.5, baseH=1.0, baseD=1.4, bz=turnZ;
+    mbox(baseW, baseH, baseD, cream, bx, baseY, bz);
+    mcyl(0.4,0.4,0.08,24, creamDark, bx, baseY+0.1, bz-baseD/2-0.03, Math.PI/2,0,0);
+    var topY = baseY + baseH/2 + 0.475;
+    mbox(0.9, 0.55, 0.9, steelGrey, bx, topY, bz);
+
+    var wheelX = bx-(baseW/2+0.55), wheelY = baseY+0.1, R=0.5;
+    var rim = new THREE.Mesh(new THREE.TorusGeometry(R,0.07,10,28), new THREE.MeshStandardMaterial({color: hex(yellow), roughness:0.5, metalness:0.3}));
+    rim.position.set(wheelX, wheelY, bz); rim.rotation.y = Math.PI/2;
+    scene.add(rim);
+    for(var i=0;i<6;i++){
+      var ang = i*Math.PI/3;
+      mbox(0.07, R*0.85, 0.07, yellow, wheelX, wheelY+R*0.42*Math.cos(ang), bz+R*0.42*Math.sin(ang));
+    }
+    mcyl(0.12,0.12,0.2,16, steelDark, wheelX, wheelY, bz, 0,0,Math.PI/2);
+    var motorX = wheelX-0.5;
+    mcyl(0.28,0.28,0.75,28, steel, motorX, wheelY, bz, 0,0,Math.PI/2);
+    mbox(0.06, 0.9, 1.0, yellow, bx+baseW/2+0.03, baseY+0.1, bz); // впритык к корпусу
+    return topY+0.3;
+  }
+
+  // --- два питателя на входе ---
+  var feeders = [
+    {name:'Питатель №1 — Песок', x:-1.5, val:'[XX,X %]', sub:'[XX,X Гц]', body:'#1E8A54', rim:'#146140'},
+    {name:'Питатель №2 — Глина', x:1.5,  val:'[XX,X %]', sub:'[XX,X Гц]', body:'#D97706', rim:'#9A530A'}
+  ];
+  var feederZ = -11, mergeZ = -8.5;
+  feeders.forEach(function(f){
+    box(0.5, 0.3, mergeZ - feederZ, '#434B57', f.x, 0.15, (feederZ + mergeZ)/2, {roughness:0.55, metalness:0.3});
+    buildFeederModel(f.x, feederZ, f.body, f.rim);
+    addStation({
+      x:f.x, y:1.95, z:feederZ, name:f.name, state:'nodata',
+      statusText:'Нет данных · регистр не назначен',
+      note:'Заглушка: '+f.val+', '+f.sub+' — это макет формата, не текущее значение.',
+      footprint:{w:2.4,h:2.6,d:2.4}, footprintY:1.1
+    });
+  });
+  box(feeders[1].x - feeders[0].x, 0.3, 0.6, '#434B57', 0, 0.15, mergeZ, {roughness:0.55, metalness:0.3});
+
+  // --- нога 1, вниз по конвейеру: ДТЕ117, дальше PL601 ---
+  var vertLeg = [
+    {name:'Дробилка ДТЕ117', z:-4},
+    {name:'PL 601', z:0}
+  ];
+  box(0.6, 0.3, Math.abs(vertLeg[0].z - mergeZ) - 0.9, '#434B57', 0, 0.15, (mergeZ + vertLeg[0].z)/2, {roughness:0.55, metalness:0.3});
+  vertLeg.forEach(function(s, i){
+    if(s.name === 'Дробилка ДТЕ117'){
+      buildDTE117MapModel(s.z);
+      addStation({
+        x:0, y:1.95, z:s.z, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:3.2,h:1.8,d:1.6}, footprintY:0.85
+      });
+    } else if(s.name === 'PL 601'){
+      var top2 = buildPL601Model(s.z);
+      addStation({
+        x:0, y:top2+1.0, z:s.z, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:2.0,h:2.4,d:2.0}, footprintY:1.2
+      });
+    }
+    if(i < vertLeg.length - 1){
+      var next = vertLeg[i+1];
+      box(0.6, 0.3, (next.z - s.z) - 1.8, '#434B57', 0, 0.15, (s.z + next.z)/2, {roughness:0.55, metalness:0.3});
+    }
+  });
+  var turnZ = vertLeg[vertLeg.length - 1].z;
+
+  // --- поворот налево: Камневыделитель, СМК-102, УСМ-40, СМК 126 — по заводской схеме ---
+  var leftLeg = [
+    {name:'Камневыделитель', x:-4.5},
+    {name:'СМК-102', x:-10},
+    {name:'УСМ-40', x:-15.5},
+    {name:'СМК 126', x:-21}
+  ];
+  // соединитель от PL601 (x=0) до первого станка левой ноги
+  box(Math.abs(leftLeg[0].x) - 0.9, 0.3, 0.6, '#434B57', leftLeg[0].x/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
+  leftLeg.forEach(function(s, i){
+    if(s.name === 'Камневыделитель'){
+      var kvTop = buildKamnevydelitelModel(s.x);
+      addStation({
+        x:s.x, y:kvTop+0.85, z:turnZ, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:2.0,h:1.8,d:2.0}, footprintY:0.9
+      });
+    } else if(s.name === 'СМК-102'){
+      var smkTop = buildSMK102MapModel(s.x);
+      addStation({
+        x:s.x, y:smkTop+0.65, z:turnZ, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:2.0,h:2.2,d:2.0}, footprintY:1.1
+      });
+    } else if(s.name === 'УСМ-40'){
+      var usmTop = buildUSM40Model(s.x);
+      addStation({
+        x:s.x, y:usmTop+0.95, z:turnZ, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:2.6,h:2.2,d:2.2}, footprintY:1.1
+      });
+    } else if(s.name === 'СМК 126'){
+      buildSMK126Model(s.x);
+      addStation({
+        x:s.x, y:1.5, z:turnZ, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:2.2,h:1.6,d:1.2}, footprintY:0.8
+      });
+    } else {
+      dashedBox(1.8, 1.6, 1.8, s.x, 0.8, turnZ);
+      addStation({
+        x:s.x, y:1.95, z:turnZ, name:s.name, state:'nodata',
+        statusText:'Нет данных · регистр не назначен',
+        note:'Появится, когда главный инженер привяжет регистр датчика к этому станку.',
+        footprint:{w:1.8,h:1.6,d:1.8}, footprintY:0.8
+      });
+    }
+    if(i < leftLeg.length - 1){
+      var next = leftLeg[i+1];
+      box(Math.abs(next.x - s.x) - 1.8, 0.3, 0.6, '#434B57', (s.x + next.x)/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
+    }
+  });
+  var riseX = leftLeg[leftLeg.length - 1].x;
+
+  // --- продолжение по земле, на той же высоте, что и PL601: развилка на два бункера ---
+  var mergeX = riseX - 3;
+  box(Math.abs(mergeX - riseX) - 0.9, 0.3, 0.6, '#434B57', (riseX + mergeX)/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
+
+  var bunkers = [
+    {name:'Бункер 1', x:mergeX - 2, z:turnZ - 2.5, val:'[XX,X %]'},
+    {name:'Бункер 2', x:mergeX - 2, z:turnZ + 2.5, val:'[XX,X %]'}
+  ];
+  bunkers.forEach(function(b){
+    box(Math.abs(b.x - mergeX), 0.3, 0.6, '#434B57', (mergeX + b.x)/2, 0.15, turnZ, {roughness:0.55, metalness:0.3});
+    box(0.6, 0.3, Math.abs(b.z - turnZ) - 1.1, '#434B57', b.x, 0.15, (turnZ + b.z)/2, {roughness:0.55, metalness:0.3});
+    var bTop = buildBunker(b.x, b.z);
+    addStation({
+      x:b.x, y:bTop+0.35, z:b.z, name:b.name, state:'nodata',
+      statusText:'Нет данных · регистр не назначен',
+      note:'Заглушка: '+b.val+' — это макет формата, не текущее значение.',
+      footprint:{w:2.0,h:3.6,d:2.0}, footprintY:1.8
+    });
+  });
+
+  // --- включаем тени для всей построенной сцены разом ---
+  scene.traverse(function(o){
+    if(o.isMesh){
+      o.receiveShadow = true;
+      if(!(o.material && o.material.transparent)) o.castShadow = true;
+    }
+  });
+
+  // --- camera rig: manual orbit, no external controls addon ---
+  var target = new THREE.Vector3(-12.5, 1, -4);
+  var radius = 40, theta = Math.PI*0.62, phi = 0.95, forcedPhi = null;
+  var dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, moved = false;
+  var pinchDist = null;
+
+  function clampPhi(p){ return Math.max(0.06, Math.min(1.5, p)); }
+
+  function updateCamera(){
+    camera.position.set(
+      target.x + radius * Math.sin(phi) * Math.sin(theta),
+      target.y + radius * Math.cos(phi),
+      target.z + radius * Math.sin(phi) * Math.cos(theta)
+    );
+    camera.lookAt(target);
+  }
+
+  function setPressed(topOn){
+    document.getElementById('btnTop').setAttribute('aria-pressed', topOn ? 'true' : 'false');
+    document.getElementById('btn3d').setAttribute('aria-pressed', topOn ? 'false' : 'true');
+  }
+
+  document.getElementById('btnTop').addEventListener('click', function(){
+    forcedPhi = 0.1; setPressed(true);
+  });
+  document.getElementById('btn3d').addEventListener('click', function(){
+    forcedPhi = 0.9; setPressed(false);
+  });
+
+  // --- выбор узла кликом/тапом: один раз, без перетаскивания ---
+  var raycaster = new THREE.Raycaster();
+  var pointerNdc = new THREE.Vector2();
+  var selectedStation = null;
+  var hintEl = document.getElementById('hint');
+  var panelEl = document.getElementById('detailPanel');
+
+  function showDetail(st){
+    document.getElementById('detailDot').style.background = statusColor[st.state] || statusColor.nodata;
+    document.getElementById('detailName').textContent = st.name;
+    document.getElementById('detailStatus').textContent = st.statusText || 'Нет данных';
+    document.getElementById('detailNote').textContent = st.note || '';
+    panelEl.hidden = false;
+    if(hintEl) hintEl.style.display = 'none';
+    if(selectedStation && selectedStation.puck && selectedStation.puck !== st.puck){
+      selectedStation.puck.scale.set(1,1,1);
+    }
+    if(st.puck) st.puck.scale.set(1.5,1.5,1.5);
+    selectedStation = st;
+  }
+  function hideDetail(){
+    panelEl.hidden = true;
+    if(selectedStation && selectedStation.puck) selectedStation.puck.scale.set(1,1,1);
+    selectedStation = null;
+  }
+  document.getElementById('detailClose').addEventListener('click', hideDetail);
+
+  function handlePick(clientX, clientY){
+    var rect = canvas.getBoundingClientRect();
+    pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+    var hits = raycaster.intersectObjects(pickables, false);
+    if(hits.length){
+      showDetail(hits[0].object.userData.station);
+    } else {
+      hideDetail();
+    }
+  }
+
+  canvas.addEventListener('pointerdown', function(e){
+    dragging = true; lastX = e.clientX; lastY = e.clientY; forcedPhi = null;
+    downX = e.clientX; downY = e.clientY; moved = false;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    var dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    if(Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) moved = true;
+    theta -= dx * 0.006;
+    phi = clampPhi(phi - dy * 0.006);
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(function(evt){
+    canvas.addEventListener(evt, function(e){
+      var wasDragging = dragging;
+      dragging = false;
+      if(evt === 'pointerup' && wasDragging && !moved){
+        handlePick(e.clientX, e.clientY);
+      }
+    });
+  });
+  canvas.addEventListener('wheel', function(e){
+    e.preventDefault();
+    radius = Math.max(8, Math.min(75, radius * (1 + e.deltaY * 0.001)));
+  }, {passive:false});
+
+  canvas.addEventListener('touchstart', function(e){
+    if(e.touches.length === 2){
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchDist = Math.hypot(dx,dy);
+    }
+  }, {passive:true});
+  canvas.addEventListener('touchmove', function(e){
+    if(e.touches.length === 2 && pinchDist != null){
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var d = Math.hypot(dx,dy);
+      radius = Math.max(8, Math.min(75, radius * (pinchDist / d)));
+      pinchDist = d;
+    }
+  }, {passive:true});
+  canvas.addEventListener('touchend', function(e){
+    if(e.touches.length < 2) pinchDist = null;
+  }, {passive:true});
+
+  // Пока открыта карточка узла, Esc закрывает сначала её (сам обработчик
+  // живёт снаружи: выйти из карты нужно и тогда, когда сцена не
+  // построилась).
+  window.acaiMapEscape = function(){
+    if(panelEl.hidden) return false;
+    hideDetail();
+    return true;
+  };
+
+  function resize(){
+    var w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    camera.aspect = w / Math.max(h,1);
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  var tmpV = new THREE.Vector3();
+  function positionLabels(){
+    var w = stage.clientWidth, h = stage.clientHeight;
+    trackedLabels.forEach(function(t){
+      tmpV.copy(t.pos).project(camera);
+      var visible = tmpV.z < 1;
+      t.el.style.display = visible ? 'block' : 'none';
+      if(visible){
+        t.el.style.left = ((tmpV.x * 0.5 + 0.5) * w) + 'px';
+        t.el.style.top = ((-tmpV.y * 0.5 + 0.5) * h) + 'px';
+      }
+    });
+  }
+
+  var clockStart = (window.performance && performance.now) ? performance.now() : Date.now();
+  function animate(){
+    requestAnimationFrame(animate);
+    // Карта свёрнута или вкладка в фоне — не жжём батарею и видеокарту.
+    if(document.hidden) return;
+    var t = (((window.performance && performance.now) ? performance.now() : Date.now()) - clockStart) / 1000;
+    pickables.forEach(function(hit, idx){
+      var st = hit.userData.station;
+      if(st && st.puck){
+        st.puck.position.y = st.puckBaseY + Math.sin(t*1.6 + idx*0.7) * 0.035;
+      }
+    });
+    if(forcedPhi != null){
+      phi += (forcedPhi - phi) * 0.12;
+      if(Math.abs(phi - forcedPhi) < 0.01){ phi = forcedPhi; forcedPhi = null; }
+    }
+    updateCamera();
+    positionLabels();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  document.getElementById('loadNote').hidden = true;
+}
+
+// ── Загрузка библиотеки: экран не должен оставаться пустым ───────
+// Тег <script src> в <head> блокировал отрисовку: если до CDN нет
+// связи, человек смотрел на белое поле и не понимал, сломалось или
+// грузится. Поэтому страница рисуется сразу, а библиотека едет
+// отдельно — с обработкой обрыва и долгого молчания.
+(function(){
+  // Пояснения на телефоне свёрнуты в две строки — нажатие разворачивает.
+  Array.prototype.forEach.call(document.querySelectorAll('.clamp'), function(el){
+    el.addEventListener('click', function(){ el.classList.toggle('open'); });
+  });
+
+  // Esc внутри карты закрывает её: страница открыта в <iframe>, и
+  // нажатие сюда до «Главной» само не доходит — сообщаем ей явно.
+  // Обработчик ставится всегда, даже если библиотека не загрузилась:
+  // иначе из нерабочей карты нельзя было бы выйти клавишей.
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    if(window.acaiMapEscape && window.acaiMapEscape()) return;
+    try { parent.postMessage('acai-massaprep-close', location.origin); } catch (err) {}
+  });
+
+  var CDN = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
+  var WAIT_MS = 12000;
+  var note = document.getElementById('loadNote');
+  var fail = document.getElementById('loadFail');
+  var why  = document.getElementById('failWhy');
+  var timer = null, done = false;
+
+  function showFail(reason){
+    if(done) return;
+    done = true;
+    clearTimeout(timer);
+    note.hidden = true;
+    why.textContent = reason;
+    fail.hidden = false;
+    // Кнопки вида и подсказка без сцены бессмысленны.
+    var controls = document.querySelector('.controls');
+    if(controls) controls.style.display = 'none';
+    var hint = document.getElementById('hint');
+    if(hint) hint.style.display = 'none';
+  }
+
+  function load(){
+    done = false;
+    fail.hidden = true;
+    note.hidden = false;
+    var controls = document.querySelector('.controls');
+    if(controls) controls.style.display = '';
+    var el = document.createElement('script');
+    el.src = CDN;
+    el.onload = function(){
+      clearTimeout(timer);
+      if(done) return;
+      if(!window.THREE){ showFail('Библиотека загрузилась не полностью.'); return; }
+      done = true;
+      try { startMap(); }
+      catch (e) { done = false; showFail('Не удалось построить схему: ' + e.message); }
+    };
+    el.onerror = function(){ showFail('До интернета нет связи, библиотека не загрузилась.'); };
+    timer = setTimeout(function(){
+      showFail('Интернет отвечает слишком долго — ждали 12 секунд.');
+    }, WAIT_MS);
+    document.head.appendChild(el);
+  }
+
+  document.getElementById('failRetry').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

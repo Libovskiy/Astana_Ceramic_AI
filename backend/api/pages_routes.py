@@ -286,3 +286,20 @@ def checklist_page(request: Request):
 @router.get("/maintenance")
 def maintenance_page(request: Request):
     return templates.TemplateResponse(request=request, name="maintenance.html")
+
+
+# =========================================
+# МАССАПОДГОТОВКА — 3D КАРТА ЛИНИИ
+# =========================================
+# Открывается из блока показаний на «Главной» по кнопке «Развернуть»,
+# в <iframe> внутри модалки. Отдельным адресом — чтобы Three.js (около
+# 600 КБ с CDN) грузился только тому, кто карту действительно раскрыл,
+# а не всем, кто зашёл на сводку.
+#
+# Права — те же, что у блока с цифрами на «Главной»: в PAGE_ROLES
+# (backend/api/main.py) этому адресу выставлен список «/». В меню
+# страницы нет: она не раздел, а развёрнутый вид блока.
+
+@router.get("/massaprep/3d")
+def massaprep_map_page(request: Request):
+    return templates.TemplateResponse(request=request, name="massaprep_map.html")
