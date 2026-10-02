@@ -423,9 +423,20 @@ function renderTechVerdict(m){
   }
   if(bad.length) rows.push({level:'critical', what:`Вне допуска: ${bad.length}`,
     where:bad.slice(0,3).join(', ')+(bad.length>3?` и ещё ${bad.length-3}`:'')});
-  if(!live || !m.withLive) rows.push({level:'warning',
-    what:'Живых показаний нет',
-    where:'панель WebHMI не отдаёт данные — режим сверять не с чем, параметры остаются справочными'});
+  // Две разные беды, и лечатся они разными людьми. Раньше обе
+  // показывались одной строкой «панель WebHMI не отдаёт данные», и
+  // технолог шёл чинить сбор, когда чинить надо было привязку.
+  const stopped = collection && !collection.ok && collection.state !== 'never';
+  if(stopped) rows.push({level:'warning',
+    what:`Сбор остановлен${(collection.since||'').slice(11,16) ? ' с ' + collection.since.slice(11,16) : ''}`,
+    where:(collection.state === 'panel' ? 'панель не отвечает' : 'расширение не на связи')
+      + ' — показания на экране старые, сверять по ним нельзя'});
+  else if(!live) rows.push({level:'warning',
+    what:'С панели не приходит ни одного показания',
+    where:'сверять не с чем — проверьте сбор WebHMI (расширение на заводском компьютере)'});
+  else if(!m.withLive) rows.push({level:'warning',
+    what:`Показания идут (${live} ${live===1?'регистр':live<5?'регистра':'регистров'}), но ни один параметр к ним не привязан`,
+    where:'сверять не с чем, пока регистр не назначен параметру — это делает главный инженер на вкладке «Регистры панели»'});
 
   if(rows.length){ ACAI.verdict('techVerdict', {title: bad.length?'Режим нарушен':'Сверять не с чем', rows}); return; }
   ACAI.verdict('techVerdict', {title:'Режим в допуске',

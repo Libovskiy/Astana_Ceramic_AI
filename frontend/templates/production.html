@@ -177,7 +177,7 @@
 <script src="/static/mobile_nav_v2.js?v=6"></script>
 <script src="/static/production.js?v=62"></script>
 <script src="/static/xls-report.js?v=3"></script>
-<script src="/static/shift-report.js?v=5"></script>
+<script src="/static/shift-report.js?v=6"></script>
 <script>
 // Сначала меню (от него зависят ссылки в выводе), потом сам вывод.
 initLayout().then(ctx => {
@@ -198,6 +198,9 @@ initLayout().then(ctx => {
     document.querySelector('.topbar-title').textContent = 'Сменный отчёт';
     document.querySelector('.topbar-sub').textContent =
       'Вагонетки за смену: съём слоёв, годные поддоны и брак';
+    // Отчёт может и не открыться (рабочий его больше не ведёт, только
+    // смотрит) — shift-report.js зовёт нас и с null, поэтому заглушка
+    // «Считаю выпуск…» наверху не остаётся висеть до конца смены.
     window.onShiftReportRendered = renderWorkerVerdict;
   } else {
     renderProdVerdict(role);
@@ -212,7 +215,19 @@ initLayout().then(ctx => {
 // смену или ещё нет. Прежний вывод говорил про файл Экселя, которого
 // рабочий не видит и не заполняет.
 function renderWorkerVerdict(report, meta){
-  if (!report) return;
+  if (!report) {
+    // Отчёта на экране нет: смену ещё не открывали или человек только
+    // зашёл. Молчать нельзя — это единственная карточка на его
+    // странице, и раньше тут до конца смены висело «Считаю выпуск…».
+    const fills = meta ? !!meta.can_fill : false;
+    ACAI.verdict('prodVerdict', {title: 'Отчёт за смену не открыт',
+      sub: fills
+        ? 'Выберите дату и смену ниже и нажмите «Открыть» — там вагонетки, '
+          + 'съём слоёв и брак. Время съёма считается само.'
+        : 'Отчёт ведёт начальник смены. Выберите дату и смену ниже и '
+          + 'нажмите «Показать», чтобы посмотреть вагонетки и брак.'});
+    return;
+  }
   const cars = (report.cars || []).length;
   const label = report.status_label || '';
 

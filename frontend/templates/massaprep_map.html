@@ -883,15 +883,47 @@ function startMap(){
   var tmpV = new THREE.Vector3();
   function positionLabels(){
     var w = stage.clientWidth, h = stage.clientHeight;
+
+    // Сначала считаем, где подпись должна быть, потом разводим: на
+    // телефоне узлы сходятся в одну точку, подписи ложились друг на
+    // друга, а крайние («PL 601») уезжали за край и читались как «01».
+    var placed = [];
     trackedLabels.forEach(function(t){
       tmpV.copy(t.pos).project(camera);
-      var visible = tmpV.z < 1;
-      t.el.style.display = visible ? 'block' : 'none';
-      if(visible){
-        t.el.style.left = ((tmpV.x * 0.5 + 0.5) * w) + 'px';
-        t.el.style.top = ((-tmpV.y * 0.5 + 0.5) * h) + 'px';
-      }
+      if(tmpV.z >= 1){ t.el.style.display = 'none'; return; }
+      t.el.style.display = 'block';
+      placed.push({el: t.el,
+                   x: (tmpV.x * 0.5 + 0.5) * w,
+                   y: (-tmpV.y * 0.5 + 0.5) * h});
     });
+
+    placed.sort(function(a, b){ return a.y - b.y; });
+
+    var GAP = 26;              // высота подписи с просветом
+    for(var i = 0; i < placed.length; i++){
+      var item = placed[i];
+      // Подпись центрирована по x (transform: translate(-50%,-100%)),
+      // поэтому держим её так, чтобы половина не вылезла за край.
+      var half = item.el.offsetWidth / 2 || 0;
+      item.x = Math.max(half + 4, Math.min(w - half - 4, item.x));
+      // Если выше уже стоит подпись впритык — опускаем эту ниже.
+      // Проходим список заново, пока двигается: сдвинув подпись, можно
+      // наехать на следующую, и за один проход это не расходилось.
+      for(var pass = 0; pass < 4; pass++){
+        var moved = false;
+        for(var j = 0; j < i; j++){
+          var other = placed[j];
+          if(Math.abs(other.x - item.x) < (half + other.el.offsetWidth / 2) &&
+             Math.abs(item.y - other.y) < GAP){
+            item.y = other.y + GAP;
+            moved = true;
+          }
+        }
+        if(!moved) break;
+      }
+      item.el.style.left = item.x + 'px';
+      item.el.style.top = item.y + 'px';
+    }
   }
 
   var clockStart = (window.performance && performance.now) ? performance.now() : Date.now();

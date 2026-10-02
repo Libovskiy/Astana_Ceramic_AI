@@ -105,8 +105,10 @@ function watchSectionCounts() {
         }
 
         const update = () => {
-            const shown = list.querySelectorAll(rowSelector).length;
-            counter.textContent = shown ? String(shown) : "";
+            // Ноль пишем числом, а не пустотой: у свёрнутого «Очередь
+            // работ» счётчика не было вовсе, и понять, пусто там или
+            // просто ничего не посчитали, можно было только раскрыв.
+            counter.textContent = String(list.querySelectorAll(rowSelector).length);
         };
 
         new MutationObserver(update).observe(list, { childList: true, subtree: true });

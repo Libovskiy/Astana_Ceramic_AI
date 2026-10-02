@@ -699,7 +699,7 @@ function openAddEquipment(){
   ACAI.showModal(`
     <h3>Добавить оборудование</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="field" style="grid-column:1/-1"><label>Название *</label><input class="input" id="ae-name" placeholder="Например: Дробилка DTE 117"></div>
+      <div class="field" style="grid-column:1/-1"><label>Название *</label><input class="input" id="ae-name" placeholder="Например: Дробилка ДТЕ117"></div>
       <div class="field"><label>Тип</label><input class="input" id="ae-type" placeholder="Дробилка, Вальцы..."></div>
       <div class="field"><label>Цех *</label>
         <select class="input" id="ae-location">${ZONES.map(z=>`<option>${z}</option>`).join('')}</select>

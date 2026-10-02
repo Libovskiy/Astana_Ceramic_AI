@@ -35,7 +35,7 @@ from backend.config import DB_NAME
 
 # Участки — те же, что в сменном отчёте (production_report_import).
 SECTIONS = {
-    "massa": "Массоподготовка",
+    "massa": "Массаподготовка",
     "kiln": "Печь и сушилка",
     "forming": "Формовка",
     "packing": "Упаковка",

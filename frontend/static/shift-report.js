@@ -49,6 +49,9 @@ async function initShiftReport() {
   if (_srViewerOnly) {
     document.getElementById("srOpenBtn").textContent = "Показать";
     await srLoadList();
+    // Страница тоже должна знать, что отчёта на экране пока нет: иначе
+    // её вывод остаётся на заглушке, пока человек не нажмёт «Показать».
+    srNotify(null);
     return;
   }
 
@@ -194,13 +197,18 @@ function srRender() {
 
   srRenderActions(report);
 
-  // Страница может подписаться на состояние отчёта. Нужно рабочему:
-  // у него на «Производстве» только этот блок, и вывод сверху должен
-  // говорить про его смену, а не про файл начальника производства.
-  if (typeof window.onShiftReportRendered === "function") {
-    try { window.onShiftReportRendered(report, _srMeta); }
-    catch (e) { console.warn("onShiftReportRendered:", e); }
-  }
+  srNotify(report);
+}
+
+
+// Страница может подписаться на состояние отчёта. Нужно рабочему: у
+// него на «Производстве» только этот блок, и вывод сверху должен
+// говорить про его смену, а не про файл начальника производства.
+// Зовём и с null — «отчёта на экране нет» это тоже состояние.
+function srNotify(report) {
+  if (typeof window.onShiftReportRendered !== "function") return;
+  try { window.onShiftReportRendered(report, _srMeta); }
+  catch (e) { console.warn("onShiftReportRendered:", e); }
 }
 
 function srCarRow(c, editable) {

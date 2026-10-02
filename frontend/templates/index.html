@@ -1010,6 +1010,13 @@ setInterval(fetchLive,1000);setInterval(renderDashboard,15000);
   .page { padding-bottom: calc(146px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 </style>
+<style>
+/* Кружок помощника висит в правом нижнем углу поверх страницы. На
+   телефоне запас снизу уже был, на компьютере — нет, и он накрывал
+   последнюю строку: «+ Задача» в календаре нажать было нечем. */
+.page { padding-bottom: 96px; }
+</style>
+
 <button id="aiFab" type="button" title="Спросить о заводе"
   style="display:none;position:fixed;right:20px;bottom:20px;z-index:65;
          width:56px;height:56px;border-radius:50%;border:none;

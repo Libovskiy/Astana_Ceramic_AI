@@ -808,17 +808,26 @@ def summary(year: int | None = None) -> dict:
         if not run:
             return {"loaded": False, "year": year}
 
+        # Подпись участка берём по ключу, а не из строки: она записана
+        # вместе с прогоном, и у строк, загруженных до переименования,
+        # осталось старое написание («Массоподготовка»). Ключ один и
+        # тот же, поэтому экран не зависит от того, когда грузили файл.
+        from backend.services.production_report_import import SECTION_TITLES
+
         by_section = [dict(item) for item in conn.execute(
             """
-            SELECT section, section_title,
+            SELECT section,
                    COUNT(*) AS cases,
                    SUM(COALESCE(minutes, 0)) AS minutes,
                    SUM(CASE WHEN minutes IS NULL THEN 1 ELSE 0 END) AS unparsed
             FROM xls_downtime WHERE year = ?
-            GROUP BY section, section_title
+            GROUP BY section
             ORDER BY minutes DESC
             """, (year,)
         )]
+
+        for item in by_section:
+            item["section_title"] = SECTION_TITLES.get(item["section"], item["section"])
 
         months = [dict(item) for item in conn.execute(
             """
@@ -1193,15 +1202,21 @@ def analytics(year: int | None = None) -> dict:
 
         months.sort(key=lambda item: order.get(item["sheet"], 99))
 
+        # Подпись — по ключу, см. такую же выборку выше.
+        from backend.services.production_report_import import SECTION_TITLES
+
         by_section = [dict(row) for row in conn.execute(
             """
-            SELECT section, section_title, COUNT(*) AS cases,
+            SELECT section, COUNT(*) AS cases,
                    SUM(COALESCE(minutes, 0)) AS minutes,
                    SUM(CASE WHEN minutes IS NULL THEN 1 ELSE 0 END) AS unparsed
             FROM xls_downtime WHERE year = ?
-            GROUP BY section, section_title ORDER BY minutes DESC
+            GROUP BY section ORDER BY minutes DESC
             """, (year,)
         )]
+
+        for row in by_section:
+            row["section_title"] = SECTION_TITLES.get(row["section"], row["section"])
 
         # Причины пишут вручную и по-разному («Проточка СМК-102» и
         # «Проточка СМК-102.»), поэтому группируем по очищенному тексту,

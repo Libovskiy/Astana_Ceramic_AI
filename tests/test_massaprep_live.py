@@ -115,8 +115,8 @@ LIVE = {
 SENSOR_NAMES = (ROOT / "frontend" / "static" / "sensor-names.js").read_text(encoding="utf-8")
 
 
-def open_map(browser, health, live=LIVE):
-    page = browser.new_page()
+def open_map(browser, health, live=LIVE, viewport=None):
+    page = browser.new_page(viewport=viewport) if viewport else browser.new_page()
     # Справочник имён — настоящий файл системы: проверяем тот же путь,
     # которым страница ходит на сервере.
     page.route("**/static/sensor-names.js", lambda route: route.fulfill(
@@ -201,6 +201,32 @@ try:
         check("сбор стоит: сказано, с какого времени",
               "13:40" in page.locator("#liveStrip").inner_text(),
               page.locator("#liveStrip").inner_text())
+        page.close()
+
+        # ── 3. телефон: подписи читаются ────────────────────────
+        # На узкой ширине узлы сходятся в одну точку. Подписи налезали
+        # друг на друга, а крайние уезжали за край: «PL 601» читался
+        # как «01».
+        page = open_map(browser, {"ok": True, "state": "live", "last_data_at": NOW},
+                        viewport={"width": 390, "height": 844})
+        boxes = page.locator(".chip").evaluate_all(
+            """els => els.map(e => { const r = e.getBoundingClientRect();
+                 return {t: e.textContent.trim(), l: r.left, r: r.right,
+                         top: r.top, bot: r.bottom}; })""")
+
+        outside = [b["t"] for b in boxes if b["l"] < 0 or b["r"] > 390]
+        check("на телефоне подписи не уезжают за край", not outside, outside)
+
+        overlaps = []
+        for i, one in enumerate(boxes):
+            for other in boxes[i + 1:]:
+                if (one["l"] < other["r"] and other["l"] < one["r"]
+                        and one["top"] < other["bot"] and other["top"] < one["bot"]):
+                    overlaps.append((one["t"], other["t"]))
+        check("на телефоне подписи не налезают друг на друга", not overlaps, overlaps)
+
+        # Парная: развели — но не растеряли, видны все десять.
+        check("и все узлы подписаны", len(boxes) == 10, len(boxes))
         page.close()
         browser.close()
 finally:
