@@ -51,7 +51,7 @@ fd, monitoring = tempfile.mkstemp(suffix=".db"); os.close(fd)
 conn = sqlite3.connect(factory)
 conn.execute("CREATE TABLE equipment(id INTEGER PRIMARY KEY, name TEXT, location TEXT, is_active INTEGER DEFAULT 1)")
 conn.execute("INSERT INTO equipment VALUES(1,'Бункер хранения шихты №1','Массаподготовка',1)")
-conn.execute("INSERT INTO equipment VALUES(2,'Дробилка DTE 117','Массаподготовка',1)")
+conn.execute("INSERT INTO equipment VALUES(2,'Дробилка ДТЕ117','Массаподготовка',1)")
 conn.commit(); conn.close()
 
 now = datetime.now()
@@ -104,8 +104,12 @@ check(rows["конвейер_1_гц"]["short_title"] == "Конв. 1",
       "и короткое имя для тесных мест тоже", rows["конвейер_1_гц"]["short_title"])
 
 # ── Пары из кода перенесены ─────────────────────────────────────────
-check(rows["pl024_1_загрузка_проц"]["title"] == "Загрузка питателя PL024-1",
+# Имя — то, которым станок зовут на заводе: PL024-1 это бункер 1, и
+# «PL024» с экранов убрано по решению владельца 02.10.2026.
+check(rows["pl024_1_загрузка_проц"]["title"] == "Загрузка бункера 1",
       "пара из LIVE_MAP перенесена в базу", rows["pl024_1_загрузка_проц"]["title"])
+check(rows["pl024_1_загрузка_проц"]["short_title"] == "Бункер 1",
+      "и короткое имя без «PL024»", rows["pl024_1_загрузка_проц"]["short_title"])
 check("kp10_гц" in rows,
       "регистр из LIVE_MAP заведён, даже если панель его не присылала")
 check(rows["kp10_гц"]["state"] == "silent",
@@ -119,7 +123,7 @@ target = rows["конвейер_1_гц"]["id"]
 reg.update_register(target, title="Конвейер №1", equipment_id=2, changed_by="гл. инженер")
 after = {r["register"]: r for r in reg.list_registers()}["конвейер_1_гц"]
 check(after["equipment_id"] == 2, "станок назначается", after["equipment_id"])
-check(after["equipment_name"] == "Дробилка DTE 117", "и подтягивается его имя", after)
+check(after["equipment_name"] == "Дробилка ДТЕ117", "и подтягивается его имя", after)
 
 reg.update_register(target, equipment_id=0, changed_by="гл. инженер")
 after = {r["register"]: r for r in reg.list_registers()}["конвейер_1_гц"]
