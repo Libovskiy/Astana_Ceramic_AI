@@ -193,6 +193,20 @@
         </div>
       </div>
 
+      <!-- Цифровой двойник: весь завод. Устроен так же, как карта
+           линии ниже — отдельная страница в iframe по нажатию. -->
+      <div class="overlay massa-overlay hidden" id="twinOverlay">
+        <div class="massa-modal">
+          <div class="massa-modal-head">
+            <span class="massa-modal-title"><span data-icon=cube></span> Цифровой двойник завода</span>
+            <button type="button" class="ss-expand" onclick="closeTwin()">
+              <span data-icon=close></span> Свернуть
+            </button>
+          </div>
+          <iframe class="massa-frame" id="twinFrame" title="Цифровой двойник завода"></iframe>
+        </div>
+      </div>
+
       <!-- Развёрнутый вид: сцена живёт отдельной страницей и грузится
            в iframe только после нажатия. Закрыли — адрес убираем,
            чтобы Three.js не держал видеокарту в фоне. -->
@@ -212,7 +226,16 @@
       <div class="prod-map-wrap">
         <div class="prod-map-header">
           <h2>Производственная цепочка — Astana Ceramic</h2>
-          <span id="mapTime" style="font-size:11px;color:var(--text-dim)"></span>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span id="mapTime" style="font-size:11px;color:var(--text-dim)"></span>
+            <!-- Та же цепочка, только в объёме и по заводской планировке.
+                 Кнопка здесь, а не отдельным пунктом меню: это не новый
+                 раздел, а развёрнутый вид этой же карточки. -->
+            <button type="button" class="ss-expand" id="twinExpand" onclick="openTwin()"
+                    title="Цифровой двойник завода: все участки одной сценой">
+              <span data-icon=cube></span> Развернуть
+            </button>
+          </div>
         </div>
         <div class="prod-map-body">
           <div class="prod-flow" id="prodFlow"></div>
@@ -637,6 +660,27 @@ function renderSensors(lv){
      </div>`;
 }
 
+// ── ЦИФРОВОЙ ДВОЙНИК ЗАВОДА ───────────────────────────────
+// Устроен ровно как карта линии ниже: адрес ставится в iframe по
+// нажатию и снимается при закрытии.
+function openTwin(){
+  const frame=document.getElementById('twinFrame');
+  const theme=(window.acaiTheme&&window.acaiTheme.get())||'dark';
+  frame.src='/twin?theme='+theme;
+  document.getElementById('twinOverlay').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+
+function closeTwin(){
+  document.getElementById('twinOverlay').classList.add('hidden');
+  document.getElementById('twinFrame').removeAttribute('src');
+  document.body.style.overflow='';
+}
+
+function twinOpen(){
+  return !document.getElementById('twinOverlay').classList.contains('hidden');
+}
+
 // ── 3D-КАРТА МАССАПОДГОТОВКИ ──────────────────────────────
 // Свёрнуто — карточка с цифрами, развёрнуто — страница /massaprep/3d
 // на весь экран. Адрес ставится в iframe по нажатию и снимается при
@@ -666,14 +710,22 @@ function massaMapOpen(){
 // карты: там нажатие не доходит до нас, поэтому сцена присылает
 // сообщение (см. frontend/templates/massaprep_map.html).
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&massaMapOpen())closeMassaMap();
+  if(e.key!=='Escape')return;
+  if(massaMapOpen())closeMassaMap();
+  else if(twinOpen())closeTwin();
 });
 window.addEventListener('message',e=>{
-  if(e.origin===location.origin&&e.data==='acai-massaprep-close'&&massaMapOpen())closeMassaMap();
+  if(e.origin!==location.origin)return;
+  if(e.data==='acai-massaprep-close'&&massaMapOpen())closeMassaMap();
+  if(e.data==='acai-twin-close'&&twinOpen())closeTwin();
+  // Из двойника можно уйти в подробную карту линии, не возвращаясь
+  // на сводку: закрываем одну сцену и открываем другую.
+  if(e.data==='acai-twin-open-massa'){closeTwin();openMassaMap();}
 });
 // Тему переключили при открытой карте — перерисовываем сцену в ней же.
 document.addEventListener('acai-theme',()=>{
   if(massaMapOpen())openMassaMap();
+  if(twinOpen())openTwin();
 });
 
 // ── ДАШБОРД ───────────────────────────────────────────────

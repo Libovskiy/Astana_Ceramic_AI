@@ -303,3 +303,19 @@ def maintenance_page(request: Request):
 @router.get("/massaprep/3d")
 def massaprep_map_page(request: Request):
     return templates.TemplateResponse(request=request, name="massaprep_map.html")
+
+
+# =========================================
+# ЦИФРОВОЙ ДВОЙНИК ЗАВОДА
+# =========================================
+# Весь завод одной сценой: массаподготовка, формовка, сушилки, печь,
+# упаковка, склад. Открывается с «Главной» из карточки
+# «Производственная цепочка» — та же плоская цепочка, только в объёме.
+#
+# Отдельным адресом, как и карта линии: Three.js и сама сцена тяжелее
+# всей сводки, грузить их каждому, кто открыл «Главную», незачем.
+# Права — тот же список, что у «/» (см. PAGE_ROLES).
+
+@router.get("/twin")
+def twin_map_page(request: Request):
+    return templates.TemplateResponse(request=request, name="twin_map.html")

@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Цифровой двойник завода</title>
+<!--
+  Цифровой двойник: весь завод одной сценой — от массаподготовки до
+  склада готовой продукции.
+
+  Открывается с «Главной», из карточки «Производственная цепочка», в
+  <iframe> по кнопке «Развернуть». Отдельным адресом — чтобы Three.js
+  и сама сцена грузились только тому, кто её раскрыл.
+
+  Доступ — тот же, что у сводки: PAGE_ROLES в backend/api/main.py
+  выставляет «/twin» те же роли, что «/».
+
+  Живых показаний четыре: загрузка бункеров 1 и 2 и частоты питателей
+  глины и песка. Остальные участки серые и так и подписаны — панель
+  для них ничего не присылает, а рисовать выдуманные цифры нельзя.
+  Планировка — по заводским схемам; где положение условное, это
+  сказано в карточке участка.
+-->
+<script>
+  /* Тема — та же, что выбрал человек в системе: iframe с того же
+     адреса, значит и localStorage тот же. */
+  (function () {
+    var theme = null;
+    try { theme = new URLSearchParams(location.search).get('theme'); } catch (e) {}
+    if (theme !== 'light' && theme !== 'dark') {
+      try { theme = localStorage.getItem('acai_theme'); } catch (e) { theme = null; }
+    }
+    if (theme !== 'light' && theme !== 'dark') theme = 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+  })();
+</script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<script src="/static/sensor-names.js"></script>
+<style>
+
+/* Layout: полноэкранная изометрия-разрез по плану завода; сверху плашки показателей, справа список участков, снизу лента потока, по клику карточка участка */
+:root{
+  --bg:#EAF0F6; --panel:rgba(255,255,255,.9); --panel-b:rgba(20,40,70,.08);
+  --fg:#14233A; --mut:#5F7189; --accent:#1F5FD1; --brick:#C2562F;
+  --ok:#15803D; --warn:#B45309; --crit:#B91C1C; --nodata:#94A3B8;
+  --sh:0 6px 24px rgba(20,40,70,.12);
+  --font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+/* Тёмная тема — та же, что во всей системе: выбор человека лежит в
+   localStorage, его ставит скрипт в <head>. Светлые плашки поверх
+   тёмной сцены читались бы как фонари, поэтому у них свои цвета. */
+:root[data-theme="dark"]{
+  --bg:#0F1B33; --panel:rgba(23,40,74,.92); --panel-b:rgba(120,150,200,.22);
+  --fg:#F4F6FA; --mut:#9FB0CE; --accent:#5B8DEF;
+  --sh:0 6px 24px rgba(0,0,0,.45);
+}
+:root[data-theme="dark"] .tg{background:rgba(23,40,74,.92);color:#F4F6FA;
+  box-shadow:0 1px 4px rgba(0,0,0,.5)}
+:root[data-theme="dark"] .tg small{color:#8FB4FF}
+:root[data-theme="dark"] .pin{background:rgba(23,40,74,.95);color:#F4F6FA}
+:root[data-theme="dark"] .chip,
+:root[data-theme="dark"] .dbar button{background:#17284A;color:#E8EDF7;border-color:#2C4170}
+:root[data-theme="dark"] .dbar{background:rgba(23,40,74,.96)}
+:root[data-theme="dark"] .step:before{background:#2C4170}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);overflow:hidden}
+*{box-sizing:border-box}
+#app{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--panel-b);border-radius:14px;box-shadow:var(--sh);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+#top{position:absolute;z-index:6;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top,0px));display:flex;gap:10px;align-items:stretch;pointer-events:none;flex-wrap:wrap}
+#top>*{position:relative;pointer-events:auto}
+.brand{padding:10px 14px;display:flex;flex-direction:column;justify-content:center}
+.brand b{font-size:14px}
+.brand span{font-size:11px;color:var(--mut)}
+.kpi{padding:9px 14px;min-width:132px}
+.kpi small{display:block;font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.kpi strong{font-size:22px;font-variant-numeric:tabular-nums;line-height:1.15}
+.kpi em{font-style:normal;font-size:11px;color:var(--mut);margin-left:4px}
+.kpi i{position:absolute;right:10px;top:10px;width:9px;height:9px;border-radius:50%}
+.live{margin-left:auto;padding:10px 14px;font-size:12px;display:flex;gap:8px;align-items:center}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+#side{right:16px;top:calc(96px + env(safe-area-inset-top,0px));width:250px;padding:10px 6px 6px;max-height:calc(100% - 270px);overflow:auto}
+#side h4{margin:2px 10px 8px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:10px;cursor:pointer;font-size:13px}
+.row:hover,.row.on{background:rgba(31,95,209,.09)}
+.row i{width:9px;height:9px;border-radius:50%;flex:none}
+.row span{flex:1;min-width:0}
+.row small{color:var(--mut);font-size:11px}
+#card{left:16px;top:calc(96px + env(safe-area-inset-top,0px));width:320px;max-height:calc(100% - 370px);min-height:150px;overflow:auto;padding:14px 16px;display:none}
+#card h3{margin:0 0 2px;font-size:17px;padding-right:22px}
+#card .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;margin:4px 0 10px;padding:3px 9px;border-radius:99px;background:rgba(20,40,70,.06)}
+#card .st i{width:8px;height:8px;border-radius:50%}
+#card p{margin:0 0 10px;font-size:12.5px;line-height:1.45;color:var(--mut)}
+#card h5{margin:12px 0 6px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+#card dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:7px 12px;font-size:13px}
+#card dt{color:var(--mut)} #card dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+#card .x{position:absolute;right:10px;top:8px;border:0;background:none;font-size:20px;color:var(--mut);cursor:pointer}
+#flow{left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));padding:10px 16px 12px;overflow-x:auto}
+#flow h4{margin:0 0 8px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.steps{display:flex;align-items:flex-start;min-width:800px}
+.step{flex:1;text-align:center;position:relative;cursor:pointer;min-width:0}
+.step:before{content:"";position:absolute;top:10px;left:-50%;width:100%;height:2px;background:#CBD5E1}
+.step:first-child:before{display:none}
+.step .d{position:relative;z-index:1;width:22px;height:22px;border-radius:50%;margin:0 auto 5px;display:grid;place-items:center;color:#fff;font-size:11px;border:2px solid #fff}
+.step b{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step small{color:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
+#pins{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pin{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--panel-b);border-radius:99px;padding:4px 10px 4px 7px;font-size:11.5px;font-weight:700;box-shadow:var(--sh);white-space:nowrap;color:var(--fg)}
+.pin i{width:9px;height:9px;border-radius:50%}
+.pin.on{outline:2px solid var(--accent)}
+.tg{position:absolute;left:0;top:0;pointer-events:none;font-size:10.5px;font-weight:700;line-height:1.2;background:rgba(255,255,255,.88);color:#1E293B;border-radius:6px;padding:2px 6px;white-space:nowrap;box-shadow:0 1px 4px rgba(20,40,70,.18)}
+.tg small{font-weight:600;color:#1F5FD1;margin-left:4px}
+#legend{left:16px;bottom:calc(112px + env(safe-area-inset-bottom,0px));padding:10px 14px;font-size:11.5px;display:grid;gap:5px;pointer-events:none}
+#legend h4{margin:0 0 2px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+#legend div{display:flex;align-items:center;gap:8px}
+#legend i{width:12px;height:12px;border-radius:3px;flex:none}
+#legend i.c{border-radius:50%}
+#legend b{color:#F59E0B;font-size:14px;width:12px;text-align:center}
+.ctl{right:16px;bottom:calc(112px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;overflow:hidden}
+.ctl button{width:38px;height:36px;border:0;background:none;font-size:18px;color:var(--fg);cursor:pointer}
+.drw{position:absolute;inset:0;z-index:30;pointer-events:none;touch-action:none}
+.drw.on{pointer-events:auto;cursor:crosshair}
+.dbar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));z-index:31;display:none;gap:6px;align-items:center;padding:6px 8px;background:rgba(255,255,255,.95);border-radius:12px;box-shadow:0 2px 10px rgba(20,40,70,.25);font-family:inherit}
+.dbar.on{display:flex}
+.dbar button{height:32px;min-width:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;font-size:13px;font-weight:700;color:#1E293B;cursor:pointer}
+.dbar .sw{width:26px;min-width:26px;height:26px;padding:0;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #94A3B8}
+.dbar .sw.a{box-shadow:0 0 0 2px #1F5FD1}
+.ctl button:hover{background:rgba(31,95,209,.09)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid #CBD5E1;background:#fff;border-radius:99px;padding:4px 10px;font:600 12px var(--font);color:#1E293B;cursor:pointer}.chip:hover{background:rgba(31,95,209,.09)}
+.note{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));font-size:11px;color:var(--mut);background:var(--panel);padding:5px 12px;border-radius:99px;border:1px solid var(--panel-b);max-width:min(620px,56%);text-align:center}
+@media (max-width:820px){
+  #side{display:none} #card{width:calc(100% - 32px);top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px));max-height:34%}
+  #legend{display:none} .kpi{min-width:0;flex:1 1 40%} .live{display:none} .note{display:none} .brand{flex:1 1 100%}
+}
+
+/* Пока сцена едет и если не доехала — внятная строка вместо пустоты. */
+.stageNote{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:24px;text-align:center;z-index:40}
+.stageNote[hidden]{display:none}
+.stageNote .noteBox{background:var(--panel);border:1px solid var(--panel-b);border-radius:14px;
+  padding:18px 20px;max-width:min(92vw,460px);box-shadow:var(--sh)}
+.stageNote h2{margin:0 0 8px;font-size:15px;font-weight:800}
+.stageNote p{margin:0 0 6px;font-size:13px;line-height:1.45;color:var(--mut)}
+.stageNote button{margin-top:12px;height:36px;padding:0 14px;border:1px solid var(--panel-b);
+  border-radius:9px;background:var(--panel);color:var(--fg);font:700 13px var(--font);cursor:pointer}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <canvas id="c"></canvas>
+  <div id="tags"></div><div id="pins"></div>
+  <div id="top">
+    <div class="panel brand"><b>ТОО Astana Ceramic</b><span>Цифровой двойник завода</span></div>
+    <div class="panel kpi"><small>Бункер 1</small><strong id="k1">—</strong><em>%</em><i id="d1"></i></div>
+    <div class="panel kpi"><small>Бункер 2</small><strong id="k2">—</strong><em>%</em><i id="d2"></i></div>
+    <div class="panel kpi"><small>Питатель №1 · Глина</small><strong id="k3">—</strong><em>Гц</em><i id="d3"></i></div>
+    <div class="panel kpi"><small>Питатель №2 · Песок</small><strong id="k4">—</strong><em>Гц</em><i id="d4"></i></div>
+    <div class="panel live"><i></i><span id="liveTxt">Снимок данных</span></div>
+  </div>
+  <div class="panel" id="side"><h4>Участки</h4><div id="rows"></div></div>
+  <div class="panel" id="card"><button class="x" id="cx" aria-label="Закрыть">×</button><h3 id="ct"></h3><div class="st" id="cs"></div><p id="cn"></p><div id="cl"></div></div>
+  <div class="panel ctl"><button id="zi" aria-label="Приблизить">+</button><button id="zo" aria-label="Отдалить">−</button><button id="rl" aria-label="Повернуть влево">↶</button><button id="rr" aria-label="Повернуть вправо">↷</button><button id="hm" aria-label="Весь завод">⌂</button><button id="tg" aria-label="Подписи оборудования" style="font-size:13px;font-weight:800">Аа</button><button id="pn" aria-label="Рисовать на схеме">✎</button></div>
+  <canvas id="dr" class="drw"></canvas>
+  <div class="dbar" id="dbar"><button class="sw a" data-c="#E11D48" style="background:#E11D48" aria-label="красный"></button><button class="sw" data-c="#1F5FD1" style="background:#1F5FD1" aria-label="синий"></button><button class="sw" data-c="#16A34A" style="background:#16A34A" aria-label="зелёный"></button><button class="sw" data-c="#111827" style="background:#111827" aria-label="чёрный"></button><button id="dundo">Отмена</button><button id="dclr">Стереть всё</button><button id="ddone">Готово</button></div>
+  <div class="panel" id="legend"><h4>Что на схеме</h4>
+    <div><i style="background:#6B4F36"></i>Шихта (глина и песок)</div>
+    <div><i style="background:#C98B6B"></i>Сырец после формовки</div>
+    <div><i style="background:#C2562F"></i>Обожжённый кирпич</div>
+    <div><b>▲</b>Направление движения</div>
+    <div><i class="c" style="background:#15803D"></i>В норме &nbsp;<i class="c" style="background:#B45309"></i>Внимание &nbsp;<i class="c" style="background:#94A3B8"></i>Нет данных</div></div>
+  <div class="note">Материал везде идёт в одну сторону: от Массаподготовки к упаковке. Планировка по схемам завода. Живые данные только у питателей и бункеров, остальное серое. Положение Массаподготовки и Упаковки условное.</div>
+  <div class="panel" id="flow"><h4>Путь материала: от сырья до отгрузки</h4><div class="steps" id="steps"></div></div>
+</div>
+
+<script>
+function startTwin(){
+var COLORS={ok:'#15803D',warn:'#B45309',crit:'#B91C1C',nodata:'#94A3B8'};
+var LABEL={ok:'В норме',warn:'Внимание',crit:'Авария',nodata:'Нет данных'};
+
+/* ---------- ДАННЫЕ ----------
+   Приходят с панели WebHMI: /api/sensors/live. Пока не пришли —
+   честные прочерки, а не последние известные числа. Привязано четыре
+   регистра: загрузка бункеров 1 и 2, частоты питателей глины и песка.
+   Остальные участки серые: регистров для них панель не присылает. */
+var LIVE={bunker1:null,bunker2:null,feeder1:null,feeder2:null,ts:''};
+var collection=null;
+function lvl(p){return p==null?'nodata':p<50?'crit':p<80?'warn':'ok'}
+function hz(v){return v==null?'nodata':v>0?'ok':'warn'}
+function f1(v){return v==null?'—':v.toFixed(1).replace('.',',')}
+function stateOf(a){return a.indexOf('crit')>-1?'crit':a.indexOf('warn')>-1?'warn':'ok'}
+var NO=['нет данных'];
+
+/* ---------- участки (координаты в условных метрах, 1 ед. = 10 px схемы) ---------- */
+var ZONES=[
+ {id:'mass',name:'Массаподготовка',r:[72,33,132,60],hh:10,note:'Ящичные питатели подают глину и песок, дробилки, затем лента идёт к бункерам. Положение на плане условное.',
+  items:function(){return [['Питатель №1 · Глина',f1(LIVE.feeder1)+' Гц'],['Питатель №2 · Песок',f1(LIVE.feeder2)+' Гц'],['Дробилки','нет данных']]}},
+ {id:'opt',name:'Оптима',r:[47,13,69.5,57],hh:3,state:'nodata',note:'Фильтр, измельчение в Оптиме и конвейеры. Шихта идёт сюда из бункеров, дальше на формовку.',
+  items:function(){return [['Фильтр','нет данных'],['Оптима','нет данных'],['Конвейеры','нет данных']]}},
+ {id:'bunk',name:'Бункеры 1 и 2',r:[47.2,48.4,60.4,55.4],hh:13,note:'Запас шихты перед формовкой. Уровни приходят с датчиков.',
+  items:function(){return [['Бункер 1',f1(LIVE.bunker1)+' %'],['Бункер 2',f1(LIVE.bunker2)+' %'],['Данные от',LIVE.ts]]}},
+ {id:'form',name:'Формовка',r:[0,10,40,38],hh:10,state:'nodata',note:'Вакуумный пресс Магна 575 сжимает массу и откачивает воздух и воду, выдавливает брус на линию, нарезчики режут его, робот ставит сырец на новую вагонетку.',items:function(){return [['Экструдер шнековый MAGNA 575','нет данных'],['Линия экструзии','нет данных'],['Нарезчики','нет данных'],['Робот формовки','нет данных']]}},
+ {id:'dry1',name:'Сушилка 1',r:[-40.5,26.8,-17.5,35.2],hh:8,state:'nodata',note:'Сушка на вагонетках, 24 вагонетки.',items:function(){return [['Вагонеток','24'],['Показания','нет данных']]}},
+ {id:'dry2',name:'Сушилка 2',r:[-40.5,36.6,-17.5,45],hh:8,state:'nodata',note:'Вторая сушилка, 24 вагонетки.',items:function(){return [['Вагонеток','24'],['Показания','нет данных']]}},
+ {id:'kiln',name:'Печь обжига',r:[-40.5,15.8,-12,25.8],hh:8,state:'nodata',note:'Одна печь, вместимость 24 вагонетки. Температурные зоны пока не подключены.',items:function(){return [['Вагонеток','24'],['Показания','нет данных']]}},
+ {id:'pack',name:'Разгрузка и упаковка',r:[22,33,46,57],hh:9,state:'nodata',note:'Вагонетка с обожжённым кирпичом приезжает по рельсам, робот 1 снимает кирпич на конвейер, он едет налево к роботу 2. Робот 2 кладёт кирпич на поддон. Готовый поддон едет в обмотчик и дальше на улицу, там его забирает кар и везёт на склад ГП.',items:function(){return [['Робот 1 (разгрузка)','нет данных'],['Конвейер','нет данных'],['Робот 2 (поддоны)','нет данных'],['Площадка поддонов','не прописана'],['Упаковочная машина Messersi MH3','нет данных']]}},
+ {id:'gp',name:'Склад ГП',r:[5,61,45,77],hh:4,state:'nodata',note:'Готовая продукция на улице, отсюда машины забирают кирпич.',items:function(){return [['Показания','нет данных']]}},
+ {id:'fuel',name:'Уголь и Проматик',r:[-47.5,-4.8,-26,12.5],hh:8,state:'nodata',note:'Углезапасник, углесушка, Проматик с генератором и мельницей.',items:function(){return [['Углезапасник','нет данных'],['Углесушка','нет данных'],['Генератор','нет данных'],['Мельница','нет данных']]}},
+ {id:'util',name:'Компрессорная и отопление',r:[16.5,6,47,13],hh:6,state:'nodata',note:'Компрессорная и узел отопления.',items:function(){return [['Компрессорная','нет данных'],['Узел отопления','нет данных']]}}
+];
+var H=function(t){return [t]};
+function Z(id){return ZONES.filter(function(q){return q.id===id})[0]}
+function recalc(){
+  var f=[hz(LIVE.feeder1),hz(LIVE.feeder2)];
+  Z('mass').state=(f[0]==='nodata'&&f[1]==='nodata')?'nodata':stateOf(f);
+  Z('bunk').state=stateOf([lvl(LIVE.bunker1),lvl(LIVE.bunker2)])}
+/* подробности по технологическому регламенту ТОО Astana Ceramic */
+(function(){
+ var A=function(id,note,f){var z=Z(id);if(note)z.note=note;z.items=f};
+ A('mass','Линия из 6 машин: бурт, приёмные бункеры с питателями, дробилка ДТЕ117, дезинтегратор PL 601, вальцы СМК 102 и УСМ 40, смеситель СМК 126, затем бункеры. Ленточные конвейеры №1–11.',function(){return [H('Питание'),['Питатель №1 · Глина',f1(LIVE.feeder1)+' Гц'],['Питатель №2 · Песок',f1(LIVE.feeder2)+' Гц'],['Бункеры загрузки','фронтальный погрузчик ≈3 м³'],
+  H('Измельчение'),['Дробилка ДТЕ117','30–50 м³/ч · 55 кВт'],['Дезинтегратор PL 601','40 т/ч · зазор 2–25 мм'],['Камневыделительные вальцы PL 194','отключены'],['Вальцы тонкого помола СМК 102','40 т/ч · зазор 3,5 мм'],['Вальцы УСМ 40','50 т/ч · зазор 1,5 мм · до 2 мм'],
+  H('Смешивание'),['Смеситель лопастной СМК 126','2,5 м³ · 44 лопасти · зазор до 10 мм']]});
+ A('opt','Супертонкий помол шихты: вальцы Оптима 800, зазор не более 1 мм. Перед ними питатель-разравниватель. Конвейеры №12–15 подают массу на пресс.',function(){return [H('Оптима 800'),['Валки','Ø1000 × 800 мм'],['Зазор','1 мм, электрогидравлика'],['Поджатие','пневматическое'],['Износ бандажа','до 60 мм (мин. Ø880)'],['Масса','≈14 т'],H('Регламент'),['Проточка валков','каждые 20 дней – 4 недели'],['Скребки','менять при износе 80–90%']]});
+ A('bunk',null,function(){return [H('Уровни'),['Бункер 1',f1(LIVE.bunker1)+' %'],['Бункер 2',f1(LIVE.bunker2)+' %'],['Данные от',LIVE.ts],H('Конструкция'),['Объём каждого','≈100 м³'],['Подача','пластинчатые конвейеры'],['Конвейеры','№8, 9, 10 (реверс), 11 (реверс)'],['Переход бункер на бункер','оператор формовки']]});
+ A('form','Вакуумный пресс Magna 575 выдавливает брус через мундштук, затем столы и резчики режут его на сырец, ряды программируются, робот-садчик ставит сырец на вагонетку. До мундштука оборудование Verdes, дальше Beralmar.',function(){return [H('Пресс Magna 575 (Verdes)'),['Узлы','смеситель, вакуум-камера, шнек, мундштук'],['Влияет на брак','влажность, температура бруса, вакуум'],
+  H('Резка и столы (Beralmar)'),['Стол мерного бруса','на входе, проход при смене мундштука'],['Вертикальный резчик','гильотина, тахогенератор'],['Откидной стол','после среза бруса'],['Скоростная лента','отрыв мерного бруса'],['Многострунный резчик','2 рамки, автозамена при обрыве'],['Стол обрезков','сброс обрезков'],['Стол программирования рядов','ряды и слои для садки'],
+  H('Садка'),['Робот-садчик','сырец на вагонетку']]});
+ A('dry1','Туннельная сушилка Llevant: два пути по 22 вагонетки, 4 зоны. Путь 3 для вагонеток с сырцом. Автоматика MICROSEC (давление, влажность, температура по зонам).',function(){return [H('Сушилка'),['Длина','110 м, 2 пути'],['Вагонеток','22 на путь'],['Зоны','4, у каждой своя температура'],['Воздух','160 000 м³/ч · 120 °C'],['Влажность формовки','не более 24%'],['Тепло','генератор 1,2 млн + рекуперация печи 1,6 млн ккал/ч'],
+  H('Вентиляторы'),['Нагнетание','QB-54 (55 кВт) и QB-44 (30 кВт)'],['Вытяжка','2 × GAT-125 (30 кВт)'],['Рециркуляция','16 × GAT-63 и 32 × GAT-80'],H('Автоматика'),['Контроллер','MICROSEC (PLC)'],['Показания','нет данных']]});
+ A('dry2','Второй путь той же сушилки (22 вагонетки). Резервный путь №1 служит для вывода вагонеток через тросовую лебёдку.',function(){return [['Вагонеток','22'],['Показания','нет данных']]});
+ A('kiln','Туннельная печь Prestermic, уголь Проматик, 133 угольных инжектора, автоматика MICROBER-1. Зоны: предварительный нагрев, обжиг, охлаждение, рекуперация.',function(){return [H('Печь'),['Длина','106,5 м'],['Канал','4,7 × 1,54 м'],['Вагонеток в печи','22 (всего 74 с сушилкой и резервом)'],['Температура','оптимум 950 °C · максимум 1150 °C'],['Время обжига','35,77 ч'],
+  H('Горелки'),['Инжекторы угля','133, распределителей 19'],['Расход на горелку','≈6 кг/ч'],H('Вентиляторы'),['Дымосос','QB-44 · 37 кВт'],['Контравек','QB-40 · 30 кВт'],['Рекуперация','QB-54 · 37 кВт'],['Подвагонеточная яма','GAT-80 · 5,5 кВт'],H('Системы'),['Быстрое охлаждение','GERIM 200/2/14, 14 инжекторов'],['Предварительный нагрев','INYECTAIR 8+8'],['Показания','нет данных']]});
+ A('pack','Робот 1 снимает слои кирпича с вагонетки на цепные столы, группировка и опрокидыватель, Робот 2 формирует пакет на поддоне, упаковщик обматывает плёнкой, кар забирает пакеты.',function(){return [H('Разгрузка'),['Робот 1','FANUC M-410iB/700 · 700 кг'],['Цепные столы','приём, 3 стола, опрокидыватель, забор'],H('Упаковка'),['Робот 2','FANUC M-410iB/700 · слои крест на 90°'],['Упаковщик','Messersi MH3, 40 пакетов/ч'],['Подача поддонов','5 рядов × 20 шт'],['Формирование и упаковка','4 пакета · 8,4 м'],['Выдача','5 пакетов · 5,7 м (на схеме 3)'],H('Управление'),['Контроллер','Schneider Modicon M340']]});
+ A('fuel','Подготовка угля для печи: загрузочная воронка дозирует уголь в шаровую мельницу, угольная пыль идёт к горелкам. Углесушка и теплогенератор для сушилки.',function(){return [H('Проматик'),['Загрузочная воронка','дозирование угля'],['Шаровая мельница','барабан на двух опорах'],['Мелющая арматура','заложено 4,8 т · 300 кг раз в 3 мес'],['Фактически','≈170 кг в месяц'],H('Теплогенератор сушилки'),['Топка','1500 CSD, уголь ≤20 мм'],['Теплообменник','GB/1500'],['Показания','нет данных']]});
+})();
+var ND=function(){return 'нет данных'};
+var STEPS=[
+ {n:'Питатели',z:'mass',s:function(){return Z('mass').state},t:function(){return f1(LIVE.feeder1)+' / '+f1(LIVE.feeder2)+' Гц'}},
+ {n:'Дробилки',z:'mass',s:function(){return 'nodata'},t:ND},
+ {n:'Бункеры',z:'bunk',s:function(){return Z('bunk').state},t:function(){return f1(LIVE.bunker1)+' / '+f1(LIVE.bunker2)+' %'}},
+ {n:'Оптима',z:'opt',s:function(){return 'nodata'},t:ND},
+ {n:'Формовка',z:'form',s:function(){return 'nodata'},t:ND},
+ {n:'Сушилки',z:'dry1',s:function(){return 'nodata'},t:function(){return '2 × 22 ваг.'}},
+ {n:'Печь',z:'kiln',s:function(){return 'nodata'},t:function(){return '22 ваг.'}},
+ {n:'Разгрузка',z:'pack',s:function(){return 'nodata'},t:ND},
+ {n:'Склад ГП',z:'gp',s:function(){return 'nodata'},t:ND}
+];
+
+/* ---------- сцена ---------- */
+var CX=34,CZ=36;
+var cv=document.getElementById('c');
+var renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+var scene=new THREE.Scene();
+var DARK_UI=document.documentElement.getAttribute('data-theme')==='dark';
+/* Фон сцены — по теме. Сам завод не перекрашиваем: цвет оборудования
+   это его цвет, а не оформление страницы. */
+scene.background=new THREE.Color(DARK_UI?'#0F1B33':'#EAF0F6');
+var cam=new THREE.OrthographicCamera(-1,1,1,-1,-500,700);
+scene.add(new THREE.HemisphereLight(0xffffff,0xb9c6d8,0.9));
+var sun=new THREE.DirectionalLight(0xffffff,0.75);sun.position.set(CX-70,110,CZ+60);sun.target.position.set(CX,0,CZ);scene.add(sun.target);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);var sc=sun.shadow.camera;sc.left=-140;sc.right=140;sc.top=110;sc.bottom=-110;sc.near=1;sc.far=400;scene.add(sun);
+
+/* ---------- процедурные текстуры ---------- */
+var _seed=7;function rnd(){_seed=(_seed*16807)%2147483647;return _seed/2147483647}
+function shade(hex,k){var c=parseInt(hex.slice(1),16),r=Math.max(0,Math.min(255,((c>>16)&255)*k)),g=Math.max(0,Math.min(255,((c>>8)&255)*k)),b=Math.max(0,Math.min(255,(c&255)*k));return 'rgb('+(r|0)+','+(g|0)+','+(b|0)+')'}
+function mk(draw){var c=document.createElement('canvas');c.width=c.height=256;var x=c.getContext('2d');draw(x);var t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;return t}
+function speck(x,n,k,col){for(var i=0;i<n;i++){x.fillStyle=col||('rgba(0,0,0,'+(rnd()*k)+')');x.fillRect(rnd()*256,rnd()*256,1+rnd()*2,1+rnd()*2)}}
+var TEXGEN={
+ concrete:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);speck(x,2600,.12);speck(x,500,0,'rgba(255,255,255,.35)');x.strokeStyle='rgba(0,0,0,.10)';x.lineWidth=1;x.strokeRect(.5,.5,255,255);x.beginPath();x.moveTo(0,128);x.lineTo(256,128);x.moveTo(128,0);x.lineTo(128,256);x.stroke()})},
+ plaster:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);speck(x,1200,.06);x.fillStyle='rgba(20,40,70,.10)';for(var i=0;i<4;i++)x.fillRect(i*64,0,2,256);x.fillStyle='rgba(255,255,255,.5)';for(var i=0;i<4;i++)x.fillRect(i*64+2,0,1,256)})},
+ brick:function(c){return mk(function(x){x.fillStyle='#D8C9BC';x.fillRect(0,0,256,256);for(var r=0;r<8;r++){var off=r%2?32:0;for(var k=-1;k<4;k++){x.fillStyle=shade(c,.85+rnd()*.3);x.fillRect(off+k*64+2,r*32+2,60,28)}}speck(x,900,.15)})},
+ wood:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);for(var i=0;i<60;i++){x.strokeStyle='rgba(60,35,10,'+(.08+rnd()*.14)+')';x.beginPath();var y=rnd()*256;x.moveTo(0,y);x.lineTo(256,y+rnd()*6-3);x.stroke()}x.fillStyle='rgba(0,0,0,.25)';x.fillRect(0,0,256,3);x.fillRect(0,128,256,3)})},
+ metal:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);for(var i=0;i<240;i++){x.fillStyle='rgba(255,255,255,'+(rnd()*.07)+')';x.fillRect(rnd()*256,0,1,256)}speck(x,500,.08);x.strokeStyle='rgba(0,0,0,.28)';x.lineWidth=2;x.strokeRect(1,1,254,254);x.beginPath();x.moveTo(128,0);x.lineTo(128,256);x.stroke();x.fillStyle='rgba(255,255,255,.35)';[[10,10],[246,10],[10,246],[246,246],[118,10],[138,10],[118,246],[138,246]].forEach(function(p){x.beginPath();x.arc(p[0],p[1],3,0,7);x.fill()})})},
+ belt:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);for(var i=0;i<16;i++){x.fillStyle='rgba(255,255,255,.12)';x.fillRect(0,i*16,256,2);x.fillStyle='rgba(0,0,0,.25)';x.fillRect(0,i*16+8,256,3)}speck(x,300,.15)})},
+ hatch:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);x.strokeStyle='rgba(120,80,0,.28)';x.lineWidth=5;for(var i=-256;i<512;i+=32){x.beginPath();x.moveTo(i,256);x.lineTo(i+256,0);x.stroke()}speck(x,600,.08)})},
+ epoxy:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);speck(x,900,.05);x.strokeStyle='rgba(255,255,255,.55)';x.lineWidth=2;x.strokeRect(1,1,254,254);x.beginPath();x.moveTo(128,0);x.lineTo(128,256);x.moveTo(0,128);x.lineTo(256,128);x.stroke()})},
+ asphalt:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);speck(x,6000,.22);speck(x,1200,0,'rgba(255,255,255,.18)')})},
+ ground:function(c){return mk(function(x){x.fillStyle=c;x.fillRect(0,0,256,256);for(var i=0;i<30;i++){x.fillStyle='rgba('+(rnd()<.5?'255,255,255':'60,80,100')+','+(.03+rnd()*.05)+')';x.beginPath();x.arc(rnd()*256,rnd()*256,10+rnd()*30,0,7);x.fill()}speck(x,3500,.12)})}
+};
+/* цвет -> [вид текстуры, размер плитки в ед. мира] */
+var TEXMAP={'#f8fafc':['plaster',10],'#f1f5f9':['concrete',9],'#eef2f7':['concrete',9],'#e2e8f0':['concrete',8],'#d5dde8':['concrete',9],'#cbd5e1':['concrete',8],
+ '#dce5ef':['ground',14],'#c9d3dd':['asphalt',6],'#c9d3df':['asphalt',6],'#d3dce7':['asphalt',6],
+ '#d4e8d6':['epoxy',7],'#fde68a':['hatch',6],'#e9ecef':['concrete',9],'#7c97b8':['epoxy',7],'#c9d6e5':['concrete',9],
+ '#434b57':['belt',3],'#c2562f':['brick',2.2],'#c98b6b':['brick',2.2],'#b08968':['wood',3],
+ '#9b3a2e':['metal',5],'#7a2c22':['metal',5],'#1f6fb2':['metal',5],'#15569a':['metal',5],'#3f6f54':['metal',5],'#2f5d47':['metal',5],'#475569':['metal',5],'#334155':['metal',5],'#2f7d4e':['metal',5],'#dde9df':['plaster',10],'#d97706':['metal',4],'#1e8a54':['metal',4],'#9a530a':['metal',4],'#146140':['metal',4]};
+var TEXCACHE={};
+function mat(c,r,m){var o=new THREE.MeshStandardMaterial({color:c,roughness:r==null?.75:r,metalness:m||0});
+  var k=TEXMAP[String(c).toLowerCase()];
+  if(k){var key=k[0]+c;if(!TEXCACHE[key])TEXCACHE[key]=TEXGEN[k[0]](c);o.map=TEXCACHE[key];o.color.set('#ffffff');o.userData.tile=k[1]}
+  return o}
+function scaleUV(g,w,h,d,tile){var uv=g.attributes.uv,dims=[[d,h],[d,h],[w,d],[w,d],[w,h],[w,h]];
+  for(var f=0;f<6;f++)for(var v=0;v<4;v++){var i=f*4+v;uv.setXY(i,uv.getX(i)*dims[f][0]/tile,uv.getY(i)*dims[f][1]/tile)}uv.needsUpdate=true}
+function box(w,h,d,c,x,y,z,r,m){var g=new THREE.BoxGeometry(w,h,d),mm=mat(c,r,m);if(mm.userData.tile)scaleUV(g,w,h,d,mm.userData.tile);
+  var o=new THREE.Mesh(g,mm);o.position.set(x,y+h/2,z);scene.add(o);return o}
+/* прямоугольник по углам плана */
+function rect(x0,z0,x1,z1,h,c,y,r,m){return box(x1-x0,h,z1-z0,c,(x0+x1)/2,y||0,(z0+z1)/2,r,m)}
+function cyl(rt,rb,h,c,x,y,z,seg){var o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||20),mat(c,.6,.1));o.position.set(x,y+h/2,z);scene.add(o);return o}
+function tree(x,z,s){s=s||1;cyl(.35*s,.45*s,2.2*s,'#8B6B4A',x,0,z);var o=new THREE.Mesh(new THREE.SphereGeometry(1.7*s,14,12),mat('#5DB26B',.8));o.position.set(x,3.4*s,z);scene.add(o)}
+
+/* земля и дороги */
+rect(-120,-60,170,110,0.3,'#DCE5EF',-0.3);
+rect(-120,80,170,92,0.1,'#C9D3DF',0);
+for(var i=-6;i<=15;i++)rect(-118+i*12.5,85.6,-118+i*12.5+6,86.4,0.12,'#F8FAFC',0.1);
+for(var i=-50;i<=110;i+=10){tree(i,98,1);tree(i+5,-14,1.1)}
+
+/* ---------- корпуса: разрез, низкие стены ---------- */
+var WALL='#F8FAFC',EDGE='#1F5FD1',FLOORC='#F1F5F9';
+function wallsRect(x0,z0,x1,z1,h,skip){var t=.5;
+  if(skip!=='n')rect(x0,z0-t,x1,z0,h,WALL);if(skip!=='s')rect(x0,z1,x1,z1+t,h,WALL);
+  rect(x0-t,z0-t,x0,z1+t,h,WALL);rect(x1,z0-t,x1+t,z1+t,h,WALL);
+  rect(x0-t,z0-t,x1+t,z0,.3,EDGE,h);if(skip!=='s')rect(x0-t,z1,x1+t,z1+t,.3,EDGE,h)}
+/* главный зал с выемкой снизу (9.5..21.5, 48..57) */
+rect(-46.7,13,47,48,0.2,FLOORC);rect(-46.7,48,9.5,56.8,0.2,FLOORC);rect(21.5,48,47,56.8,0.2,FLOORC);
+wallsRect(-46.7,13,47,48,1.6,'s');
+rect(-47.2,48,-46.7,56.8,1.6,WALL);rect(-46.7,56.8,9.5,57.3,1.6,WALL);rect(9.5,48,10,57,1.6,WALL);rect(21,48,21.5,50.4,1.6,WALL);rect(21,54.4,21.5,57,1.6,WALL);rect(21.5,56.8,47,57.3,1.6,WALL);
+rect(9.5,48,21.5,48.5,1.6,WALL);
+[[-47.2,48,-46.7,57.3],[-46.7,56.8,9.5,57.3],[9.5,48,10,57.3],[21,48,21.5,50.4],[21,54.4,21.5,57.3],[21.5,56.8,47,57.3],[9.5,48,21.5,48.5]].forEach(function(e){rect(e[0],e[1],e[2],e[3],.3,EDGE,1.6)});
+/* здание Оптимы */
+rect(47,13,69.5,57,0.2,'#EEF2F7');wallsRect(47,13,69.5,57,1.6);
+/* ---------- помощники для моделей ---------- */
+var anims=[];var PI=Math.PI;
+function G(x,y,z){var g=new THREE.Group();g.position.set(x,y||0,z);scene.add(g);return g}
+function mb(w,h,d,c,x,y,z,g,r,m){var geo=new THREE.BoxGeometry(w,h,d),mm=mat(c,r==null?.55:r,m==null?.25:m);if(mm.userData.tile)scaleUV(geo,w,h,d,mm.userData.tile);
+  var o=new THREE.Mesh(geo,mm);o.position.set(x,y,z);(g||scene).add(o);return o}
+function cy(ax,rt,rb,len,c,x,y,z,g,seg,r,m){var o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,len,seg||24),mat(c,r==null?.5:r,m==null?.3:m));
+  if(ax==='x')o.rotation.z=PI/2;if(ax==='z')o.rotation.x=PI/2;o.position.set(x,y,z);(g||scene).add(o);return o}
+function frus(rt,rb,h,c,x,y,z,g){var o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,4,1),mat(c,.5,.3));o.rotation.y=PI/4;o.position.set(x,y,z);(g||scene).add(o);return o}
+function glass(w,h,d,x,y,z,g,col,op){var o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color:col||'#BFD7F2',transparent:true,opacity:op||.28,roughness:.1,metalness:.1,depthWrite:false}));o.position.set(x,y,z);(g||scene).add(o);return o}
+
+/* технические комнаты */
+(function(){
+  /* компрессорная */
+  rect(16.5,6,33.5,13,.2,'#C4B5FD');var pw='#7C3AED';
+  rect(16.5,5.6,33.5,6,3.4,pw);rect(16.5,13,33.5,13.4,3.4,pw);rect(16.1,5.6,16.5,13.4,3.4,pw);rect(33.5,5.6,33.9,13.4,3.4,pw);
+  [[20,8],[27,8]].forEach(function(p){cy('x',1.3,1.3,6,'#94A3B8',p[0],1.9,p[1]);cy('x',1.35,1.35,.3,'#475569',p[0]-2.4,1.9,p[1]);cy('x',1.35,1.35,.3,'#475569',p[0]+2.4,1.9,p[1])});
+  [[19,11.2],[25,11.2],[30.5,11.2]].forEach(function(p){mb(3.6,2.6,2.2,'#2563EB',p[0],1.5,p[1]);cy('y',.7,.7,.7,'#CBD5E1',p[0],3.2,p[1]);mb(.9,1.2,1.2,'#1E293B',p[0]+2.2,1.2,p[1])});
+  /* узел отопления */
+  rect(33.5,6.5,47,13,.2,'#E2E8F0');rect(33.5,6.1,47,6.5,3,WALL);rect(33.5,13,47,13.4,3,WALL);rect(33.1,6.1,33.5,13.4,3,WALL);rect(47,6.1,47.4,13.4,3,WALL);
+  [[37,9.5],[42,9.5]].forEach(function(p){cy('y',1.7,1.7,4.6,'#CBD5E1',p[0],2.5,p[1]);cy('y',1.5,1.5,.4,'#B91C1C',p[0],4.9,p[1])});
+  cy('x',.4,.4,13,'#EF4444',40,3.2,7.8);cy('x',.4,.4,13,'#3B82F6',40,2.6,11.4);cy('y',.7,.7,9,'#94A3B8',45.5,4.5,8.4);
+  /* уголь и Проматик */
+  [[-47.5,-4.8,-27.5,.2],[-44.2,.5,-26,5.3],[-46.7,5.5,-26.3,12.5]].forEach(function(b){rect(b[0],b[1],b[2],b[3],.2,'#CBD5E1');var t=.35;
+    rect(b[0],b[1]-t,b[2],b[1],2.6,WALL);rect(b[0],b[3],b[2],b[3]+t,2.6,WALL);rect(b[0]-t,b[1]-t,b[0],b[3]+t,2.6,WALL);rect(b[2],b[1]-t,b[2]+t,b[3]+t,2.6,WALL);rect(b[0]-t,b[1]-t,b[2]+t,b[1],.3,EDGE,2.6)});
+  /* углезапасник: кучи угля */
+  [[-43,-2.4,2.2],[-37.5,-2.3,2.3],[-32.5,-2.4,2.1]].forEach(function(p){var c=new THREE.Mesh(new THREE.ConeGeometry(p[2],2.6,20),mat('#1F2937',.95));c.position.set(p[0],1.8,p[1]);scene.add(c)});
+  /* углесушка: вращающийся барабан */
+  var d=G(-35,0,2.9);cy('x',1.7,1.7,13,'#64748B',0,3.2,0,d);(function(){var rg=new THREE.Group();rg.position.set(0,3.2,0);d.add(rg);for(var q=0;q<4;q++){var a=q*PI/2;mb(12.6,.25,.35,'#334155',0,Math.sin(a)*1.75,Math.cos(a)*1.75,rg)}anims.push(function(t){rg.rotation.x=t*.7})})();[-4.5,0,4.5].forEach(function(x){cy('x',2,2,.5,'#334155',x,3.2,0,d);mb(.8,2.2,.8,'#475569',x,1.1,1.8,d);mb(.8,2.2,.8,'#475569',x,1.1,-1.8,d)});
+  mb(2.6,3.2,3,'#EF4444',-7.2,2,0,d);cy('y',.6,.6,5,'#94A3B8',7.4,3.5,0,d);
+  /* Проматик: генератор и мельница */
+  var gen=G(-43.3,0,10.4);mb(4.6,2.8,2.6,'#2F7D4E',0,1.8,0,gen);cy('x',1.1,1.1,2.2,'#1F2937',-3.2,1.8,0,gen);cy('y',.4,.4,2,'#94A3B8',1.4,4.2,0,gen);
+  var ml=G(-36.5,0,10.4);cy('x',1.9,1.9,6.4,'#7A2C22',0,2.9,0,ml);(function(){var rg=new THREE.Group();rg.position.set(0,2.9,0);ml.add(rg);for(var q=0;q<4;q++){var a=q*PI/2;mb(6,.2,.3,'#CBD5E1',0,Math.sin(a)*1.95,Math.cos(a)*1.95,rg)}anims.push(function(t){rg.rotation.x=t*.9})})();cy('x',2.1,2.1,.5,'#334155',-3,2.9,0,ml);cy('x',2.1,2.1,.5,'#334155',3,2.9,0,ml);mb(2.2,2.2,2.2,'#475569',4.8,1.7,0,ml);cy('x',.9,.9,2.6,'#2563EB',7,1.7,0,ml);
+  /* бункер угля */
+})();
+
+/* ---------- участки на полу ---------- */
+function zfloor(x0,z0,x1,z1,c){rect(x0,z0,x1,z1,.15,c,.2,.9)}
+zfloor(0,12,40,34,'#D4E8D6');                      /* формовка */
+zfloor(-40.5,15.8,-19.3,25.8,'#E9ECEF');zfloor(-19.3,15.8,-12,25.8,'#FDE68A');
+zfloor(-40.5,26.8,-17.5,35.2,'#FDE68A');zfloor(-40.5,36.6,-17.5,45,'#FDE68A');
+zfloor(-17.3,25.5,-11.5,45,'#7C97B8');                    /* операторская */
+zfloor(-40.5,45.2,-11.5,54,'#C9D6E5');                    /* обводной путь */
+zfloor(22,33,46,57,'#D4E8D6');
+zfloor(47.2,48.4,60.4,55.4,'#D4E8D6');
+
+
+/* ---------- оборудование ---------- */
+var DARK='#3F6F54';
+function feeder(x,z,body,rim,dir){ /* ящичный питатель; лента выхода идёт в сторону dir по z */
+  var g=G(x,0,z);[[-3,-2.6],[3,-2.6],[-3,2.6],[3,2.6]].forEach(function(p){mb(.5,2.2,.5,'#475569',p[0],1.1,p[1],g)});
+  mb(7,.5,6,'#334155',0,2.4,0,g);
+  var h=frus(5.6,3.2,3.8,rim,0,4.6,0,g);var hh=frus(5.2,3,3.5,body,0,4.65,0,g);hh.scale.set(.985,1,.985);
+  [[0,2.7],[0,-2.7]].forEach(function(p){mb(7.8,.35,.5,rim,p[0],6.45,p[1]*1.02+(p[1]>0?.1:-.1),g)});[[2.8,0],[-2.8,0]].forEach(function(p){mb(.5,.35,7.8,rim,p[0]*1.02,6.45,0,g)});
+  mb(2.4,.45,3.7,'#434B57',0,1.7,dir*3.95,g);
+  cy('z',.8,.8,2.4,'#2563EB',4.4,2.7,0,g);mb(1.4,1.4,1.4,'#475569',4.3,2.3,-1.6,g);
+  mb(1.2,1.9,.6,'#E2E8F0',-4.2,1.3,-2.9,g);mb(.5,.5,.1,'#22C55E',-4.2,1.6,-3.22,g);
+  /* вибрация питателя */
+  anims.push(function(t){hh.position.y=4.65+Math.sin(t*14+x)*.02});
+  return g}
+function crusher(x,z,body){var g=G(x,0,z);
+  [[-2.4,-1.9],[2.4,-1.9],[-2.4,1.9],[2.4,1.9]].forEach(function(p){mb(.55,2.4,.55,'#334155',p[0],1.2,p[1],g)});
+  mb(6.2,.5,4.8,'#334155',0,2.6,0,g);
+  mb(5,2.4,4.2,body,0,3.9,0,g);
+  frus(3.4,1.9,2.2,'#7A2C22',0,6.2,0,g);
+  [-2.7,2.7].forEach(function(zz){var gf=new THREE.Group();gf.position.set(0,3.9,zz);g.add(gf);cy('z',1.8,1.8,.5,'#64748B',0,0,0,gf);cy('z',.5,.5,.7,'#1F2937',0,0,0,gf);
+    for(var k=0;k<3;k++){var sp=mb(3.4,.25,.2,'#E2E8F0',0,0,(zz>0?.3:-.3),gf);sp.rotation.z=k*PI/3;}
+    anims.push(function(t){gf.rotation.z=t*4})});
+  cy('x',1,1,2.8,'#2563EB',-4.6,3.2,2.9,g);mb(1.2,2.2,1.6,'#475569',-3.4,3.2,2.9,g);
+  mb(2,.9,1.6,'#E2E8F0',3.4,4,-2.8,g);
+  anims.push(function(t){g.children.forEach(function(c){});});
+  return g}
+function bunker(cx,cz){var g=G(cx,0,cz);
+  [[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4]].forEach(function(p){cy('y',.35,.35,3.2,'#475569',p[0],1.6,p[1],g,10)});
+  cy('y',3,.9,3,'#15569A',0,4.7,0,g,28);
+  cy('y',3,3,4.4,'#1F6FB2',0,8.4,0,g,28);
+  cy('y',3.12,3.12,.4,'#E2E8F0',0,10.4,0,g,28);
+  var cone=new THREE.Mesh(new THREE.ConeGeometry(3.2,1.5,28),mat('#15569A',.5,.3));cone.position.set(0,11.4,0);g.add(cone);
+  cy('y',.55,.55,1.2,'#475569',0,2.9,0,g);
+  /* лестница */
+  mb(.15,10,.15,'#CBD5E1',3.15,5.2,-.5,g);mb(.15,10,.15,'#CBD5E1',3.15,5.2,.5,g);for(var k=0;k<14;k++)mb(.15,.12,1.1,'#CBD5E1',3.15,.8+k*.7,0,g);
+  /* поясок состояния */
+  var band=cy('y',3.15,3.15,.6,COLORS.ok,0,9.2,0,g,28);g.userData.band=band;return g}
+function transborder(x0,z0,x1,z1,axis){ /* рельсы и тележка */
+  var cx=(x0+x1)/2,cz=(z0+z1)/2,w=x1-x0,L=z1-z0;var g=G(cx,0,cz);
+  mb(w,.15,L,'#9CA3AF',0,.28,0,g,.9,0);
+  [-1,1].forEach(function(s){mb(.28,.3,L,'#E5E7EB',s*(w/2-.9),.55,0,g,.3,.6)});
+  for(var k=-L/2+1;k<L/2;k+=2.2)mb(w-.8,.18,.45,'#6B7280',0,.4,k,g,.9,0);
+  var car=G(0,0,0);g.add(car);scene.remove(car);
+  mb(w-1.4,.55,5.2,DARK,0,1.1,0,car,.4,.4);[-1,1].forEach(function(s){[-1.7,1.7].forEach(function(zz){cy('x',.4,.4,.4,'#1F2937',s*(w/2-.9),.55,zz,car)})});
+  mb(w-2,1.1,.25,'#B08968',0,1.8,-2.4,car);mb(w-2,1.1,.25,'#B08968',0,1.8,2.4,car);
+  var ph=Math.random()*6;anims.push(function(t){car.position.z=Math.sin(t*.35+ph)*(L/2-3.4)});return g}
+function robot(x,z,ph){var g=G(x,0,z);cy('y',1.4,1.6,1,'#1F2937',0,.5,0,g);
+  var j1=G(0,1,0);g.add(j1);scene.remove(j1);cy('y',1.1,1.1,.9,'#F59E0B',0,.5,0,j1);
+  mb(.9,3.4,.9,'#F59E0B',0,2.3,0,j1);cy('z',.7,.7,1.2,'#1F2937',0,4,0,j1);
+  var a2=G(0,4,0);j1.add(a2);scene.remove(a2);mb(.8,.8,3.8,'#F59E0B',0,0,1.7,a2);cy('x',.55,.55,1,'#1F2937',0,0,3.6,a2);mb(1.5,.3,1.5,'#334155',0,-.5,3.9,a2);
+  anims.push(function(t){j1.rotation.y=Math.sin(t*.6+ph)*1.1;a2.rotation.x=Math.sin(t*1.1+ph)*.35});return g}
+
+/* ---------- формовка: вакуумный пресс Магна 575, линия экструзии, нарезчики ---------- */
+(function(){var g=G(27,.5,24);
+  [-1.45,1.45].forEach(function(zz){mb(19,.6,.6,'#334155',-.5,.5,zz,g)});[[-9,-1.45],[-9,1.45],[8,-1.45],[8,1.45]].forEach(function(p){mb(.5,1.0,.5,'#475569',p[0],0,p[1],g)});
+  /* загрузочный бункер со смесителем */
+  frus(2.6,1.2,1.4,'#3F6F54',6.2,4.0,0,g);mb(3.6,2.4,3,'#2F5D47',6.2,2.1,0,g);cy('x',.3,.3,4,'#94A3B8',6.2,3.9,-1.2,g,10);cy('x',.3,.3,4,'#94A3B8',6.2,3.9,1.2,g,10);
+  cy('z',1,1,3,'#2563EB',6.2,2.4,3.9,g);mb(2,2,2,'#475569',6.2,2.1,2.3,g);
+  /* вакуумная камера: из массы откачивают воздух и воду */
+  cy('y',1.9,1.9,4,'#CBD5E1',1.8,3,0,g,28,.3,.7);cy('y',2,2,.4,'#475569',1.8,5,0,g,28);cy('y',2,2,.4,'#475569',1.8,1,0,g,28);
+  var win=cy('x',.65,.65,.3,'#7DD3FC',-.1,3,0,g,20,.1,.2);win.position.x=-.12;
+  mb(2.6,1.6,2.2,'#334155',1.8,1.4,-4,g);cy('y',.9,.9,2,'#2563EB',1.8,3.4,-4,g);cy('z',.35,.35,3.2,'#94A3B8',1.8,3.6,-2.2,g,12);
+  cy('y',.45,.45,.3,'#E5E7EB',3.6,5.2,0,g,16);                       /* манометр */
+  /* шнековый цилиндр и мундштук */
+  cy('x',1.7,1.7,7,'#CBD5E1',-4,2.5,0,g,28,.3,.7);[-.8,-7.2].forEach(function(x){cy('x',1.95,1.95,.4,'#475569',x,2.5,0,g,28)});
+  mb(3.2,2.8,3,'#7A2C22',-8.8,2.5,0,g);mb(1.2,1.7,1.9,'#334155',-10.6,2.4,0,g);
+  var aug=cy('x',.2,.2,6,'#94A3B8',-4,2.5,0,g,8);var ang=0,lt=null;anims.push(function(t){var e=E(t).pe;if(lt===null)lt=t;ang+=Math.max(0,t-lt)*4*e;lt=t;aug.rotation.y=ang})})();
+/* линия: выдавленный брус едет на нарезчики */
+(function(){var c=G(7.4,0,24);
+  [[-.4,-1.7],[-.4,1.7],[.4,-1.7],[.4,1.7]].forEach(function(p){mb(.35,4.4,.35,'#9B3A2E',p[0],2.2,p[1],c)});
+  mb(1.2,.35,4,'#9B3A2E',0,4.6,0,c);
+  var cut=G(0,0,0);c.add(cut);scene.remove(cut);for(var k=-1;k<=1;k++)mb(.05,2.6,.05,'#E5E7EB',k*.25,0,0,cut);mb(.2,.3,3.2,'#475569',0,1.4,0,cut);
+  anims.push(function(t){var S=E(t);cut.position.y=3.6-.9*S.pe*(.5+.5*Math.cos(2*PI*(S.tauP/2.2)))});
+  cy('z',.5,.5,1.6,'#2563EB',0,5.5,0,c,12)})();
+var ROBF=null;
+
+/* фильтр */
+(function(){var g=G(53.5,0,15.6);mb(5.4,3.6,4.4,'#94A3B8',0,3.6,0,g);frus(2.9,.9,2,'#64748B',0,1,0,g);[-1.6,-.8,0,.8,1.6].forEach(function(x){cy('y',.42,.42,1.5,'#CBD5E1',x,6.3,-1,g,14);cy('y',.42,.42,1.5,'#CBD5E1',x,6.3,1,g,14)});
+  cy('x',1,1,.9,'#475569',3.4,3.2,0,g);cy('x',.4,.4,4,'#94A3B8',5.6,4.8,0,g);mb(1.2,1,1,'#334155',5.4,1.4,0,g)})();
+/* Оптима: мельница */
+(function(){var g=G(54,0,33);mb(10,.7,6,'#334155',0,.5,0,g);cy('x',2.5,2.5,6,'#9B3A2E',0,3.4,0,g,32,.4,.5);
+  [-3.1,3.1].forEach(function(x){cy('x',2.7,2.7,.5,'#7A2C22',x,3.4,0,g,32)});for(var k=-2;k<=2;k++)cy('x',2.52,2.52,.15,'#CBD5E1',k*1.1,3.4,0,g,32);
+  mb(2.2,2.6,2.4,'#475569',4.4,2.3,0,g);cy('x',1.1,1.1,3,'#2563EB',6.9,2.3,0,g);frus(1.8,.8,2.8,'#7A2C22',-2.4,6.5,0,g);
+  [[-2.4,-1.8],[-2.4,1.8],[2.4,-1.8],[2.4,1.8]].forEach(function(p){mb(.6,2.4,.6,'#475569',p[0],1.5,p[1],g)});
+  anims.push(function(t){g.children[1].rotation.x=t*.8})})();
+/* ---------- рельсы, вагонетки, роботы ---------- */
+function railsX(x0,x1,z,g){g=g||1.8;[-1,1].forEach(function(s){mb(x1-x0,.28,.28,'#E5E7EB',(x0+x1)/2,.42,z+s*g/2,null,.3,.7)});for(var x=x0+1;x<x1;x+=2)mb(.45,.16,g+1,'#6B7280',x,.25,z,null,.9,0)}
+function deckZ(x0,z0,x1,z1){var cx=(x0+x1)/2,cz=(z0+z1)/2,w=x1-x0,L=z1-z0;mb(w,.15,L,'#9CA3AF',cx,.28,cz,null,.9,0);
+  [-1,1].forEach(function(s){mb(.28,.3,L,'#E5E7EB',cx+s*(w/2-.9),.55,cz,null,.3,.6)});for(var k=z0+1;k<z1;k+=2.2)mb(w-.8,.18,.45,'#6B7280',cx,.4,k,null,.9,0)}
+var TRX=-8.15,TLX=-43.65,PX=41,ZLOAD=24,ZKILN=18.4,ZUNL=36,XU=31,XR=34.6;
+deckZ(-46.3,15,-41,47);deckZ(-10.8,14.8,-5.5,47);deckZ(38,22.5,44,47.5);
+[18.4,22.6,29.5,33,39.3,42.8].forEach(function(z){railsX(-41,-10.8,z)});
+railsX(-5.5,38,ZUNL);railsX(-5.5,38,ZLOAD);          /* сквозной путь под формовкой */                                       /* рельсы к разгрузке вместо конвейера */
+function makeWagon(col){var g=G(0,0,0);mb(1.5,.35,2.4,'#334155',0,.9,0,g,.6,.4);
+  [-1,1].forEach(function(sx){[-1,1].forEach(function(sz){cy('z',.34,.34,.3,'#111827',sx*.55,.65,sz*1.05,g,12)})});
+  var pg=G(0,1.1,0);g.add(pg);scene.remove(pg);var pm=new THREE.MeshStandardMaterial({color:col,roughness:.9});
+  var p=new THREE.Mesh(new THREE.BoxGeometry(1.3,1.5,2.1),pm);p.position.y=.75;pg.add(p);
+  for(var k=1;k<3;k++){var ln=new THREE.Mesh(new THREE.BoxGeometry(1.32,.07,2.12),new THREE.MeshStandardMaterial({color:'#6B3A22',roughness:1}));ln.position.y=k*.5;pg.add(ln)}
+  return {g:g,pile:pg,mat:pm}}
+function platform(x,z){var p=G(x,0,z);mb(3.4,.2,3.8,'#3F6F54',0,.4,0,p,.4,.4);mb(3.4,.1,.4,'#F59E0B',0,.54,1.8,p,.5,0);mb(3.4,.1,.4,'#F59E0B',0,.54,-1.8,p,.5,0);return p}
+function ease(u){return .5-.5*Math.cos(Math.PI*Math.min(1,Math.max(0,u)))}
+function seg(u,a,b){return Math.min(1,Math.max(0,(u-a)/(b-a)))}
+function lerp(a,b,k){return a+(b-a)*k}
+/* стоящие вагонетки: ряды по 12, два ряда на сушилку и на печь = 24 */
+function row(z,x0,x1,col){var n=12,p=(x1-x0)/n,a=[];for(var i=0;i<n;i++){var w=makeWagon(col);w.g.position.set(x0+(i+.5)*p,0,z);a.push(w.g)}return {z:z,a:a,p:p,x0:x0}}
+function shiftRow(r,dx){r.a.forEach(function(g,i){g.position.x=r.x0+(i+.5)*r.p+dx})}
+var RD1=row(29.5,-40,-18,'#C98B6B'),RD2=row(39.3,-40,-18,'#C98B6B'),RK=row(18.4,-40,-20,'#C2562F');
+row(33,-40,-18,'#C98B6B');row(42.8,-40,-18,'#C98B6B');row(22.6,-40,-20,'#C2562F');
+/* цикл вагонетки: новая вагонетка вталкивает ряд в сушилку, с другой стороны ряд выталкивает вагонетку на левый трансбордер к печи, из печи на правый трансбордер к упаковке */
+var WT=70,W=makeWagon('#C98B6B'),V=makeWagon('#B98363'),K=makeWagon('#C2562F');var PW=platform(TRX,ZLOAD),PV=platform(TLX,ZKILN);
+function sm(x){x=Math.min(1,Math.max(0,x));return x*x*(3-2*x)}
+var LS=68.5,FN=9,DT=2.2,PICK=[50.3,51.9,53.5,55.1],A2=[54.1,55.7,57.3,58.9];
+/* Единый ход процесса. Цикл 70 с: погрузка вагонетки у формовки (~25 с) -> сушилка -> печь -> выгрузка Роботом 1 -> возврат под формовкой.
+   Всё считается от времени, без скачков: каждый участок плавный, концы участков совпадают. */
+function E(t){if(E.t===t)return E.v;
+  var k=Math.floor(t/WT),u=t-k*WT,rw=(k%2)?RD2:RD1,oth=(k%2)?RD1:RD2,dz=rw.z,dzn=((k+1)%2)?RD2.z:RD1.z,RKp=RK.p;
+  var loading=(u>=LS||u<24),tau=u>=LS?u-LS:u+(WT-LS);
+  var tauP=u>=64.3?u-LS:(u<24?u+(WT-LS):99);
+  var pe=tauP<99?sm(seg(tauP,-4.2,-3.4))*(1-sm(seg(tauP,18.8,19.8))):0;
+  /* робот формовки: берёт сырец с ленты и кладёт на вагонетку */
+  var fy=3.82,ft=.42,envF=loading?sm(seg(tau,3.4,4.4))*(1-sm(seg(tau,24.2,25.2))):0,fa=ft;
+  if(loading&&tau>=4.4){var m=Math.floor((tau-4.4)/DT);if(m<FN){var ph=(tau-4.4)/DT-m,c=Math.cos(2*PI*ph);fy=lerp(3.82,5.58,.5-.5*c);fa=.12+.3*c*c}}
+  ft=lerp(.3,fa,envF);
+  var cnt=0;if(loading)for(var m2=0;m2<FN;m2++)cnt+=sm(seg(tau,4.4+DT*m2+.75,4.4+DT*m2+1.45));
+  var pileL=loading?cnt/FN:1;
+  /* загружаемая вагонетка W */
+  var s11=rw.x0+11.5*rw.p,s12=s11+rw.p,wx=TRX,wz=ZLOAD,wv=false,wp=1;
+  if(loading){wv=true;wp=pileL}
+  else if(u<27){wv=true;wz=lerp(ZLOAD,dz,ease(seg(u,24,27)))}
+  else if(u<30.5){wv=true;wz=dz;wx=u<29?lerp(TRX,s12,ease(seg(u,27,29))):lerp(s12,s11,ease(seg(u,29,30.5)))}
+  var shD=(u>=29&&u<30.5)?-rw.p*ease(seg(u,29,30.5)):0;
+  /* вагонетка V: выходит из сушилки, едет к печи */
+  var v0=RK.x0-.5*RKp,v1=RK.x0+.5*RKp,vx=TLX,vz=dz,vv=false;
+  if(u>=30.5&&u<32){vv=true;vx=lerp(rw.x0-.5*rw.p,TLX,ease(seg(u,30.5,32)))}
+  else if(u>=32&&u<35){vv=true;vz=lerp(dz,ZKILN,ease(seg(u,32,35)))}
+  else if(u>=35&&u<38){vv=true;vz=ZKILN;vx=u<36.5?lerp(TLX,v0,ease(seg(u,35,36.5))):lerp(v0,v1,ease(seg(u,36.5,38)))}
+  var shK=(u>=36.5&&u<38)?RKp*ease(seg(u,36.5,38)):0;
+  var pvz;if(u<32)pvz=dz;else if(u<35)pvz=lerp(dz,ZKILN,ease(seg(u,32,35)));else if(u<40)pvz=ZKILN;else if(u<55)pvz=lerp(ZKILN,dzn,ease(seg(u,40,55)));else pvz=dzn;
+  /* вагонетка K: выходит из печи, выгрузка, возврат */
+  var pickSum=0;for(var i=0;i<4;i++)pickSum+=.25*sm(seg(u,PICK[i]-.3,PICK[i]+.3));
+  var slotK=RK.x0+11.5*RKp+RKp,kx=TRX,kz=ZKILN,kv=false,kp=1;
+  if(u>=38&&u<41){kv=true;kx=lerp(slotK,TRX,ease(seg(u,38,41)))}
+  else if(u>=41&&u<45){kv=true;kz=lerp(ZKILN,ZUNL,ease(seg(u,41,45)))}
+  else if(u>=45&&u<49.5){kv=true;kz=ZUNL;kx=lerp(TRX,XU,ease(seg(u,45,49.5)))}
+  else if(u>=49.5&&u<57){kv=true;kz=ZUNL;kx=XU;kp=1-pickSum}
+  else if(u>=57&&u<59.5){kv=true;kz=ZUNL;kx=lerp(XU,PX,ease(seg(u,57,59.5)));kp=0}
+  else if(u>=59.5&&u<62.5){kv=true;kx=PX;kz=lerp(ZUNL,ZLOAD,ease(seg(u,59.5,62.5)));kp=0}
+  else if(u>=62.5&&u<LS){kv=true;kz=ZLOAD;kx=lerp(PX,TRX,ease(seg(u,62.5,LS)));kp=0}
+  var pz;if(u<24)pz=ZLOAD;else if(u<27)pz=lerp(ZLOAD,dz,ease(seg(u,24,27)));else if(u<30.5)pz=dz;else if(u<36)pz=lerp(dz,ZKILN,ease(seg(u,30.5,36)));else if(u<41)pz=ZKILN;else if(u<45)pz=lerp(ZKILN,ZUNL,ease(seg(u,41,45)));else if(u<49.5)pz=ZUNL;else if(u<60)pz=lerp(ZUNL,ZLOAD,ease(seg(u,49.5,60)));else pz=ZLOAD;
+  /* Робот 1 (на портале): вагонетка -> конвейер */
+  var r1y=0,r1a=1.02,env1=sm(seg(u,49.5,50.3))*(1-sm(seg(u,56.7,57.5)));
+  if(u>=PICK[0]&&u<PICK[0]+6.4){var m1=Math.floor((u-PICK[0])/1.6),p1=(u-PICK[0])/1.6-m1,c1=Math.cos(2*PI*p1);r1y=lerp(0,1.57,.5-.5*c1);r1a=.3+.72*c1*c1}
+  var r1t=lerp(.3,r1a,env1);
+  /* Робот 2: конвейер -> поддон */
+  var r2y=3.17,r2a=.4,env2=sm(seg(u,53.3,54.1))*(1-sm(seg(u,60.5,61.3)));
+  if(u>=A2[0]&&u<A2[0]+6.4){var m3=Math.floor((u-A2[0])/1.6),p3=(u-A2[0])/1.6-m3,c3=Math.cos(2*PI*p3);r2y=lerp(3.17,2.08,.5-.5*c3);r2a=.1+.3*c3*c3}
+  var r2t=lerp(.3,r2a,env2);
+  var stk=0;for(var j=0;j<4;j++)stk+=.25*sm(seg(u,A2[j]+.8-.35,A2[j]+.8+.35));
+  E.t=t;E.v={k:k,u:u,rw:rw,oth:oth,tau:tau,tauP:tauP,pe:pe,loading:loading,fy:fy,ft:ft,r1y:r1y,r1t:r1t,r2y:r2y,r2t:r2t,stk:stk,
+    wx:wx,wz:wz,wv:wv,wp:wp,shD:shD,vx:vx,vz:vz,vv:vv,shK:shK,pvz:pvz,kx:kx,kz:kz,kv:kv,kp:kp,pz:pz};
+  return E.v}
+/* предметы на лентах: брус из мундштука, сырец после нарезчиков, кирпич от Робота 1 */
+var barI=[0,1,2].map(function(){var b=box(4.4,1.2,1.5,'#B98363',0,2,0,.9);b.visible=false;return b});
+var rawI=[0,1,2].map(function(){var b=box(1.6,.7,1.1,'#C98B6B',0,2,0,.9);b.visible=false;return b});
+var firI=[0,1].map(function(){var b=box(1.6,.7,1.1,'#C2562F',0,2,0,.9);b.visible=false;return b});
+anims.push(function(t){var S=E(t);
+  shiftRow(S.oth,0);shiftRow(S.rw,S.shD);shiftRow(RK,S.shK);
+  W.g.visible=S.wv;W.g.position.set(S.wx,0,S.wz);W.pile.scale.y=Math.max(.001,S.wp);
+  V.g.visible=S.vv;V.g.position.set(S.vx,0,S.vz);
+  K.g.visible=S.kv;K.g.position.set(S.kx,0,S.kz);K.pile.scale.y=Math.max(.001,S.kp);
+  PW.position.set(TRX,0,S.pz);PV.position.set(TLX,0,S.pvz);
+  /* брус растёт из мундштука (v=2 ед/с), потом едет к нарезчикам и разрезается */
+  barI.forEach(function(b){b.visible=false});rawI.forEach(function(b){b.visible=false});
+  var tp=S.tauP;
+  if(tp<99){for(var m=0;m<FN;m++){var a=tp-(DT*m-4.2);if(a>=0&&a<4.2){var b=barI[m%3],len=a<2.2?2*a:4.4,c=a<2.2?15.8-len/2:15.8-2.2-2*(a-2.2);b.visible=true;b.scale.x=Math.max(.01,len/4.4);b.position.set(c,2.5,24)}}
+    for(var m4=0;m4<FN;m4++){var a2=tp-DT*m4;if(a2>=0&&a2<4.4){var r=rawI[m4%3];r.visible=true;r.position.set(6.4-a2*1.114,2.25,24)}}}
+  firI.forEach(function(b){b.visible=false});
+  for(var i=0;i<4;i++){var a3=S.u-(PICK[i]+.8);if(a3>=0&&a3<3){var f=firI[i%2];f.visible=true;f.position.set(34.6,2.25,39.6+2.4*a3)}}});
+/* роботы: формовки, 1 (вагонетка -> конвейер), 2 (конвейер -> поддон) */
+function robot2(x,z,drive,lift){var g=G(x,lift||0,z);cy('y',1.4,1.6,1,'#1F2937',0,.5,0,g);
+  var j1=G(0,1,0);g.add(j1);scene.remove(j1);cy('y',1.1,1.1,.9,'#F59E0B',0,.5,0,j1);mb(.9,3.4,.9,'#F59E0B',0,2.3,0,j1);cy('z',.7,.7,1.2,'#1F2937',0,4,0,j1);
+  var a2=G(0,4,0);j1.add(a2);scene.remove(a2);mb(.8,.8,6.4,'#F59E0B',0,0,3,a2);cy('x',.55,.55,1,'#1F2937',0,0,6.2,a2);mb(1.8,.3,1.8,'#334155',0,-.5,6.5,a2);
+  g.rotation.y=-Math.PI/2;anims.push(function(t){var r=drive(t);j1.rotation.y=r[0];a2.rotation.x=r[1]});return g}
+robot2(-3.4,28,function(t){var S=E(t);return [S.fy,S.ft]});                          /* робот формовки: сырец -> вагонетка */
+/* портал над рельсами: Робот 1 стоит на площадке выше вагонеток, рельсы проходят под ним */
+(function(){var g=G(XR,0,ZUNL);[[-1.7,-1.7],[1.7,-1.7],[-1.7,1.7],[1.7,1.7]].forEach(function(p){mb(.4,3.5,.4,'#475569',p[0],1.75,p[1],g)});mb(4.4,.3,4.4,'#334155',0,3.5,0,g)})();
+robot2(XR,ZUNL,function(t){var S=E(t);return [S.r1y,S.r1t]},3.65);                      /* робот 1: вагонетка -> конвейер */
+robot2(28.4,47,function(t){var S=E(t);return [S.r2y,S.r2t]});                            /* робот 2: конвейер -> поддон */
+/* ---------- линия поддонов: горизонтальный конвейер, обмотчик, накопитель на 3 поддона, кар (общие часы с вагонеткой) ---------- */
+(function(){var BZ=52.4,SX=[11.6,14.4,17.2],ST=31.4,SRC=41,WX=25,J=[1,0,2],H=PI/2,PV2=2.4;
+  var x0=29.2,z0=50.2,x1=33.6,z1=54.6,m='#1F5FD1';mb(x1-x0,.06,.2,m,(x0+x1)/2,.36,z0);mb(x1-x0,.06,.2,m,(x0+x1)/2,.36,z1);mb(.2,.06,z1-z0,m,x0,.36,(z0+z1)/2);mb(.2,.06,z1-z0,m,x1,.36,(z0+z1)/2);
+  for(var k=0;k<5;k++)mb(2.6,.25,2.2,'#B08968',43.6,.55+k*.26,BZ,null,.9,0);
+  function mkP(){var g=G(0,1.9,BZ);mb(2.6,.3,2.2,'#B08968',0,.15,0,g,.9,0);var st=mb(2.4,1.5,2,'#C2562F',0,.3,0,g,.9,0);st.geometry.translate(0,.75,0);var film=glass(2.55,1.6,2.1,0,1.1,0,g,'#EAF2FB',.5);return {g:g,st:st,film:film}}
+  var M=[mkP(),mkP(),mkP(),mkP()];
+  function state(k){var L=[0,1,2],P=3;for(var i=0;i<k;i++){var j=J[i%3],pk=L[j];L=L.filter(function(_,ii){return ii!==j}).concat([P]);P=pk}return {L:L,P:P,j:J[k%3]}}
+  /* обмотчик */
+  var wg=G(WX,0,BZ);[[-2.4,-1.7],[2.4,-1.7],[-2.4,1.7],[2.4,1.7]].forEach(function(p){mb(.4,5.8,.4,'#9B3A2E',p[0],3.1,p[1],wg)});mb(5.2,.5,.5,'#9B3A2E',0,6.2,1.7,wg);mb(5.2,.5,.5,'#9B3A2E',0,6.2,-1.7,wg);
+  var ring=new THREE.Mesh(new THREE.TorusGeometry(1.7,.14,10,36),mat('#F59E0B',.5,.2));ring.rotation.x=PI/2;ring.position.set(0,5.4,0);wg.add(ring);mb(1.2,2,.8,'#E2E8F0',0,1.2,-2.5,wg);
+  var carry=null,KZ=55;
+  anims.push(function(t){var S=E(t),k=S.k,u=S.u,Q=state(k),j=Q.j,pk=Q.L[j];
+    /* накопитель: 3 поддона, кар берёт любой, остальные подвигаются, новый приходит последним */
+    for(var i=0;i<3;i++){var q=M[Q.L[i]],x=SX[i],vis=true;if(i===j)vis=u<12;else if(i>j)x=lerp(SX[i],SX[i-1],ease(seg(u,19,21.5)));q.g.visible=vis;q.g.position.x=x;q.st.scale.y=1;q.film.visible=true}
+    /* рабочий поддон у Робота 2: растёт стопка, потом едет через обмотчик в накопитель */
+    var mp=M[Q.P],px=ST;mp.st.scale.y=.02+.98*S.stk;mp.film.visible=false;
+    if(u>=61){px=Math.max(SX[2],ST-PV2*(u-61));mp.st.scale.y=1;mp.film.visible=px<WX-1.3}
+    mp.g.visible=true;mp.g.position.x=px;
+    /* пустой поддон: из стопки на ленту и к Роботу 2 */
+    var me=M[pk];if(u>=58){me.g.visible=true;me.g.position.x=u<62.5?SRC:lerp(SRC,ST,ease(seg(u,62.5,66.5)));me.st.scale.y=.02;me.film.visible=false}
+    var wenv=(u>=61&&px>SX[2])?sm((3.2-Math.abs(px-WX))/2.5):0;ring.position.y=lerp(5.4,3+Math.sin((u-61)*6)*.9,wenv);ring.rotation.z=t*3;
+    if(typeof fork==='undefined')return;
+    if(!carry){carry=new THREE.Group();var b1=new THREE.Mesh(new THREE.BoxGeometry(2.6,.3,2.2),mat('#B08968',.9));b1.position.y=.15;carry.add(b1);var b2=new THREE.Mesh(new THREE.BoxGeometry(2.4,1.5,2),mat('#C2562F',.9));b2.position.y=1.05;carry.add(b2);carry.position.set(2.6,.5,0);fork.add(carry);carry.visible=false}
+    /* кар: заезжает в выемку носом, берёт поддон, выезжает задом, везёт на склад */
+    var w=u-4,xj=SX[j],x=34,z=69,yaw=0,has=false,cy2=.5;
+    if(w>=0&&w<27){
+      if(w<4){var qq=ease(seg(w,0,4));x=lerp(34,xj,qq);z=lerp(69,63,qq);yaw=lerp(0,H,seg(w,0,2.5))}
+      else if(w<7){x=xj;z=lerp(63,KZ,ease(seg(w,4,7)));yaw=H}
+      else if(w<10){x=xj;z=KZ;yaw=H;has=w>=8;cy2=lerp(1.75,2.1,seg(w,8,10))}
+      else if(w<14){x=xj;z=lerp(KZ,63,ease(seg(w,10,14)));yaw=H;has=true;cy2=lerp(2.1,.6,seg(w,10,12))}
+      else if(w<16.5){x=xj;z=63;yaw=lerp(H,-H,seg(w,14,16.5));has=true;cy2=.6}
+      else if(w<20){var q2=ease(seg(w,16.5,20));x=lerp(xj,25,q2);z=lerp(63,66.5,q2);yaw=-H;has=w<19.6;cy2=.6}
+      else{var q3=ease(seg(w,20,27));x=lerp(25,34,q3);z=lerp(66.5,69,q3);yaw=lerp(-H,0,seg(w,20,23))}}
+    fork.position.set(x,0,z);fork.rotation.y=yaw;carry.visible=has;carry.position.y=cy2})})();
+/* дым из трубы печи */
+(function(){var P=[];for(var i=0;i<6;i++){var mt=new THREE.MeshStandardMaterial({color:'#CBD5E1',transparent:true,opacity:.5,roughness:1,depthWrite:false});var o=new THREE.Mesh(new THREE.SphereGeometry(1,10,8),mt);scene.add(o);P.push({o:o,mt:mt})}
+  anims.push(function(t){P.forEach(function(p,i){var f=((t*.12)+i/6)%1;p.o.position.set(-14+f*5,16.2+f*9,20.8);var sc=.9+f*2.6;p.o.scale.set(sc,sc,sc);p.mt.opacity=.55*(1-f)})})})();
+/* бункеры */
+var BUNK=[bunker(50.5,51.8),bunker(56.9,51.8)];
+/* сушилки: теплоизолированный тоннель, воздуховод, вентиляторы */
+[[26.8,35.2],[36.6,45]].forEach(function(r){var cz=(r[0]+r[1])/2,L=23,cx=-29;
+  mb(L,3,.45,'#E2E8F0',cx,1.5,r[0]+.2,null,.8,0);mb(L,3,.45,'#E2E8F0',cx,1.5,r[1]-.2,null,.8,0);mb(.5,3,r[1]-r[0],'#64748B',cx-L/2,1.5,cz,null,.5,.3);mb(.5,3,r[1]-r[0],'#64748B',cx+L/2,1.5,cz,null,.5,.3);
+  glass(L,.25,r[1]-r[0],cx,3.1,cz);cy('x',.75,.75,L-1,'#CBD5E1',cx,4.4,cz,null,20,.3,.7);
+  [-9,-1,7].forEach(function(dx){var fw=G(cx+dx,4.6,cz);cy('y',1.2,1.2,.8,'#475569',0,.6,0,fw);var bl=G(0,1.2,0);fw.add(bl);scene.remove(bl);for(var k=0;k<4;k++){var b=mb(2,.08,.45,'#CBD5E1',0,0,0,bl);b.rotation.y=k*PI/2;b.position.set(Math.cos(k*PI/2)*.8,0,Math.sin(k*PI/2)*-.8)}anims.push(function(t){bl.rotation.y=t*5});mb(.5,.7,.5,'#475569',0,.2,0,fw)})});
+/* печь обжига: арочный свод, горелки, свечение */
+(function(){var cx=-26.2,cz=20.8,L=28.5;
+  var arch=new THREE.Mesh(new THREE.CylinderGeometry(4.9,4.9,L,28,1,true,0,PI),new THREE.MeshStandardMaterial({color:'#D8DEE6',transparent:true,opacity:.42,side:THREE.DoubleSide,roughness:.6,depthWrite:false}));
+  arch.rotation.z=PI/2;arch.position.set(cx,.3,cz);scene.add(arch);
+  mb(L,.6,.5,'#6B7280',cx,.6,cz-4.9);mb(L,.6,.5,'#6B7280',cx,.6,cz+4.9);
+  var gl=new THREE.Mesh(new THREE.BoxGeometry(11,.12,8),new THREE.MeshBasicMaterial({color:'#FF7A18',transparent:true,opacity:.5}));gl.position.set(cx-1,.55,cz);scene.add(gl);anims.push(function(t){gl.material.opacity=.4+Math.sin(t*3)*.12});
+  for(var k=0;k<5;k++){[-1,1].forEach(function(s){cy('z',.36,.36,1.6,'#EF4444',cx-8+k*3.6,2.4,cz+s*4.7)})}
+  cy('x',.9,.9,12,'#94A3B8',-20,5.5,cz-3);cy('y',1.4,1.8,15,'#E2E8F0',-14,7.5,20.8);mb(3.6,.8,3.6,'#C2562F',-14,15.4,20.8);cy('y',.9,.9,3,'#475569',-13.2,1.8,22.8)})();
+/* ---------- Массаподготовка (положение условное). По регламенту: питатели -> конв.№1 -> дробилка ДТЕ117 -> конв.№3 -> дезинтегратор PL 601 -> конв.№4 -> вальцы PL 194 (отключены) -> конв.№5 -> СМК 102 -> конв.№6 -> УСМ 40 -> конв.№7 -> смеситель СМК 126 -> конв.№8-10 -> бункеры.
+   Верхняя нитка идёт на восток, нижняя возвращается на запад к бункерам (U-образно) ---------- */
+function rollmill(x,z,body,spin,off){var g=G(x,0,z);
+  [[-2.6,-1.9],[2.6,-1.9],[-2.6,1.9],[2.6,1.9]].forEach(function(p){mb(.55,2.4,.55,'#334155',p[0],1.2,p[1],g)});
+  mb(6.4,.5,4.8,'#334155',0,2.6,0,g);mb(5.2,2.8,4.2,body,0,4.2,0,g);frus(4.4,2.4,2.2,off?'#64748B':'#7A2C22',0,6.7,0,g);
+  [-2.7,2.7].forEach(function(zz){var gf=new THREE.Group();gf.position.set(0,4.2,zz);g.add(gf);cy('z',1.5,1.5,.5,'#64748B',0,0,0,gf);cy('z',.45,.45,.7,'#1F2937',0,0,0,gf);
+    for(var k=0;k<3;k++){var sp=mb(2.9,.22,.2,'#E2E8F0',0,0,(zz>0?.3:-.3),gf);sp.rotation.z=k*PI/3}
+    if(spin)anims.push(function(t){gf.rotation.z=t*spin})});
+  mb(2.2,1.6,1.6,'#2563EB',3.9,3.4,2.9,g);mb(1.2,1.6,.6,'#E2E8F0',-3.7,1.2,-2.8,g);mb(.5,.5,.1,off?'#EF4444':'#22C55E',-3.7,1.5,-3.12,g);
+  return g}
+function mixer(x,z){var g=G(x,0,z);
+  [[-3.8,-1.5],[3.8,-1.5],[-3.8,1.5],[3.8,1.5]].forEach(function(p){mb(.5,2.2,.5,'#334155',p[0],1.1,p[1],g)});
+  mb(9.4,.5,4.2,'#334155',0,2.3,0,g);mb(9,2,3.6,'#64748B',0,3.5,0,g);glass(9,.25,3.6,0,4.6,0,g,'#CBD5E1',.35);
+  [-.85,.85].forEach(function(zz,i){var rg=new THREE.Group();rg.position.set(0,4.1,zz);g.add(rg);cy('x',.22,.22,8.6,'#1F2937',0,0,0,rg);
+    for(var k=0;k<6;k++){var pd=mb(.25,1.1,.6,'#E2E8F0',-3.7+k*1.5,0,0,rg);pd.rotation.x=k*PI/3}
+    anims.push(function(t){rg.rotation.x=t*(i?-1.1:1.1)})});
+  mb(2.2,2,2.2,'#2563EB',-5.6,3.3,0,g);cy('x',.18,.18,7,'#38BDF8',0,5.4,-1.9,g,10);mb(1.2,1.9,.6,'#E2E8F0',3.7,1.3,-2.5,g);
+  return g}
+(function(){rect(72,33,132,60,.2,'#EEF2F7');wallsRect(72,33,132,60,1.6);rect(73,34,131,59,.15,'#D4E8D6',.2);
+  feeder(79,39.5,'#D97706','#9A530A',1);feeder(90,39.5,'#1E8A54','#146140',1);   /* №1 глина, №2 песок */
+  crusher(100,44,'#9B3A2E');                                                      /* ДТЕ117 */
+  rollmill(112,44,'#9B3A2E',5);                                                   /* PL 601 */
+  rollmill(123,44,'#94A3B8',0,true);                                              /* PL 194, отключены */
+  rollmill(121,51.8,'#B45309',3);                                                 /* СМК 102 */
+  rollmill(107,51.8,'#0E7490',4);                                                 /* УСМ 40 */
+  mixer(91,51.8);                                                                 /* СМК 126 */
+  [[102,36.4,'#C98B3C'],[110,36.4,'#7DBE84']].forEach(function(p){var c=new THREE.Mesh(new THREE.ConeGeometry(3,3,20),mat(p[2],.95));c.position.set(p[0],1.6,p[1]);scene.add(c)});
+  var pult=G(77,0,57);mb(6,2.6,3.2,'#475569',0,1.5,0,pult);glass(5.2,1,.12,0,2,-1.66,pult,'#7DD3FC',.6);mb(1,1.4,.8,'#E2E8F0',3.6,.9,0,pult);
+  [76,96,116].forEach(function(x){[35,58].forEach(function(z){cy('y',.45,.45,7,'#CBD5E1',x,3.5,z,null,14,.6,.1)})})})();
+
+/* ---------- конвейеры ---------- */
+var belts=[];
+function conv(x0,z0,x1,z1,rev,kind){rect(x0,z0,x1,z1,.5,'#434B57',1.4,.6,.3);var alongX=(x1-x0)>=(z1-z0),L=alongX?x1-x0:z1-z0;
+  var cxm=(x0+x1)/2,czm=(z0+z1)/2;
+  if(alongX){rect(x0,z0-.15,x1,z0+.1,.9,'#94A3B8',1.4,.5,.5);rect(x0,z1-.1,x1,z1+.15,.9,'#94A3B8',1.4,.5,.5);
+    for(var p=x0+1;p<x1;p+=6){[z0-.1,z1+.1].forEach(function(zz){mb(.35,1.4,.35,'#64748B',p,.7,zz)});cy('z',.28,.28,z1-z0+.2,'#475569',p+3,1.3,czm,null,10)}
+    cy('z',.5,.5,z1-z0+.3,'#334155',x0,1.65,czm,null,14);cy('z',.5,.5,z1-z0+.3,'#334155',x1,1.65,czm,null,14)}
+  else{rect(x0-.15,z0,x0+.1,z1,.9,'#94A3B8',1.4,.5,.5);rect(x1-.1,z0,x1+.15,z1,.9,'#94A3B8',1.4,.5,.5);
+    for(var p=z0+1;p<z1;p+=6){[x0-.1,x1+.1].forEach(function(xx){mb(.35,1.4,.35,'#64748B',xx,.7,p)});cy('x',.28,.28,x1-x0+.2,'#475569',cxm,1.3,p+3,null,10)}
+    cy('x',.5,.5,x1-x0+.3,'#334155',cxm,1.65,z0,null,14);cy('x',.5,.5,x1-x0+.3,'#334155',cxm,1.65,z1,null,14)}
+  var n=(kind==='static'||kind==='raw'||kind==='bar'||kind==='fired')?0:Math.max(1,Math.floor(L/5));var items=[];for(var i=0;i<n;i++){var b=kind==='raw'?box(1.6,.7,1.1,'#C98B6B',0,2,0,.9):kind==='fired'?box(1.6,.7,1.1,'#C2562F',0,2,0,.9):kind==='bar'?box(4.4,1.2,1.5,'#B98363',0,2,0,.9):kind==='pallet'?box(2.6,1.7,2.2,'#C2562F',0,2,0,.9):kind==='palletE'?box(2.6,.3,2.2,'#B08968',0,2,0,.9):box(.9,.55,.9,'#6B4F36',0,2,0,1);b.userData.cy=kind==='bar'?2.5:kind==='pallet'?2.75:kind==='palletE'?2.1:2.35;items.push(b)}
+  belts.push({rev:rev,x0:x0,z0:z0,x1:x1,z1:z1,ax:alongX,L:L,items:items})}
+/* направление движения везде одно: от Массаподготовки к упаковке */
+conv(75.5,43.2,95.5,44.8,false);            /* №1 от питателей к дробилке */
+conv(103.2,43.2,108.8,44.8,false);          /* №3 к PL 601 */
+conv(115.3,43.2,119.8,44.8,false);          /* №4 к PL 194 */
+conv(126.2,43.2,129.6,44.8,false);          /* №5 */
+conv(128.2,44.8,129.8,51,false);            /* №5 вниз */
+conv(124.4,51,129.8,52.6,true);             /* №5 к СМК 102 */
+conv(110.6,51,117.8,52.6,true);             /* №6 к УСМ 40 */
+conv(96.2,51,103.6,52.6,true);              /* №7 к смесителю */
+conv(59.9,51,86.3,52.6,true);               /* №8-10 смеситель -> бункеры (на запад) */
+conv(48.6,36,52.4,48.8,true);             /* бункеры -> Оптима (на север) */
+conv(50,24.8,52,30,true);                 /* Оптима -> на север */
+conv(47,23.2,52,24.8,true);                 /* на запад */
+conv(35,23.2,47,24.8,true);              /* к вакуумному прессу */
+conv(8.4,23.2,15.8,24.8,true,'bar');           /* выдавленный брус */
+conv(1.5,23.2,6.4,24.8,true,'raw');          /* нарезанный сырец к роботу */
+conv(33.8,38.4,35.4,47.2,false,'fired');      /* от робота 1 к роботу 2 */
+conv(10.3,51.6,42,53.2,true,'static');      /* на улицу к кару */
+
+/* ---------- склад ГП, грузовики ---------- */
+rect(5,61,45,77,.2,'#D5DDE8');
+for(var i=0;i<8;i++)for(var j=1;j<3;j++){var x=9+i*4.6,z=64+j*4.4;box(3.4,.35,2.6,'#B08968',x,.2,z);var rows=2+((i+j)%3);for(var a=0;a<rows;a++)box(3,.9,2.2,'#C2562F',x,.55+a*.9,z,.9)}
+function truck(c){var g=new THREE.Group();
+  function b(w,h,d,col,x,y,z,r){var o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col,r==null?.6:r));o.position.set(x,y+h/2,z);g.add(o)}
+  b(5.4,2.8,2.7,'#F8FAFC',-.7,1,0);b(5.5,.3,2.8,'#1F5FD1',-.7,2.2,0);b(5.5,.3,2.8,'#1F5FD1',-.7,1.2,0);
+  b(2.2,2.1,2.6,c,2.7,.9,0);b(.1,1.1,2.3,'#7DD3FC',3.8,2,0,.1);b(.12,.6,2.2,'#7DD3FC',-.6,.9,0,.1);
+  b(.5,.5,2.8,'#334155',4,.7,0);b(.1,.35,.5,'#FEF08A',3.85,1.5,.9);b(.1,.35,.5,'#FEF08A',3.85,1.5,-.9);
+  b(5.4,.4,2.6,'#334155',-.7,.7,0);
+  [-2.2,2.6].forEach(function(x){[-1.35,1.35].forEach(function(z){var w=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,.5,16),mat('#111827'));w.rotation.x=PI/2;w.position.set(x,.72,z);g.add(w);var h=new THREE.Mesh(new THREE.CylinderGeometry(.34,.34,.52,12),mat('#CBD5E1',.4,.6));h.rotation.x=PI/2;h.position.set(x,.72,z);g.add(h)})});
+  scene.add(g);return g}
+var trucks=[];
+var fork=new THREE.Group();(function(){function b(w,h,d,col,x,y,z){var o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col,.6));o.position.set(x,y+h/2,z);fork.add(o)}
+ b(2.4,1.2,1.8,'#F59E0B',0,.5,0);b(.8,1.6,1.7,'#F59E0B',-.6,1.7,0);b(.2,.2,1.8,'#1F2937',.4,3.4,0);b(.2,3.2,.2,'#1F2937',.4,.4,.85);b(.2,3.2,.2,'#1F2937',.4,.4,-.85);
+ b(.25,3.6,.15,'#334155',1.4,0,.55);b(.25,3.6,.15,'#334155',1.4,0,-.55);b(1.8,.12,.15,'#334155',2.2,.3,.55);b(1.8,.12,.15,'#334155',2.2,.3,-.55);
+ [[-.8,.95],[-.8,-.95],[.8,.95],[.8,-.95]].forEach(function(p){var w=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.35,12),mat('#111827'));w.rotation.x=PI/2;w.position.set(p[0],.42,p[1]);fork.add(w)});
+ scene.add(fork)})();
+
+/* ---------- подписи оборудования ---------- */
+var tags=[];var showAll=false;
+function tag(txt,x,y,z){var el=document.createElement('div');el.className='tg';document.getElementById('tags').appendChild(el);tags.push({el:el,txt:txt,p:new THREE.Vector3(x,y,z)})}
+function T(f){return typeof f==='function'?f():f}
+tag(function(){return 'Питатель №1 · Глина<small>'+f1(LIVE.feeder1)+' Гц</small>'},79,7.4,39.5);
+tag(function(){return 'Питатель №2 · Песок<small>'+f1(LIVE.feeder2)+' Гц</small>'},90,7.4,39.5);
+tag('Дробилка ДТЕ117',100,8.6,44);tag('Дезинтегратор PL 601',112,8.6,44);tag('Камневыделительные вальцы PL 194 · отключены',123,8.6,44);
+tag('Вальцы тонкого помола СМК 102',121,8.6,51.8);tag('Вальцы УСМ 40',107,8.6,51.8);tag('Смеситель лопастной СМК 126',91,6.6,51.8);
+tag('Конв. №1',85,3.4,44);tag('Конв. №3',106,3.4,44);tag('Конв. №4',117.5,3.4,44);tag('Конв. №5',129,3.4,48);tag('Конв. №6',114,3.4,51.8);tag('Конв. №7',100,3.4,51.8);tag('Конв. №8–10 · к бункерам',75,3.4,51.8);
+
+
+tag(function(){return 'Бункер 1<small>'+f1(LIVE.bunker1)+' %</small>'},50.5,10.6,51.8);
+tag(function(){return 'Бункер 2<small>'+f1(LIVE.bunker2)+' %</small>'},56.9,10.6,51.8);
+
+tag('Оптима',54.7,5.2,33);
+tag('Экструдер шнековый MAGNA 575',27,8.4,24);tag('Нарезчики',7.4,7.2,24);
+
+
+tag('Туннельная сушилка LLEVANT, путь 1 · 22 вагонетки',-29,3.6,31);tag('Туннельная сушилка LLEVANT, путь 2 · 22 вагонетки',-29,3.6,41);
+tag('Туннельная печь PRESTHERMIC · 22 вагонетки',-30,3.6,20.4);
+
+tag('Робот-разгрузчик FANUC M-410iB/700',34.6,11,36);tag('Робот-укладчик FANUC M-410iB/700',28.4,8,47);tag('Упаковочная машина Messersi MH3',25,7.4,52.4);tag('Заезд кара',14.9,4,53);tag('Кар',44,5,64);
+tag('Склад ГП · поддоны',25,3.4,69);
+
+tag('Углесушка',-35,6,2.9);
+
+/* ---------- хитбоксы, кольца, плашки ---------- */
+var hit=[];
+ZONES.forEach(function(z){var r=z.r,w=r[2]-r[0],d=r[3]-r[1],cx=(r[0]+r[2])/2,cz=(r[1]+r[3])/2;
+  var hb=new THREE.Mesh(new THREE.BoxGeometry(w,z.hh,d),new THREE.MeshBasicMaterial({visible:false}));hb.position.set(cx,z.hh/2,cz);hb.userData.zone=z;scene.add(hb);hit.push(hb);
+  var ring=new THREE.Mesh(new THREE.PlaneGeometry(w+3,d+3),new THREE.MeshBasicMaterial({color:0x1F5FD1,transparent:true,opacity:.2,depthWrite:false}));
+  ring.rotation.x=-Math.PI/2;ring.position.set(cx,.5,cz);ring.visible=false;scene.add(ring);z.ring=ring;
+  z.top=new THREE.Vector3(cx,z.hh,cz);z.cx=cx;z.cz=cz;
+  if(z.state===undefined)z.state='ok'});
+recalc();
+scene.traverse(function(o){if(o.isMesh&&o.material&&o.material.visible!==false&&!o.userData.zone){o.castShadow=true;o.receiveShadow=true}});
+
+/* ---------- камера ---------- */
+var cam3={yaw:Math.PI/4,pitch:0.62,zoom:1,tx:CX,tz:CZ};var goal={yaw:cam3.yaw,zoom:1,tx:CX,tz:CZ};
+var HOME={yaw:Math.PI/4,zoom:1,tx:CX,tz:CZ};
+function size(){renderer.setSize(cv.clientWidth,cv.clientHeight,false)}
+function applyCam(){var w=cv.clientWidth,h=cv.clientHeight,asp=w/h;var span=(asp<1?330:235)/cam3.zoom;
+  cam.left=-span*asp/2;cam.right=span*asp/2;cam.top=span/2;cam.bottom=-span/2;cam.updateProjectionMatrix();
+  var r=220;cam.position.set(cam3.tx+Math.sin(cam3.yaw)*Math.cos(cam3.pitch)*r,Math.sin(cam3.pitch)*r,cam3.tz+Math.cos(cam3.yaw)*Math.cos(cam3.pitch)*r);cam.lookAt(cam3.tx,0,cam3.tz)}
+addEventListener('resize',function(){size();applyCam()});
+var drag=null,moved=false;
+cv.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY,b:e.button,sx:e.clientX,sy:e.clientY};moved=false;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',function(e){if(!drag)return;var dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>4)moved=true;drag.x=e.clientX;drag.y=e.clientY;if(!moved)return;
+  if(drag.b===2||e.shiftKey){var k=0.3/cam3.zoom;goal.tx-=(dx*Math.cos(cam3.yaw)+dy*Math.sin(cam3.yaw))*k;goal.tz+=(dx*Math.sin(cam3.yaw)-dy*Math.cos(cam3.yaw))*k;cam3.tx=goal.tx;cam3.tz=goal.tz}
+  else{goal.yaw-=dx*0.006;cam3.yaw=goal.yaw}});
+cv.addEventListener('pointerup',function(e){var was=moved;drag=null;if(!was)pick(e)});
+cv.addEventListener('contextmenu',function(e){e.preventDefault()});
+cv.addEventListener('wheel',function(e){e.preventDefault();goal.zoom=Math.max(.6,Math.min(6,goal.zoom*(e.deltaY<0?1.12:.89)))},{passive:false});
+function bind(id,f){document.getElementById(id).onclick=f}
+bind('zi',function(){goal.zoom=Math.min(6,goal.zoom*1.3)});bind('zo',function(){goal.zoom=Math.max(.6,goal.zoom/1.3)});
+bind('rl',function(){goal.yaw+=Math.PI/6});bind('rr',function(){goal.yaw-=Math.PI/6});
+bind('hm',function(){selected=null;showCard(null);goal.yaw=HOME.yaw;goal.zoom=HOME.zoom;goal.tx=HOME.tx;goal.tz=HOME.tz});
+
+bind('tg',function(){showAll=!showAll;document.getElementById('tg').style.opacity=showAll?1:.45});document.getElementById('tg').style.opacity=.45;
+var ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),selected=null;
+function pick(e){var r=cv.getBoundingClientRect();mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mouse,cam);
+  var h=ray.intersectObjects(hit,false);if(h.length)select(h[0].object.userData.zone)}
+function select(z){selected=z;showCard(z);goal.tx=z.cx;goal.tz=z.cz;goal.zoom=Math.max(goal.zoom,2.2)}
+function showCard(z){
+  ZONES.forEach(function(q){q.ring.visible=(q===z)});
+  document.querySelectorAll('.row,.pin').forEach(function(r){r.classList.toggle('on',!!z&&r.dataset.id===z.id)});
+  var c=document.getElementById('card');if(!z){c.style.display='none';return}
+  document.getElementById('ct').textContent=z.name;
+  document.getElementById('cs').innerHTML='<i style="background:'+COLORS[z.state]+'"></i>'+LABEL[z.state];
+  document.getElementById('cn').textContent=z.note;
+  var zt=zoneTags(z);
+  document.getElementById('cl').innerHTML='<h5>Оборудование и показания</h5><dl>'+z.items().map(function(r){return r.length===1?'<dt style="grid-column:1/-1;margin-top:6px;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#1F5FD1;font-weight:800">'+r[0]+'</dt>':'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>'}).join('')+'</dl>'+(zt.length?'<h5 style="margin-top:12px">На схеме (нажми, чтобы показать)</h5><div class="chips">'+zt.map(function(g,i){return '<button class="chip" data-i="'+i+'">'+plain(g.txt)+'</button>'}).join('')+'</div>':'');
+  document.querySelectorAll('#cl .chip').forEach(function(b){b.onclick=function(){var g=zt[+b.dataset.i];goal.tx=g.p.x;goal.tz=g.p.z;goal.zoom=Math.max(goal.zoom,3.2)}});
+  if(z.id==='mass'){
+    document.getElementById('cl').insertAdjacentHTML('beforeend',
+      '<h5 style="margin-top:12px">Подробнее</h5>'+
+      '<div class="chips"><button class="chip" onclick="openMassaLine()">'+
+      'Открыть линию массаподготовки</button></div>');
+  }
+  c.style.display='block'}
+bind('cx',function(){selected=null;showCard(null)});
+
+function paintUI(){
+  function set(id,di,v,l){document.getElementById(id).textContent=f1(v);document.getElementById(di).style.background=COLORS[l]}
+  set('k1','d1',LIVE.bunker1,lvl(LIVE.bunker1));set('k2','d2',LIVE.bunker2,lvl(LIVE.bunker2));
+  set('k3','d3',LIVE.feeder1,hz(LIVE.feeder1));set('k4','d4',LIVE.feeder2,hz(LIVE.feeder2));
+  document.getElementById('liveTxt').textContent=LIVE.ts||'Жду показаний с панели';
+  document.getElementById('rows').innerHTML=ZONES.map(function(z){return '<div class="row" data-id="'+z.id+'"><i style="background:'+COLORS[z.state]+'"></i><span>'+z.name+'</span><small>'+LABEL[z.state]+'</small></div>'}).join('');
+  document.querySelectorAll('.row').forEach(function(r){r.onclick=function(){select(Z(r.dataset.id))}});
+  document.getElementById('steps').innerHTML=STEPS.map(function(s){var st=s.s();return '<div class="step" data-z="'+s.z+'"><div class="d" style="background:'+COLORS[st]+'">'+(st==='nodata'?'':'✓')+'</div><b>'+s.n+'</b><small>'+s.t()+'</small></div>'}).join('');
+  document.querySelectorAll('.step').forEach(function(r){r.onclick=function(){select(Z(r.dataset.z))}});
+  var pins=document.getElementById('pins');pins.innerHTML='';
+  ZONES.forEach(function(z){var p=document.createElement('div');p.className='pin';p.dataset.id=z.id;p.innerHTML='<i style="background:'+COLORS[z.state]+'"></i>'+z.name;p.onclick=function(){select(z)};pins.appendChild(p);z.pin=p})}
+var tmp=new THREE.Vector3();
+function zoneOf(g){if(g.z!==undefined)return g.z;var best=null,bd=1e9;ZONES.forEach(function(q){var r=q.r,dx=Math.max(r[0]-g.p.x,0,g.p.x-r[2]),dz=Math.max(r[1]-g.p.z,0,g.p.z-r[3]),d=Math.sqrt(dx*dx+dz*dz)+(r[2]-r[0])*(r[3]-r[1])*1e-6;if(d<bd){bd=d;best=q}});g.z=bd<8?best:null;return g.z}
+function zoneTags(z){return tags.filter(function(g){return zoneOf(g)===z})}
+function plain(t){return String(T(t)).replace(/<small>.*?<\/small>/g,'').replace(/<[^>]+>/g,'')}
+/* Подписи стоят над своими станками, а станки на схеме стоят тесно:
+   в массаподготовке их восемь в ряд. Поэтому сначала считаем место,
+   потом разводим по вертикали и держим в пределах экрана — иначе
+   «Вальцы тонкого помола СМК 102» ложится на «Конв. №4». */
+function placeTags(){var w=cv.clientWidth,h=cv.clientHeight,put=[];
+  tags.forEach(function(g){var ok=showAll||(selected&&zoneOf(g)===selected);if(!ok){g.el.style.display='none';return}
+    tmp.copy(g.p).project(cam);var x=(tmp.x*.5+.5)*w,y=(-tmp.y*.5+.5)*h;if(x<-80||x>w+80||y<-30||y>h+30){g.el.style.display='none';return}
+    g.el.style.display='block';var t=T(g.txt);if(g.last!==t){g.el.innerHTML=t;g.last=t}put.push({el:g.el,x:x,y:y})});
+  put.sort(function(a,b){return a.y-b.y});
+  var GAP=20;
+  for(var i=0;i<put.length;i++){var it=put[i],half=(it.el.offsetWidth||0)/2;
+    it.x=Math.max(half+4,Math.min(w-half-4,it.x));
+    for(var pass=0;pass<4;pass++){var moved=false;
+      for(var j=0;j<i;j++){var o=put[j];
+        if(Math.abs(o.x-it.x)<(half+(o.el.offsetWidth||0)/2)&&Math.abs(it.y-o.y)<GAP){it.y=o.y+GAP;moved=true}}
+      if(!moved)break}
+    it.el.style.transform='translate('+it.x+'px,'+it.y+'px) translate(-50%,-100%)'}}
+/* Подписи участков разводим так же, как подписи оборудования: на
+   телефоне завод умещается целиком, участки сходятся в одну точку, и
+   «Сушилка 1» ложилась на «Сушилку 2». Двигаем вниз, не прячем: по
+   подписи нажимают, чтобы открыть участок. */
+function placePins(){var w=cv.clientWidth,h=cv.clientHeight,put=[];
+  ZONES.forEach(function(z){tmp.copy(z.top).project(cam);
+    var x=(tmp.x*.5+.5)*w,y=(-tmp.y*.5+.5)*h;
+    if(x<-80||x>w+80||y<-40||y>h+40){z.pin.style.display='none';return}
+    z.pin.style.display='flex';put.push({el:z.pin,x:x,y:y})});
+  put.sort(function(a,b){return a.y-b.y});
+  for(var i=0;i<put.length;i++){var it=put[i],half=(it.el.offsetWidth||0)/2,gap=(it.el.offsetHeight||22)+4;
+    it.x=Math.max(half+4,Math.min(w-half-4,it.x));
+    for(var pass=0;pass<5;pass++){var moved=false;
+      for(var j=0;j<i;j++){var o=put[j];
+        if(Math.abs(o.x-it.x)<(half+(o.el.offsetWidth||0)/2)&&Math.abs(it.y-o.y)<gap){it.y=o.y+gap;moved=true}}
+      if(!moved)break}
+    it.el.style.transform='translate('+it.x+'px,'+it.y+'px) translate(-50%,-130%)'}}
+
+var t0=performance.now(),rm=matchMedia('(prefers-reduced-motion: reduce)');
+/* ---------- рисование поверх схемы ---------- */
+(function(){var dr=document.getElementById('dr'),bar=document.getElementById('dbar'),btn=document.getElementById('pn');if(!dr||!btn)return;
+  var ctx=dr.getContext('2d'),strokes=[],cur=null,col='#E11D48',on=false;
+  function fit(){var r=dr.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);dr.width=Math.max(1,Math.round(r.width*d));dr.height=Math.max(1,Math.round(r.height*d));redraw()}
+  function redraw(){var d=dr.width/Math.max(1,dr.getBoundingClientRect().width);ctx.clearRect(0,0,dr.width,dr.height);ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=4*d;
+    strokes.concat(cur?[cur]:[]).forEach(function(st){ctx.strokeStyle=st.c;ctx.beginPath();st.p.forEach(function(p,i){i?ctx.lineTo(p[0]*d,p[1]*d):ctx.moveTo(p[0]*d,p[1]*d)});if(st.p.length===1)ctx.lineTo(st.p[0][0]*d+.1,st.p[0][1]*d);ctx.stroke()})}
+  function pt(e){var r=dr.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
+  dr.addEventListener('pointerdown',function(e){if(!on)return;dr.setPointerCapture(e.pointerId);cur={c:col,p:[pt(e)]};redraw();e.preventDefault()});
+  dr.addEventListener('pointermove',function(e){if(!cur)return;cur.p.push(pt(e));redraw()});
+  function end(){if(cur){strokes.push(cur);cur=null;redraw()}}
+  dr.addEventListener('pointerup',end);dr.addEventListener('pointercancel',end);
+  function set(v){on=v;dr.classList.toggle('on',v);bar.classList.toggle('on',v);if(v)fit()}
+  btn.addEventListener('click',function(){set(!on)});
+  document.getElementById('ddone').addEventListener('click',function(){set(false)});
+  document.getElementById('dundo').addEventListener('click',function(){strokes.pop();redraw()});
+  document.getElementById('dclr').addEventListener('click',function(){strokes=[];redraw()});
+  bar.querySelectorAll('.sw').forEach(function(b){b.addEventListener('click',function(){col=b.dataset.c;bar.querySelectorAll('.sw').forEach(function(x){x.classList.remove('a')});b.classList.add('a')})});
+  addEventListener('resize',function(){if(on)fit()})})();
+function loop(now){var t=(now-t0)/1000;
+  cam3.yaw+=(goal.yaw-cam3.yaw)*.12;cam3.zoom+=(goal.zoom-cam3.zoom)*.12;cam3.tx+=(goal.tx-cam3.tx)*.12;cam3.tz+=(goal.tz-cam3.tz)*.12;
+  if(!rm.matches){
+    belts.forEach(function(b,bi){var n=b.items.length;b.items.forEach(function(it,i){var u=((i/n)+t*1.6/b.L)%1;if(b.rev)u=1-u;var es=Math.min(1,Math.min(u,1-u)*6);it.scale.set(es,es,es);
+      if(b.ax)it.position.set(b.x0+u*b.L,it.userData.cy||2.35,(b.z0+b.z1)/2);else it.position.set((b.x0+b.x1)/2,it.userData.cy||2.35,b.z0+u*b.L)})});
+    trucks.forEach(function(tr,i){var L=300,u=((t*7+i*150)%L);var dir=i===1?-1:1;tr.position.set(dir>0?-120+u:180-u,0,i===1?88.5:83.5);tr.rotation.y=dir>0?0:Math.PI});
+  }
+  if(!rm.matches)anims.forEach(function(f){try{f(t)}catch(e){showErr(e)}});
+  try{applyCam();placePins();placeTags();renderer.render(scene,cam)}catch(e){showErr(e)}
+  requestAnimationFrame(loop)}
+var _eb=null;function showErr(e){if(_eb)return;_eb=document.createElement('div');_eb.style.cssText='position:fixed;left:8px;top:8px;z-index:99;background:#B91C1C;color:#fff;font:12px/1.3 system-ui;padding:6px 10px;border-radius:8px;max-width:90%';_eb.textContent='Ошибка: '+(e&&e.message||e);document.body.appendChild(_eb)}
+cv.addEventListener('webglcontextlost',function(ev){ev.preventDefault();showErr('потерян контекст WebGL, обновите страницу')});
+size();paintUI();applyCam();requestAnimationFrame(loop);
+
+/* ---------- живые показания с панели ---------- */
+/* Четыре регистра, те же, что на «Главной» и на карте линии. Имена
+   берём из справочника регистров, а не отсюда: иначе разъедутся. */
+var REG={bunker1:'pl024_1_загрузка_проц',bunker2:'pl024_2_загрузка_проц',
+         feeder1:'питатель_1_гц',feeder2:'питатель_2_гц'};
+
+function num(row){var v=row?parseFloat(row.value):NaN;return isFinite(v)?v:null}
+
+function blank(text){for(var k in REG)LIVE[k]=null;LIVE.ts=text;recalc();paintUI();if(selected)showCard(selected)}
+
+async function refreshLive(){
+  try{ await ACAISensors.load(); }catch(e){}
+  try{ collection=await ACAISensors.health(); }catch(e){ collection=null }
+
+  /* Сбор стоит — чисел не показываем вовсе: старое значение рядом со
+     словом «сейчас» это ложь. То же правило, что в сводке. */
+  if(collection&&!collection.ok&&collection.state!=='never'){
+    var since=(collection.since||'').slice(11,16);
+    var why=collection.state==='panel'?'панель не отвечает'
+           :collection.state==='collector'?'расширение не на связи':'сбор остановлен';
+    blank('Нет данных'+(since?' с '+since:'')+' — '+why);
+    return;
+  }
+
+  var live=null;
+  try{ var r=await fetch('/api/sensors/live',{credentials:'include'});live=r.ok?await r.json():null }catch(e){}
+  if(!live){ blank('Панель не ответила'); return }
+
+  for(var k in REG)LIVE[k]=num(live[REG[k]]);
+  var at=collection&&collection.last_data_at?new Date(collection.last_data_at):null;
+  LIVE.ts=at?'Снято в '+at.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+            :'Показания с панели';
+  recalc();paintUI();if(selected)showCard(selected);
+}
+
+refreshLive().then(function(){document.body.dataset.twinReady='1'});
+setInterval(function(){if(!document.hidden)refreshLive()},30000);
+
+/* Esc закрывает двойника: страница открыта в <iframe>, само нажатие
+   до «Главной» не доходит. Сначала закрываем карточку участка. */
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  if(selected){selected=null;showCard(null);return}
+  try{parent.postMessage('acai-twin-close',location.origin)}catch(err){}
+});
+
+/* Массаподготовка здесь показана целиком, но без подробностей линии:
+   они на отдельной карте. Чтобы человек не искал её руками, из
+   карточки участка ведём прямо туда. */
+window.openMassaLine=function(){
+  try{parent.postMessage('acai-twin-open-massa',location.origin)}catch(err){}
+};
+
+window.setTwinData=function(d){for(var k in d)LIVE[k]=d[k];recalc();paintUI();if(selected)showCard(selected)};
+}
+</script>
+<div class="stageNote" id="loadNote">
+  <div class="noteBox">
+    <h2>Собираю завод…</h2>
+    <p>Сцену рисует библиотека Three.js, она подгружается из интернета.</p>
+  </div>
+</div>
+<div class="stageNote" id="loadFail" hidden>
+  <div class="noteBox">
+    <h2>Двойник не открылся</h2>
+    <p id="failWhy"></p>
+    <p>Схему рисует библиотека, которая подгружается из интернета
+       (cdnjs.cloudflare.com). Показания по массаподготовке от неё не
+       зависят: цифры на «Главной» те же и работают без интернета.</p>
+    <button id="failRetry" type="button">Повторить</button>
+  </div>
+</div>
+
+<script>
+// ── Загрузка библиотеки: экран не должен оставаться пустым ───────
+// Блокирующий тег в <head> означал бы, что без интернета человек
+// смотрит на белое поле и не понимает, сломалось или грузится.
+(function(){
+  var CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+  var WAIT_MS = 12000;
+  var note = document.getElementById('loadNote');
+  var fail = document.getElementById('loadFail');
+  var why  = document.getElementById('failWhy');
+  var timer = null, done = false;
+
+  // Esc работает и в нерабочем двойнике: иначе из него не выйти.
+  // Когда сцена собралась, выход берёт на себя она — там Esc сначала
+  // закрывает карточку участка.
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    if(document.body.dataset.twinReady) return;
+    try { parent.postMessage('acai-twin-close', location.origin); } catch (err) {}
+  });
+
+  function showFail(reason){
+    if(done) return;
+    done = true;
+    clearTimeout(timer);
+    note.hidden = true;
+    why.textContent = reason;
+    fail.hidden = false;
+  }
+
+  function load(){
+    done = false;
+    fail.hidden = true;
+    note.hidden = false;
+    var el = document.createElement('script');
+    el.src = CDN;
+    el.onload = function(){
+      clearTimeout(timer);
+      if(done) return;
+      if(!window.THREE){ showFail('Библиотека загрузилась не полностью.'); return; }
+      done = true;
+      try { startTwin(); note.hidden = true; }
+      catch (e) { done = false; showFail('Не удалось собрать сцену: ' + e.message); }
+    };
+    el.onerror = function(){ showFail('До интернета нет связи, библиотека не загрузилась.'); };
+    timer = setTimeout(function(){
+      showFail('Интернет отвечает слишком долго — ждали 12 секунд.');
+    }, WAIT_MS);
+    document.head.appendChild(el);
+  }
+
+  document.getElementById('failRetry').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

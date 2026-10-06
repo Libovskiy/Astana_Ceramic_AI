@@ -350,6 +350,10 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
 # одним списком: разойтись они не могут.
 PAGE_ROLES["/massaprep/3d"] = PAGE_ROLES["/"]
 
+# Цифровой двойник завода — то же: развёрнутый вид «Производственной
+# цепочки» со сводки, а не отдельный раздел.
+PAGE_ROLES["/twin"] = PAGE_ROLES["/"]
+
 
 # Куда отправить человека, которому тут не место (совпадает с
 # ROLE_HOME_PAGE в frontend/static/login.js).
