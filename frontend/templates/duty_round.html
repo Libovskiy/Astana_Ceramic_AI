@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Обход дежурного — ACAI</title>
+<script src="/static/theme.js?v=2"></script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<link rel="stylesheet" href="/static/acai.css?v=65">
+<style>
+/* «Норма» — мягкий зелёный (просьба владельца, 07.10.2026: галочка зелёная
+   и приятная для глаз), неисправность — красная. */
+[hidden]{display:none!important;}
+/* полоса участков без переноса иначе растягивает страницу шире телефона:
+   у .main-content в acai.css нет min-width:0 */
+.main-content{min-width:0;}
+.dr-meta #drWho{min-width:0;overflow-wrap:anywhere;}
+.dr-tabs{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:14px;}
+.dr-tabs button{flex:1;border:0;background:transparent;color:var(--text-dim);font:inherit;font-size:14px;font-weight:600;padding:9px 8px;border-radius:7px;cursor:pointer;position:relative;}
+.dr-tabs button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow);}
+.dr-tabs .cnt{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--danger-solid);color:#fff;font-size:11px;line-height:18px;}
+.dr-seg{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.dr-chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:99px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;}
+.dr-chip[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text);}
+.dr-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;font-size:13px;color:var(--text-dim);}
+.dr-meta .field{min-width:150px;}
+.dr-prog{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;color:var(--text-dim);}
+.dr-bar{flex:1;height:8px;border-radius:4px;background:var(--border);overflow:hidden;display:flex;}
+.dr-bar i{display:block;height:100%;}
+.dr-bar .b-ok{background:var(--ok);} .dr-bar .b-bad{background:var(--danger);}
+.dr-zones{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:6px;scrollbar-width:none;}
+.dr-zones::-webkit-scrollbar{display:none;}
+.dr-zones a{flex:none;font-size:12px;padding:5px 10px;border-radius:99px;border:1px solid var(--border);color:var(--text);text-decoration:none;white-space:nowrap;background:var(--surface);}
+.dr-zones a.bad{border-color:var(--danger);color:var(--danger);}
+.dr-zones a.done{border-color:var(--ok);color:var(--ok);}
+.zone-head{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;scroll-margin-top:80px;}
+.dr-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;scroll-margin-top:80px;}
+.dr-card.any-bad{border-color:var(--danger);}
+.dr-card-h{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:var(--text);font:inherit;text-align:left;padding:12px 12px 12px 14px;cursor:pointer;}
+.dr-card-h .nm{flex:1;min-width:0;font-weight:600;font-size:15px;}
+.dr-card-h .nm small{display:block;font-weight:400;font-size:12px;color:var(--text-dim);}
+.dr-card-h .code{font-family:var(--mono);color:var(--accent);font-size:13px;margin-left:6px;white-space:nowrap;}
+.dr-card-h .cnt{font-size:13px;color:var(--text-dim);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.dr-card.all-ok{border-color:rgba(34,197,94,.45);}
+.dr-card.all-ok .cnt{color:var(--ok);font-weight:600;}
+.dr-card.any-bad .cnt{color:var(--danger);font-weight:600;}
+.dr-card-h .chev{transition:transform .15s;color:var(--text-dim);display:inline-flex;}
+.dr-card.closed .chev{transform:rotate(-90deg);}
+.dr-card.closed .dr-card-b{display:none;}
+.dr-tools{display:flex;justify-content:flex-end;gap:6px;padding:0 12px 8px;}
+.dr-3d{display:inline-flex;align-items:center;gap:4px;text-decoration:none;}
+.dr-row{border-top:1px solid var(--border);scroll-margin-top:120px;}
+.dr-row.bad{background:rgba(239,68,68,.07);}
+.dr-row.flash{animation:drflash 1.2s;}
+@keyframes drflash{0%,40%{background:rgba(59,130,246,.15);}}
+.dr-row-m{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 14px;min-height:56px;}
+.dr-row-m .lbl{flex:1;min-width:0;font-size:14px;}
+.dr-row.ok{background:rgba(34,197,94,.06);}
+.dr-known{display:block;font-size:12px;color:var(--danger);font-weight:600;margin-top:2px;}
+.dr-btns{display:flex;gap:6px;flex:none;}
+.dr-mark{width:50px;height:44px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-dim);display:grid;place-items:center;cursor:pointer;font:inherit;}
+.dr-mark.m-ok[aria-pressed="true"]{background:rgba(34,197,94,.16);border-color:var(--ok);color:var(--ok);}
+.dr-mark.m-ok:hover{border-color:var(--ok);color:var(--ok);}
+.dr-mark.m-bad[aria-pressed="true"]{background:var(--danger-solid);border-color:var(--danger-solid);color:#fff;}
+.dr-fault{padding:2px 14px 14px;display:grid;gap:10px;}
+.dr-sev{display:flex;flex-wrap:wrap;gap:6px;}
+.dr-sev button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:99px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;}
+.dr-sev button[aria-pressed="true"][data-v="watch"]{border-color:var(--warn);color:var(--warn);font-weight:600;}
+.dr-sev button[aria-pressed="true"][data-v="repair"]{background:var(--danger-solid);border-color:var(--danger-solid);color:#fff;font-weight:600;}
+.dr-sev button[aria-pressed="true"][data-v="stop"]{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:600;}
+.dr-quick{display:flex;flex-wrap:wrap;gap:6px;}
+.dr-quick button{border:1px dashed var(--border);background:transparent;color:var(--text-dim);border-radius:8px;padding:4px 9px;font:inherit;font-size:12.5px;cursor:pointer;}
+.dr-photos{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.dr-ph{position:relative;width:72px;height:72px;flex:none;}
+.dr-ph img{width:72px;height:72px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:zoom-in;display:block;}
+.dr-ph.up img{opacity:.35;}
+.dr-ph .spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+.dr-ph .spin::after{content:"";width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:drspin .7s linear infinite;}
+@keyframes drspin{to{transform:rotate(360deg)}}
+.dr-ph .err{position:absolute;inset:0;background:rgba(185,28,28,.85);color:#fff;border-radius:8px;font-size:10px;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;}
+.dr-ph .x{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger-solid);border:0;color:#fff;font-size:13px;cursor:pointer;padding:0;}
+.dr-cam{position:relative;display:inline-flex;align-items:center;gap:8px;height:72px;padding:0 14px;border-radius:8px;border:2px dashed var(--danger);color:var(--danger);font-weight:600;font-size:13px;cursor:pointer;background:var(--surface);}
+.dr-cam input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;}
+.dr-sum{margin-top:22px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;}
+.dr-sum h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin:14px 0 8px;}
+.dr-sum h3:first-child{margin-top:0;}
+.dr-dev{list-style:none;margin:0;padding:0;display:grid;gap:8px;}
+.dr-dev li{padding:10px;border-radius:10px;background:rgba(239,68,68,.07);font-size:13px;}
+.dr-dev li b{display:block;font-size:14px;}
+.dr-dev li.none{background:transparent;padding:0;color:var(--text-dim);}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;margin-right:6px;font-style:normal;}
+.tag.watch{color:var(--warn);border:1px solid var(--warn);}
+.tag.repair{background:var(--danger-solid);color:#fff;}
+.tag.stop{background:var(--text);color:var(--bg);}
+.tag.fixed{background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border);}
+.dr-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.dr-actions .btn{min-height:44px;}
+.dr-actions .btn.primary{flex:1;}
+.dr-hint{font-size:12px;color:var(--text-dim);margin-top:6px;}
+.dr-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;}
+.dr-item-h{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:var(--text);font:inherit;text-align:left;padding:12px 14px;cursor:pointer;}
+.dr-item-h .who{flex:1;min-width:0;}
+.dr-item-h .who b{display:block;font-size:14px;}
+.dr-item-h .who span,.dr-item-h .sc span{font-size:12px;color:var(--text-dim);}
+.dr-item-h .sc{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.dr-item-h .sc b{display:block;}
+.dr-item-h .sc .bad{color:var(--danger);font-weight:600;}
+.dr-item-b{border-top:1px solid var(--border);padding:12px 14px;display:grid;gap:10px;font-size:13px;}
+.dr-day{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;}
+.dr-f{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:grid;gap:6px;}
+.dr-f.stop{border-color:var(--text);}
+.dr-f.repair{border-color:var(--danger);}
+.dr-f .what{font-weight:600;font-size:14px;}
+.dr-f .meta{font-size:12px;color:var(--text-dim);}
+.dr-f .desc{font-size:13px;}
+.dr-f .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.dr-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);margin-bottom:10px;}
+/* ремонт по времени */
+.dr-rep{font-size:13px;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;}
+.dr-rep.on{flex-direction:row;align-items:center;gap:8px;background:rgba(245,158,11,.10);border:1px solid var(--warn);}
+.dr-rep.on .dot{width:9px;height:9px;border-radius:50%;background:var(--warn);flex:none;animation:drpulse 1.6s infinite;}
+@keyframes drpulse{50%{opacity:.35;}}
+.dr-rep.done{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.35);}
+.dr-rep.done b{color:var(--ok);}
+.dr-rep .sub{display:block;font-size:12px;color:var(--text-dim);}
+.dr-repform{display:grid;gap:8px;}
+/* на ярком --ok белые буквы не читаются (контраст 2,3) — заливка тёмным зелёным */
+.dr-f .btn.ok{background:var(--ok-solid);color:#fff;}
+.dr-split{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.dr-bars{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 12px;}
+.dr-barrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 0;font-size:13px;border-top:1px solid var(--border);}
+.dr-barrow:first-child{border-top:0;}
+.dr-barrow .nm{min-width:0;overflow-wrap:anywhere;}
+.dr-barrow .track{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;}
+.dr-barrow .track i{display:block;height:100%;background:var(--accent);border-radius:4px;}
+.dr-barrow .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;}
+.dr-barrow .v small{display:block;font-weight:400;font-size:11px;color:var(--text-dim);}
+@media (prefers-reduced-motion:reduce){ .dr-rep.on .dot{animation:none;} }
+/* время действий */
+.dr-li .tm{margin-left:auto;font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.dr-sheet summary .nm .when{display:block;font-weight:400;font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.dr-started{font-size:13px;color:var(--text-dim);margin:-4px 0 10px;}
+.dr-started b{color:var(--text);font-variant-numeric:tabular-nums;}
+.dr-tl{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.dr-tl summary{padding:12px 14px;cursor:pointer;font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;gap:8px;}
+.dr-tl summary::-webkit-details-marker{display:none;}
+.dr-tl summary .chev{margin-left:auto;color:var(--text-dim);display:inline-flex;transition:transform .15s;transform:rotate(-90deg);}
+.dr-tl[open] summary .chev{transform:none;}
+.dr-ev{display:grid;grid-template-columns:44px 22px minmax(0,1fr);gap:8px;align-items:start;padding:7px 14px;border-top:1px solid var(--border);font-size:13px;}
+.dr-ev .at{font-variant-numeric:tabular-nums;color:var(--text-dim);padding-top:1px;}
+.dr-ev .ic{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-weight:700;font-size:12px;background:var(--surface-2);color:var(--text-dim);}
+.dr-ev.ok .ic{background:rgba(34,197,94,.16);color:var(--ok);}
+.dr-ev.bad .ic{background:var(--danger-solid);color:#fff;}
+.dr-ev.mile .ic{background:var(--accent-solid, var(--accent));color:#fff;}
+.dr-ev.mile{font-weight:600;}
+.dr-ev small{display:block;color:var(--text-dim);font-size:12px;}
+.dr-gap{padding:5px 14px 5px 66px;border-top:1px dashed var(--border);font-size:12px;color:var(--warn);}
+/* экран одного обхода — «провалиться» из журнала */
+.dr-item-h .go{color:var(--text-dim);display:inline-flex;}
+.dr-back{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.dr-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.dr-stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;min-width:0;}
+.dr-stat b{display:block;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;}
+.dr-stat span{font-size:12px;color:var(--text-dim);}
+.dr-stat.ok b{color:var(--ok);} .dr-stat.bad b{color:var(--danger);} .dr-stat.skip b{color:var(--warn);}
+@media (max-width:520px){ .dr-stats{grid-template-columns:repeat(2,1fr);} }
+.dr-h2{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;}
+.dr-note{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:14px;white-space:pre-wrap;}
+.dr-sheet{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;}
+.dr-sheet.has-bad{border-color:var(--danger);}
+.dr-sheet.all-ok{border-color:rgba(34,197,94,.45);}
+.dr-sheet summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none;font-weight:600;}
+.dr-sheet summary::-webkit-details-marker{display:none;}
+.dr-sheet summary .nm{flex:1;min-width:0;}
+.dr-sheet summary .nm small{display:block;font-weight:400;font-size:12px;color:var(--text-dim);}
+.dr-sheet summary .code{font-family:var(--mono);color:var(--accent);font-size:13px;margin-left:6px;}
+.dr-sheet summary .cnt{font-size:13px;color:var(--text-dim);white-space:nowrap;font-weight:500;}
+.dr-sheet.all-ok summary .cnt{color:var(--ok);font-weight:600;}
+.dr-sheet.has-bad summary .cnt{color:var(--danger);font-weight:600;}
+.dr-sheet summary .chev{color:var(--text-dim);display:inline-flex;transition:transform .15s;transform:rotate(-90deg);}
+.dr-sheet[open] summary .chev{transform:none;}
+.dr-li{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border);font-size:14px;}
+.dr-li .st{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;font-weight:700;font-size:14px;}
+.dr-li.ok .st{background:rgba(34,197,94,.16);color:var(--ok);}
+.dr-li.bad{background:rgba(239,68,68,.07);}
+.dr-li.bad .st{background:var(--danger-solid);color:#fff;}
+.dr-li.skip .st{border:1.5px dashed var(--border);color:var(--text-dim);}
+.dr-li.skip .t{color:var(--text-dim);}
+.dr-li .t{flex:1;min-width:0;}
+.dr-li .t small{display:block;font-size:12px;color:var(--danger);}
+.dr-report{white-space:pre-wrap;font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;overflow-x:auto;margin:0;}
+@media (max-width:420px){ .dr-mark{width:46px;} }
+@media (prefers-reduced-motion:reduce){ .dr-row.flash{animation:none;} .dr-card-h .chev{transition:none;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Обход дежурного</div>
+        <div class="topbar-sub" id="drSub"></div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-clock" id="topbarClock"></span>
+      </div>
+    </header>
+    <div class="page">
+      <div class="dr-tabs" role="group" aria-label="Разделы обхода" id="drTabs">
+        <button data-tab="round" id="tabRound" aria-pressed="true" hidden>Обход</button>
+        <button data-tab="log" aria-pressed="false">Журнал</button>
+        <button data-tab="faults" aria-pressed="false">Поломки<span class="cnt" id="faultCnt" hidden></span></button>
+        <button data-tab="repairs" aria-pressed="false">Ремонты</button>
+      </div>
+
+      <div class="verdict calm" id="drVerdict"><div class="v-title" style="color:var(--text-dim)">Загрузка…</div></div>
+
+      <section id="vRound" hidden>
+        <div class="dr-seg" id="kindSeg" role="group" aria-label="Чей лист" hidden></div>
+        <div class="dr-meta">
+          <div class="field"><label for="drShift">Смена</label>
+            <select class="input" id="drShift"><option value="day">Дневная</option><option value="night">Ночная</option></select></div>
+          <div id="drWho"></div>
+        </div>
+        <div class="dr-prog">
+          <div class="dr-bar" aria-hidden="true"><i class="b-ok" id="barOk"></i><i class="b-bad" id="barBad"></i></div>
+          <span id="progTxt" class="mono"></span>
+          <button class="btn secondary sm" id="nextBtn" hidden>К непроверенному ↓</button>
+        </div>
+        <nav class="dr-zones" id="drZones" aria-label="Участки"></nav>
+        <div id="drList"></div>
+
+        <div class="dr-sum">
+          <h3>Отклонения</h3>
+          <ul class="dr-dev" id="drDev"></ul>
+          <h3><label for="drNote">Примечание</label></h3>
+          <textarea class="input textarea" id="drNote" placeholder="Что важно передать следующей смене"></textarea>
+          <div class="dr-hint" id="drReminder"></div>
+          <div class="dr-actions">
+            <button class="btn primary" id="submitBtn">Сдать обход</button>
+            <button class="btn secondary" id="resetBtn">Очистить</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="vLog" hidden>
+        <div class="dr-seg" id="logFilter" role="group" aria-label="Фильтр">
+          <button class="dr-chip" data-f="" aria-pressed="true">Все</button>
+          <button class="dr-chip" data-f="el" aria-pressed="false">Электрик</button>
+          <button class="dr-chip" data-f="sl" aria-pressed="false">Слесарь</button>
+        </div>
+        <div id="logList"><div class="empty">Загрузка…</div></div>
+      </section>
+
+      <section id="vDetail" hidden>
+        <div class="dr-back">
+          <button class="btn secondary sm" id="backBtn">← Журнал</button>
+          <span id="detailNav" style="margin-left:auto;display:flex;gap:6px"></span>
+        </div>
+        <div id="detailBody"><div class="empty">Загрузка…</div></div>
+      </section>
+
+      <section id="vRepairs" hidden>
+        <div class="dr-meta"><div class="field"><label for="repMonth">Месяц</label>
+          <input type="month" class="input" id="repMonth"></div></div>
+        <div id="repBody"><div class="empty">Загрузка…</div></div>
+      </section>
+
+      <section id="vFaults" hidden>
+        <label class="dr-check"><input type="checkbox" id="showResolved"> Показать устранённые</label>
+        <div id="faultList"><div class="empty">Загрузка…</div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="/static/icons.js?v=7"></script>
+<script src="/static/acai_layout.js?v=67"></script>
+<script src="/static/mobile_nav_v2.js?v=7"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KIND_NAME = {el:'Электрик', sl:'Слесарь'};
+const SEV_RANK = {stop:0, repair:1, watch:2};
+
+let T = null;            // ответ /template: листы и права
+let USER = null;
+let KIND = null;         // какой лист заполняем
+let D = null;            // черновик текущего листа
+let OPEN = new Map();    // ref → открытая неисправность
+let OPEN_LIST = [];
+let TAB = 'round';
+let LOG_F = '', ROUND_CACHE = {}, LOG_IDS = [], LAST_TAB = null, CAME_IN = false;
+let armed = null;
+
+const groups = () => T.templates[KIND].groups;
+function eqTitle(g){ return g.n + (g.c ? ' ' + g.c : '') + (g.s ? ` (${g.s})` : ''); }
+function refOf(kind, g, item){ return `${kind}|${eqTitle(g)}|${item}`; }
+function photoUrl(id){ return '/api/duty-round/photo/' + encodeURIComponent(id); }
+function dm(s){ const d = ACAI.parseTime(s); return d ? d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'}) : '—'; }
+function dmt(s){ return s ? `${dm(s)} ${ACAI.shortTime(s)}` : '—'; }
+
+// ── черновик: живёт в этом телефоне, пока обход не сдан ──
+// Фото при этом уже на сервере (загружаются сразу при съёмке), в
+// черновике только их номера: память телефона не забивается.
+function draftKey(){ return `acai_duty_draft_${USER.username}_${KIND}`; }
+function blankDraft(){ const h = new Date().getHours(); return {shift: h>=8 && h<20 ? 'day' : 'night', note:'', marks:{}, startedAt:null, open:{}, log:[]}; }
+// Ход обхода: каждое нажатие со временем этого телефона. Уходит на
+// сервер при сдаче, руководство видит его в журнале.
+function logEv(a, e, i, via){
+  D.log = D.log || [];
+  const ev = {t: ACAI.localDateTime(), a};
+  if (e != null){ ev.e = e; ev.i = i; }
+  if (via) ev.via = via;
+  D.log.push(ev);
+  if (D.log.length > 1500) D.log.shift();
+}
+function loadDraft(){
+  try { D = JSON.parse(localStorage.getItem(draftKey())) || blankDraft(); } catch { D = blankDraft(); }
+  D.open = D.open || {};
+}
+// Пишем сразу, без задержки: черновик маленький (фото — только номера),
+// а отложенная запись теряла последние отметки, если телефон тут же
+// обновил страницу или закрыл вкладку.
+function saveDraft(){
+  if (!D || !KIND) return;
+  const clean = JSON.parse(JSON.stringify(D, (k, v) => k === 'preview' ? undefined : v));
+  for (const m of Object.values(clean.marks)) if (m.photos) m.photos = m.photos.filter(p => p.id);
+  try { localStorage.setItem(draftKey(), JSON.stringify(clean)); } catch {}
+}
+addEventListener('pagehide', saveDraft);
+function touch(){
+  if (!D.startedAt){ D.startedAt = ACAI.localDateTime(); logEv('start'); }
+  disarm();
+}
+
+// ── обход ────────────────────────────────────────────────
+function stats(e){
+  const n = groups()[e].it.length; let ok = 0, bad = 0;
+  for (let i = 0; i < n; i++){ const s = (D.marks[e+'-'+i] || {}).s; if (s === 'ok') ok++; else if (s === 'bad') bad++; }
+  return {n, ok, bad};
+}
+function totals(){ let n=0, ok=0, bad=0; groups().forEach((_, e) => { const s = stats(e); n+=s.n; ok+=s.ok; bad+=s.bad; }); return {n, ok, bad, left:n-ok-bad}; }
+function zoneId(z){ return 'z' + [...new Set(groups().map(g => g.z))].indexOf(z); }
+
+function rowHTML(e, i){
+  const g = groups()[e], item = g.it[i], id = e+'-'+i, m = D.marks[id] || {};
+  const known = OPEN.get(refOf(KIND, g, item));
+  let h = `<div class="dr-row ${m.s||''}" data-id="${id}">
+    <div class="dr-row-m"><div class="lbl">${esc(item)}${known ? `<span class="dr-known">Не устранено с ${dm(known.first_at)} · ${esc(known.severity_label)}</span>` : ''}</div>
+      <div class="dr-btns">
+        <button class="dr-mark m-ok" data-act="ok" aria-pressed="${m.s==='ok'}" aria-label="Норма: ${esc(item)}">${ACAI.icon('check', 22)}</button>
+        <button class="dr-mark m-bad" data-act="bad" aria-pressed="${m.s==='bad'}" aria-label="Неисправность: ${esc(item)}">${ACAI.icon('alert', 22)}</button>
+      </div></div>`;
+  if (m.s === 'bad'){
+    const ph = m.photos || [];
+    h += `<div class="dr-fault">
+      <div class="dr-sev" role="group" aria-label="Насколько серьёзно">${Object.entries(T.severities).map(([k, v]) => `<button data-act="sev" data-v="${k}" aria-pressed="${m.sev===k}">${esc(v)}</button>`).join('')}</div>
+      <textarea class="input textarea" data-act="note" id="note-${KIND}-${id}" placeholder="Что не так? Где именно?" style="min-height:64px">${esc(m.note||'')}</textarea>
+      <div class="dr-quick">${T.templates[KIND].quick.map(q => `<button data-act="quick" data-q="${esc(q)}">+ ${esc(q)}</button>`).join('')}</div>
+      <div class="dr-photos">${ph.map((p, k) => `<div class="dr-ph ${p.state==='up'?'up':''}">
+          <img src="${esc(p.preview || (p.id ? photoUrl(p.id) : ''))}" alt="Фото ${k+1}" data-zoom>
+          ${p.state==='up' ? '<div class="spin"></div>' : ''}${p.state==='err' ? `<div class="err">${esc(p.error||'Ошибка')}</div>` : ''}
+          <button class="x" data-act="delph" data-k="${k}" aria-label="Удалить фото">✕</button></div>`).join('')}
+        <label class="dr-cam">${ACAI.icon('camera', 20)}<span>${ph.length ? 'Ещё фото' : 'Сфотографировать'}</span>
+          <input type="file" accept="image/*" capture="environment" multiple data-act="photo"></label>
+      </div></div>`;
+  }
+  return h + '</div>';
+}
+function cardHTML(e){
+  const g = groups()[e], s = stats(e), open = D.open[e] === true;
+  return `<article class="dr-card ${s.bad?'any-bad':(s.ok===s.n?'all-ok':'')} ${open?'':'closed'}" data-e="${e}" id="card-${e}">
+    <button class="dr-card-h" data-act="toggle" aria-expanded="${open}">
+      <span class="nm">${esc(g.n)}${g.c ? `<span class="code">${esc(g.c)}</span>` : ''}${g.s ? `<small>${esc(g.s)}</small>` : ''}</span>
+      <span class="cnt">${s.bad ? s.bad+' неиспр. · ' : (s.ok===s.n ? '✓ ' : '')}${s.ok+s.bad}/${s.n}</span>
+      <span class="chev">${ACAI.icon('down', 18)}</span>
+    </button>
+    <div class="dr-card-b">
+      <div class="dr-tools">
+        ${ACAI.canOpen('/plant-3d') ? `<a class="btn secondary sm dr-3d" href="/plant-3d?unit=${encodeURIComponent(eqTitle(g))}" title="Где этот станок и его узлы">${ACAI.icon('cube', 14)} 3D</a>` : ''}
+        ${g.it.length > 1 ? `<button class="btn secondary sm" data-act="allok" ${s.ok+s.bad===s.n?'disabled':''}>Остальное в норме</button>` : ''}
+      </div>
+      ${g.it.map((_, i) => rowHTML(e, i)).join('')}
+    </div></article>`;
+}
+function renderList(){
+  let h = '', last = null;
+  groups().forEach((g, e) => {
+    if (g.z !== last){ h += `<div class="zone-head" id="${zoneId(g.z)}">${esc(g.z)}</div>`; last = g.z; }
+    h += cardHTML(e);
+  });
+  $('drList').innerHTML = h;
+}
+function rerenderCard(e){
+  const t = document.createElement('div'); t.innerHTML = cardHTML(e);
+  $('card-'+e).replaceWith(t.firstElementChild);
+}
+function drafFaults(){
+  const out = [];
+  groups().forEach((g, e) => g.it.forEach((it, i) => { const m = D.marks[e+'-'+i]; if (m && m.s === 'bad') out.push({g, it, m}); }));
+  return out;
+}
+function renderProgress(){
+  const t = totals(), zs = {};
+  groups().forEach((g, e) => { const s = stats(e); const z = zs[g.z] || (zs[g.z] = {n:0, d:0, b:0}); z.n += s.n; z.d += s.ok+s.bad; z.b += s.bad; });
+  $('barOk').style.width = (t.ok/t.n*100) + '%';
+  $('barBad').style.width = (t.bad/t.n*100) + '%';
+  $('progTxt').textContent = `${t.ok+t.bad} / ${t.n}`;
+  $('nextBtn').hidden = !t.left;
+  $('drZones').innerHTML = Object.entries(zs).map(([z, v]) =>
+    `<a href="#${zoneId(z)}" class="${v.b?'bad':v.d===v.n?'done':''}">${esc(z)} <span class="mono">${v.d}/${v.n}</span></a>`).join('');
+  const f = drafFaults();
+  $('drDev').innerHTML = f.length ? f.map(({g, it, m}) => `<li><b>${esc(eqTitle(g))} — ${esc(it)}</b>
+      <i class="tag ${esc(m.sev)}">${esc(T.severities[m.sev]||'')}</i>${m.note ? esc(m.note) : '<span style="color:var(--text-dim)">описание не заполнено</span>'}${(m.photos||[]).length ? ` · фото: ${m.photos.length}` : ''}</li>`).join('')
+    : '<li class="none">Отклонений нет.</li>';
+  renderRoundVerdict(t, f);
+}
+function renderRoundVerdict(t, f){
+  if (TAB !== 'round') return;
+  const uploading = Object.values(D.marks).some(m => (m.photos||[]).some(p => p.state === 'up'));
+  const noNote = f.filter(x => !(x.m.note||'').trim());
+  const rows = [];
+  if (uploading) rows.push({level:'warning', what:'Фото ещё загружаются', where:'дождитесь, иначе обход уйдёт без них'});
+  if (noNote.length) rows.push({level:'warning', what:`Нет описания у неисправностей: ${noNote.length}`, where: noNote.slice(0,3).map(x => eqTitle(x.g)+' — '+x.it).join(', ')});
+  if (t.left) rows.push({level:'warning', what:`Осталось отметить: ${t.left} из ${t.n}`, where:'по каждому пункту — норма или неисправность'});
+  if (rows.length){ ACAI.verdict('drVerdict', {title: t.ok+t.bad ? 'Обход не закончен' : 'Обход не начат', rows}); return; }
+  ACAI.verdict('drVerdict', {title:'Обход готов — нажмите «Сдать обход»',
+    sub: f.length ? `Неисправностей: ${f.length}. После сдачи они появятся во вкладке «Неисправности» у всех.` : `Все ${t.n} пунктов в норме.`});
+}
+function renderRoundHead(){
+  $('drWho').innerHTML = `${esc(T.templates[KIND].full_title)} · ${esc(T.full_name)}` + (D.startedAt
+    ? `<div class="dr-started">Обход начат в <b>${ACAI.shortTime(D.startedAt)}</b> · идёт <b data-since="${esc(D.startedAt)}">${fmtMin(since(D.startedAt))}</b></div>`
+    : `<div class="dr-started">Время начнёт идти с первой отметки</div>`);
+}
+function renderRound(){
+  $('drShift').value = D.shift;
+  $('drNote').value = D.note;
+  renderRoundHead();
+  $('drReminder').textContent = T.templates[KIND].reminder || '';
+  $('drSub').textContent = T.templates[KIND].full_title;
+  $('kindSeg').innerHTML = T.can_conduct.map(k => `<button class="dr-chip" data-kind="${k}" aria-pressed="${k===KIND}">${KIND_NAME[k]}</button>`).join('');
+  renderList(); renderProgress();
+}
+
+$('drList').addEventListener('click', ev => {
+  const z = ev.target.closest('[data-zoom]'); if (z){ zoom(z.src); return; }
+  const b = ev.target.closest('[data-act]'); if (!b || b.dataset.act === 'note' || b.dataset.act === 'photo') return;
+  const card = b.closest('.dr-card'), e = +card.dataset.e, act = b.dataset.act;
+  if (act === 'toggle'){ D.open[e] = card.classList.contains('closed'); saveDraft(); rerenderCard(e); return; }
+  const before = stats(e); let focus = null;
+  touch();
+  if (act === 'allok'){
+    groups()[e].it.forEach((_, i) => { const id = e+'-'+i; if (!(D.marks[id]||{}).s){ D.marks[id] = {s:'ok'}; logEv('ok', e, i, 'allok'); } });
+  } else {
+    const id = b.closest('.dr-row').dataset.id, m = D.marks[id] || (D.marks[id] = {});
+    const i = +id.split('-')[1];
+    if (act === 'ok'){
+      if (m.s === 'ok'){ delete D.marks[id]; logEv('clear', e, i); }
+      else { (m.photos||[]).forEach(dropPhoto); D.marks[id] = {s:'ok'}; logEv('ok', e, i); }
+    }
+    if (act === 'bad'){
+      if (m.s === 'bad'){ (m.photos||[]).forEach(dropPhoto); delete D.marks[id]; logEv('clear', e, i); }
+      else { m.s = 'bad'; m.sev = m.sev || 'repair'; m.photos = m.photos || []; focus = id; logEv('bad', e, i); }
+    }
+    if (act === 'sev') m.sev = b.dataset.v;
+    if (act === 'delph'){ dropPhoto(m.photos[+b.dataset.k]); m.photos.splice(+b.dataset.k, 1); logEv('photo_del', e, i); }
+    if (act === 'quick') m.note = (m.note ? m.note.replace(/[\s,.]*$/, '') + ', ' : '') + b.dataset.q.toLowerCase();
+  }
+  // первая отметка — запускаем часы «обход начат в …»
+  if (!$('drWho').querySelector('[data-since]')) renderRoundHead();
+  const after = stats(e);
+  // всё в норме — карточка сворачивается сама, список короче
+  if (after.ok === after.n && before.ok !== before.n) D.open[e] = false;
+  saveDraft(); rerenderCard(e); renderProgress();
+  if (focus) document.querySelector(`#card-${e} .dr-row[data-id="${focus}"] textarea`)?.focus({preventScroll:true});
+});
+$('drList').addEventListener('input', ev => {
+  if (ev.target.dataset.act !== 'note') return;
+  D.marks[ev.target.closest('.dr-row').dataset.id].note = ev.target.value;
+  saveDraft(); renderProgress();
+});
+$('drList').addEventListener('change', ev => {
+  if (ev.target.dataset.act !== 'photo') return;
+  const row = ev.target.closest('.dr-row'), m = D.marks[row.dataset.id], e = +row.closest('.dr-card').dataset.e;
+  const files = [...ev.target.files]; ev.target.value = '';
+  files.forEach(f => uploadPhoto(f, m, e));
+});
+
+// ── фото: сжимаем на телефоне и сразу отправляем ──
+// На заводском wifi это разница между «отправилось» и «подождал и ушёл».
+function compress(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => b ? res(b) : rej(new Error('Не удалось обработать снимок')), 'image/jpeg', 0.75);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Файл не читается как изображение')); };
+    img.src = url;
+  });
+}
+async function uploadPhoto(file, m, e){
+  const p = {id:null, state:'up', preview:''};
+  m.photos.push(p); touch(); rerenderCard(e); renderProgress();
+  try {
+    const blob = await compress(file);
+    p.preview = URL.createObjectURL(blob); rerenderCard(e);
+    const fd = new FormData(); fd.append('file', blob, 'photo.jpg'); fd.append('kind', KIND);
+    const r = await fetch('/api/duty-round/photo', {method:'POST', credentials:'include', body:fd});
+    if (r.status === 401){ location.href = '/login'; return; }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || ('Ошибка ' + r.status));
+    p.id = j.id; p.state = 'done';
+    { const row = Object.entries(D.marks).find(([, x]) => x === m); if (row){ const [ee, ii] = row[0].split('-').map(Number); logEv('photo', ee, ii); } }
+  } catch (err){
+    p.state = 'err'; p.error = String(err.message || 'Ошибка').slice(0, 40);
+    ACAI.toast('Фото не загрузилось: ' + p.error, 'danger');
+  }
+  saveDraft();
+  if ($('card-'+e)) rerenderCard(e);
+  renderProgress();
+}
+function dropPhoto(p){
+  if (p && p.id) fetch('/api/duty-round/photo/' + p.id, {method:'DELETE', credentials:'include'}).catch(() => {});
+}
+function zoom(src){
+  if (!src) return;
+  ACAI.showModal(`<img src="${esc(src)}" alt="Фото неисправности" style="width:100%;border-radius:8px;max-height:70vh;object-fit:contain">
+    <div class="modal-foot"><button class="btn secondary" onclick="ACAI.closeModal()">Закрыть</button></div>`);
+}
+
+$('nextBtn').addEventListener('click', () => {
+  for (let e = 0; e < groups().length; e++) for (let i = 0; i < groups()[e].it.length; i++){
+    if ((D.marks[e+'-'+i] || {}).s) continue;
+    if (D.open[e] !== true){ D.open[e] = true; saveDraft(); rerenderCard(e); }
+    const row = document.querySelector(`#card-${e} .dr-row[data-id="${e}-${i}"]`);
+    row.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center'});
+    row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+    return;
+  }
+});
+$('drShift').addEventListener('change', ev => { D.shift = ev.target.value; saveDraft(); });
+$('drNote').addEventListener('input', ev => { D.note = ev.target.value; saveDraft(); });
+$('kindSeg').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-kind]'); if (!b || b.dataset.kind === KIND) return;
+  KIND = b.dataset.kind; disarm(); loadDraft(); renderRound();
+});
+
+function disarm(){
+  armed = null;
+  $('submitBtn').textContent = 'Сдать обход'; $('submitBtn').className = 'btn primary';
+  $('resetBtn').textContent = 'Очистить'; $('resetBtn').className = 'btn secondary';
+}
+$('submitBtn').addEventListener('click', async () => {
+  const btn = $('submitBtn'), t = totals();
+  if (Object.values(D.marks).some(m => (m.photos||[]).some(p => p.state === 'up'))){ ACAI.toast('Дождитесь загрузки фото', 'warn'); return; }
+  if (!(t.ok + t.bad)){ ACAI.toast('Не отмечено ни одного пункта', 'warn'); return; }
+  if (t.left && armed !== 'submit'){
+    armed = 'submit'; btn.textContent = `Не проверено ${t.left}. Всё равно сдать?`; btn.className = 'btn danger'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Сохраняем…';
+  const marks = Object.entries(D.marks).filter(([, m]) => m.s).map(([id, m]) => {
+    const [e, i] = id.split('-').map(Number);
+    return {e, i, s:m.s, sev:m.sev, note:m.note||'', photo_ids:(m.photos||[]).filter(p => p.id).map(p => p.id)};
+  });
+  try {
+    const r = await ACAI.post('/api/duty-round/round', {kind:KIND, shift:D.shift, note:D.note, started_at:D.startedAt, marks, log:D.log||[]});
+    try { localStorage.removeItem(draftKey()); } catch {}
+    D = blankDraft(); D.shift = $('drShift').value;
+    ACAI.toast(`Обход №${r.round_id} сдан` + (r.bad ? ` · неисправностей: ${r.bad}` : ''), 'ok');
+    await loadFaults();
+    renderRound();
+    LOG_IDS = []; LAST_TAB = 'log'; CAME_IN = false; openRound(r.round_id);
+  } catch (err){
+    // ACAI.post кладёт в сообщение причину от сервера (detail)
+    ACAI.toast('Не сохранилось: ' + (err.message || 'нет связи с сервером'), 'danger');
+  } finally { btn.disabled = false; disarm(); }
+});
+$('resetBtn').addEventListener('click', () => {
+  if (armed !== 'reset'){ armed = 'reset'; $('resetBtn').textContent = 'Точно стереть отметки?'; $('resetBtn').className = 'btn danger'; return; }
+  Object.values(D.marks).forEach(m => (m.photos||[]).forEach(dropPhoto));
+  const shift = D.shift; D = blankDraft(); D.shift = shift;
+  try { localStorage.removeItem(draftKey()); } catch {}
+  disarm(); renderRound(); scrollTo({top:0});
+  ACAI.toast('Лист очищен', 'ok');
+});
+
+// ── журнал ────────────────────────────────────────────────
+async function renderLog(){
+  const box = $('logList');
+  let rounds = [];
+  try { rounds = (await ACAI.get('/api/duty-round/rounds?limit=100' + (LOG_F ? '&kind=' + LOG_F : ''))).rounds || []; }
+  catch { box.innerHTML = '<div class="empty">Журнал не загрузился: нет связи с сервером. Обновите страницу.</div>'; return; }
+  if (TAB === 'log'){
+    const last = rounds[0];
+    ACAI.verdict('drVerdict', last
+      ? {title:`Последний обход: ${dmt(last.finished_at)}`, sub:`${KIND_NAME[last.kind]} ${last.full_name||''} · проверено ${last.checked_count} из ${last.total_count}` + (last.bad_count ? ` · неисправностей ${last.bad_count}` : ', без замечаний')}
+      : {title:'Обходов ещё не было', sub:'Как только дежурный сдаст обход, он появится здесь.'});
+  }
+  if (!rounds.length){ box.innerHTML = '<div class="empty">Пока ни одного сданного обхода.</div>'; return; }
+  let h = '', lastDay = null;
+  for (const r of rounds){
+    const day = ACAI.shortDate(r.finished_at);
+    if (day !== lastDay){ h += `<div class="dr-day">${esc(day)}</div>`; lastDay = day; }
+    h += `<article class="dr-item" data-r="${r.id}">
+      <button class="dr-item-h" data-act="openr" aria-label="Открыть обход ${esc(r.full_name||'')} ${dmt(r.finished_at)}">
+        <span class="who"><b>${esc(r.full_name || r.username || '—')}</b><span>${KIND_NAME[r.kind]||''} · ${r.shift==='night'?'ночь':r.shift==='day'?'день':'—'} · ${r.started_at ? `${ACAI.shortTime(r.started_at)}–${ACAI.shortTime(r.finished_at)} · ${duration(r.started_at, r.finished_at)}` : `сдан ${ACAI.shortTime(r.finished_at)}`}</span></span>
+        <span class="sc"><b class="mono">${r.checked_count}/${r.total_count}</b>${r.bad_count ? `<span class="bad">${r.bad_count} неиспр.${r.resolved_count ? ` (устр. ${r.resolved_count})` : ''}</span>` : '<span>без замечаний</span>'}</span>
+        <span class="go">${ACAI.icon('right', 18)}</span>
+      </button>
+    </article>`;
+  }
+  box.innerHTML = h;
+  LOG_IDS = rounds.map(r => r.id);
+}
+function faultHTML(f, opts = {}){
+  const photos = opts.photos || f.photo_ids || [];
+  return `<div class="dr-f ${f.resolved_at ? '' : esc(f.severity)}" data-f="${f.id}">
+    <div class="what">${esc(f.equipment)} — ${esc(f.item)}</div>
+    <div class="desc"><i class="tag ${f.resolved_at ? 'fixed' : esc(f.severity)}">${f.resolved_at ? 'Устранено' : esc(f.severity_label)}</i>${esc(f.note || 'Без описания')}</div>
+    ${opts.meta ? `<div class="meta">${opts.meta}</div>` : ''}
+    ${photos.length ? `<div class="dr-photos">${photos.map(id => `<div class="dr-ph"><img src="${photoUrl(id)}" alt="Фото неисправности" loading="lazy" data-zoom></div>`).join('')}</div>` : ''}
+    ${opts.repair === false ? '' : repairHTML(f)}
+  </div>`;
+}
+// ── один обход: «провалиться» из журнала ─────────────────
+// Отдельный экран со своим адресом (?round=N): ссылку можно переслать
+// мастеру, а кнопка «Назад» телефона возвращает в журнал.
+async function openRound(id, push = true){
+  TAB = 'detail';
+  $('drTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === 'log'));
+  $('vRound').hidden = true; $('vLog').hidden = true; $('vFaults').hidden = true; $('vRepairs').hidden = true; $('vDetail').hidden = false;
+  if (push) history.pushState({round:id}, '', '?round=' + id);
+  $('drSub').textContent = 'Обход №' + id;
+  $('detailBody').innerHTML = '<div class="empty">Загрузка…</div>';
+  $('detailNav').innerHTML = '';
+  scrollTo({top:0});
+  let r;
+  try { r = ROUND_CACHE[id] || (ROUND_CACHE[id] = (await ACAI.get('/api/duty-round/rounds/' + id)).round); }
+  catch (err){
+    ACAI.verdict('drVerdict', {title:'Обход не открылся', sub: String(err.message) === '404' ? 'Такого обхода нет — возможно, ссылка неверная.' : 'Нет связи с сервером. Обновите страницу.'});
+    $('detailBody').innerHTML = ''; return;
+  }
+  if (TAB !== 'detail') return;
+  renderDetail(r);
+}
+function duration(a, b){
+  const x = ACAI.parseTime(a), y = ACAI.parseTime(b);
+  if (!x || !y || y < x) return '';
+  const m = Math.round((y - x) / 60000);
+  return m < 1 ? 'меньше минуты' : m < 60 ? `${m} мин` : `${Math.floor(m/60)} ч ${m%60} мин`;
+}
+// Ход обхода: все нажатия по порядку. Подряд идущее «Остальное в
+// норме» — одной строкой; перерыв дольше 5 минут подписан, чтобы было
+// видно, где дежурный стоял.
+function timelineHTML(r){
+  const evs = r.events || [];
+  if (!evs.length) return `<div class="dr-h2">Ход обхода</div><div class="dr-note" style="color:var(--text-dim)">Время отметок для этого обхода не записано: его сдали до того, как появилась запись хода обхода.</div>`;
+  const rows = []; let prev = null;
+  for (let k = 0; k < evs.length; k++){
+    const ev = evs[k];
+    if (prev){
+      const gap = (ACAI.parseTime(ev.at) - ACAI.parseTime(prev.at)) / 60000;
+      if (gap >= 5) rows.push(`<div class="dr-gap">пауза ${fmtMin(gap)}</div>`);
+    }
+    if (ev.detail === 'allok'){
+      let n = 1;
+      while (evs[k+n] && evs[k+n].detail === 'allok' && evs[k+n].equipment === ev.equipment) n++;
+      rows.push(`<div class="dr-ev ok"><span class="at">${ACAI.shortTime(ev.at)}</span><span class="ic">✓</span>
+        <span>${esc(ev.equipment)}<small>«Остальное в норме» — ${n} ${plural(n, 'пункт', 'пункта', 'пунктов')}</small></span></div>`);
+      k += n - 1; prev = evs[k]; continue;
+    }
+    const cls = {ok:'ok', bad:'bad', start:'mile', submit:'mile'}[ev.action] || '';
+    const ic = {ok:'✓', bad:'!', clear:'×', photo:'▣', photo_del:'×', start:'▶', submit:'■'}[ev.action] || '·';
+    const what = ev.equipment ? `${esc(ev.equipment)}<small>${esc(ev.item)} — ${esc(ev.label)}</small>` : esc(ev.label[0].toUpperCase() + ev.label.slice(1));
+    rows.push(`<div class="dr-ev ${cls}"><span class="at">${ACAI.shortTime(ev.at)}</span><span class="ic">${ic}</span><span>${what}</span></div>`);
+    prev = ev;
+  }
+  const acts = evs.filter(e => !['start', 'submit'].includes(e.action)).length;
+  return `<div class="dr-h2">Ход обхода</div>
+    <details class="dr-tl" open><summary>${ACAI.shortTime(evs[0].at)}–${ACAI.shortTime(evs[evs.length-1].at)} · ${acts} ${plural(acts, 'отметка', 'отметки', 'отметок')}<span class="chev">${ACAI.icon('down', 18)}</span></summary>
+    ${rows.join('')}</details>`;
+}
+function renderDetail(r){
+  const bad = r.faults.length, skip = r.skipped.length, ok = r.checked_count - bad;
+  const openF = r.faults.filter(f => !f.resolved_at);
+  const shift = r.shift === 'night' ? 'ночная смена' : r.shift === 'day' ? 'дневная смена' : '';
+  const dur = duration(r.started_at, r.finished_at);
+  const title = `${KIND_NAME[r.kind]} ${r.full_name||''} · ${dmt(r.finished_at)}`;
+  ACAI.verdict('drVerdict', openF.length
+    ? {title, rows: openF.slice(0, 3).map(f => ({level: f.severity === 'watch' ? 'warning' : 'critical',
+        what:`${f.equipment} — ${f.item}`, where:`${f.severity_label} · не устранено`}))}
+    : {title, sub: bad ? `Неисправности этого обхода устранены (${bad}).`
+                       : `Без замечаний: ${ok} пунктов в норме${skip ? `, не проверено ${skip}` : ''}.`});
+
+  // соседние обходы — листать, не возвращаясь в журнал
+  const i = LOG_IDS.indexOf(r.id);
+  $('detailNav').innerHTML = i < 0 ? '' :
+    `<button class="btn secondary sm" data-nav="${LOG_IDS[i+1]||''}" ${LOG_IDS[i+1] ? '' : 'disabled'}>‹ Раньше</button>
+     <button class="btn secondary sm" data-nav="${LOG_IDS[i-1]||''}" ${LOG_IDS[i-1] ? '' : 'disabled'}>Позже ›</button>`;
+
+  const parts = []; let lastZ = null;
+  for (const g of r.sheet){
+    const nOk = g.items.filter(x => x.status === 'ok').length, nBad = g.items.filter(x => x.status === 'bad').length;
+    const nSkip = g.items.length - nOk - nBad;
+    const cls = nBad ? 'has-bad' : (nOk === g.items.length ? 'all-ok' : '');
+    const cnt = nBad ? `${nBad} неиспр. · ${nOk+nBad}/${g.items.length}` : `${nOk === g.items.length ? '✓ ' : ''}${nOk+nBad}/${g.items.length}`;
+    if (g.zone !== lastZ){ parts.push(`<div class="dr-h2 zone">${esc(g.zone)}</div>`); lastZ = g.zone; }
+    parts.push(`<details class="dr-sheet ${cls}" data-filter="${nBad ? 'bad' : ''} ${nSkip ? 'skip' : ''}" ${nBad ? 'open' : ''}>
+      <summary><span class="nm">${esc(g.name)}${g.code ? `<span class="code">${esc(g.code)}</span>` : ''}${g.sub ? `<small>${esc(g.sub)}</small>` : ''}${g.first_at ? `<span class="when">${ACAI.shortTime(g.first_at)}${g.last_at && g.last_at.slice(0,16) !== g.first_at.slice(0,16) ? '–' + ACAI.shortTime(g.last_at) + ' · ' + duration(g.first_at, g.last_at) : ''}</span>` : ''}</span>
+        <span class="cnt">${cnt}</span><span class="chev">${ACAI.icon('down', 18)}</span></summary>
+      ${g.items.map(x => {
+        const f = x.fault_id ? r.faults.find(y => y.id === x.fault_id) : null;
+        const mark = x.status === 'ok' ? '✓' : x.status === 'bad' ? '!' : '–';
+        const label = x.status === 'ok' ? 'норма' : x.status === 'bad' ? 'неисправность' : 'не проверено';
+        return `<div class="dr-li ${x.status}"><span class="st" title="${label}" aria-label="${label}">${mark}</span>
+          <span class="t">${esc(x.item)}${f ? `<small>${esc(f.severity_label)}${f.note ? ' · ' + esc(f.note) : ''}${f.resolved_at ? ' · устранено' : ''}</small>` : ''}</span>${x.at ? `<span class="tm">${ACAI.shortTime(x.at)}</span>` : ''}</div>`;
+      }).join('')}
+    </details>`);
+  }
+
+  $('detailBody').innerHTML = `
+    <div class="dr-stats">
+      <div class="dr-stat ok"><b>${ok}</b><span>в норме</span></div>
+      <div class="dr-stat ${bad ? 'bad' : ''}"><b>${bad}</b><span>неисправностей${bad && bad !== openF.length ? `, устр. ${bad - openF.length}` : ''}</span></div>
+      <div class="dr-stat ${skip ? 'skip' : ''}"><b>${skip}</b><span>не проверено</span></div>
+      <div class="dr-stat"><b style="font-size:16px">${r.started_at ? ACAI.shortTime(r.started_at) + '–' : ''}${ACAI.shortTime(r.finished_at)}</b><span>${dur ? 'обход ' + dur : 'сдан'}${shift ? ' · ' + shift : ''}</span></div>
+    </div>
+    ${bad ? `<div class="dr-h2">Неисправности</div>${r.faults.map(f => faultHTML(f)).join('')}` : ''}
+    ${r.note ? `<div class="dr-h2">Примечание</div><div class="dr-note">${esc(r.note)}</div>` : ''}
+    <div class="dr-h2">Весь лист</div>
+    <div class="dr-seg" id="sheetFilter" role="group" aria-label="Что показать">
+      <button class="dr-chip" data-sf="" aria-pressed="true">Все</button>
+      ${bad ? '<button class="dr-chip" data-sf="bad" aria-pressed="false">Неисправности</button>' : ''}
+      ${skip ? '<button class="dr-chip" data-sf="skip" aria-pressed="false">Не проверено</button>' : ''}
+      <button class="dr-chip" data-sf="open" aria-pressed="false">Раскрыть всё</button>
+    </div>
+    ${parts.join('')}
+    ${timelineHTML(r)}
+    <div class="dr-h2">Отчёт текстом</div>
+    <pre class="dr-report" id="rep-${r.id}">${esc(r.report)}</pre>
+    <div class="dr-actions"><button class="btn secondary" data-act="copy" data-id="${r.id}">Скопировать отчёт</button></div>`;
+}
+$('detailBody').addEventListener('click', async ev => {
+  const z = ev.target.closest('[data-zoom]'); if (z){ zoom(z.src); return; }
+  const sf = ev.target.closest('[data-sf]');
+  if (sf){
+    const v = sf.dataset.sf, sheets = [...document.querySelectorAll('#detailBody .dr-sheet')];
+    if (v === 'open'){
+      const openAll = sheets.some(d => !d.hidden && !d.open);
+      sheets.forEach(d => { if (!d.hidden) d.open = openAll; });
+      sf.textContent = openAll ? 'Свернуть всё' : 'Раскрыть всё';
+      return;
+    }
+    $('sheetFilter').querySelectorAll('[data-sf]').forEach(x => { if (x.dataset.sf !== 'open') x.setAttribute('aria-pressed', x === sf); });
+    sheets.forEach(d => { d.hidden = !!v && !d.dataset.filter.includes(v); if (v) d.open = !d.hidden; });
+    // заголовок участка прячем, если под ним не осталось станков
+    document.querySelectorAll('#detailBody .dr-h2.zone').forEach(h => {
+      let n = h.nextElementSibling, any = false;
+      while (n && n.classList.contains('dr-sheet')){ if (!n.hidden) any = true; n = n.nextElementSibling; }
+      h.hidden = !any;
+    });
+    return;
+  }
+  const id = +new URLSearchParams(location.search).get('round');
+  if (await repairClick(ev, async () => { delete ROUND_CACHE[id]; if (id) await openRound(id, false); })) return;
+  const b = ev.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'copy') copyReport(b.dataset.id);
+});
+$('detailNav').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-nav]'); if (!b || !b.dataset.nav) return;
+  const id = +b.dataset.nav;
+  history.replaceState({round:id}, '', '?round=' + id);
+  openRound(id, false);
+});
+// «← Журнал»: если пришли из журнала — шаг назад по истории (тогда и
+// кнопка телефона ведёт себя так же), если по ссылке — просто в журнал.
+$('backBtn').addEventListener('click', () => {
+  if (CAME_IN && history.state && history.state.round) history.back();
+  else setTab('log');
+});
+addEventListener('popstate', ev => {
+  if (ev.state && ev.state.round) openRound(ev.state.round, false);
+  else setTab(LAST_TAB && LAST_TAB !== 'detail' ? LAST_TAB : 'log', false);
+});
+function copyReport(id){
+  const pre = $('rep-' + id);
+  navigator.clipboard.writeText(pre.textContent).then(() => ACAI.toast('Отчёт скопирован', 'ok'), () => {
+    const rg = document.createRange(); rg.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg);
+    ACAI.toast('Текст выделен — скопируйте вручную', 'warn');
+  });
+}
+$('logList').addEventListener('click', ev => {
+  const z = ev.target.closest('[data-zoom]'); if (z){ zoom(z.src); return; }
+  const b = ev.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'openr'){ CAME_IN = true; openRound(+b.closest('.dr-item').dataset.r); }
+});
+$('logFilter').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-f]'); if (!b) return;
+  LOG_F = b.dataset.f; $('logFilter').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderLog();
+});
+
+// ── неисправности ─────────────────────────────────────────
+async function loadFaults(){
+  try {
+    const r = await ACAI.get('/api/duty-round/faults' + ($('showResolved').checked ? '?resolved=1' : ''));
+    OPEN_LIST = r.open || [];
+    OPEN = new Map(OPEN_LIST.map(f => [f.ref, f]));
+    $('faultCnt').hidden = !OPEN_LIST.length; $('faultCnt').textContent = OPEN_LIST.length;
+    return r;
+  } catch { return null; }
+}
+async function renderFaults(){
+  const r = await loadFaults(), box = $('faultList');
+  if (!r){ box.innerHTML = '<div class="empty">Список не загрузился: нет связи с сервером. Обновите страницу.</div>'; return; }
+  if (TAB === 'faults'){
+    ACAI.verdict('drVerdict', OPEN_LIST.length
+      ? {title:`Не устранено: ${OPEN_LIST.length}`, rows: OPEN_LIST.slice(0, 3).map(f => ({level: f.severity === 'repair' || f.severity === 'stop' ? 'critical' : 'warning',
+          what:`${f.equipment} — ${f.item}`, where:`${f.severity_label} · с ${dm(f.first_at)}${f.times > 1 ? ` · отмечено ${f.times} раза` : ''}`}))}
+      : {title:'Открытых поломок нет', sub:'Всё, что находили на обходах, отремонтировано.'});
+  }
+  let h = OPEN_LIST.length ? '' : '<div class="empty">Открытых неисправностей нет. Когда на обходе отметят неисправность, она будет здесь, пока её не устранят.</div>';
+  for (const f of OPEN_LIST){
+    h += faultHTML(f, {
+      photos: f.all_photo_ids,
+      meta: `${KIND_NAME[f.kind]} · нашёл ${esc(f.found_by||'—')} ${dmt(f.found_at)}${f.times > 1 ? ` · отмечено ${f.times} раза, впервые ${dm(f.first_at)}` : ''}`
+    });
+  }
+  if (r.resolved){
+    h += `<div class="dr-day">Устранённые · ${r.resolved.length}</div>` + (r.resolved.map(f => faultHTML(f, {meta:`${KIND_NAME[f.kind]} · нашёл ${esc(f.found_by||'—')} ${dmt(f.found_at)}`})).join('') || '<div class="empty">Пока нет.</div>');
+  }
+  box.innerHTML = h;
+}
+$('showResolved').addEventListener('change', renderFaults);
+$('faultList').addEventListener('click', async ev => {
+  const z = ev.target.closest('[data-zoom]'); if (z){ zoom(z.src); return; }
+  await repairClick(ev, renderFaults);
+});
+// ── ремонт по времени ─────────────────────────────────────
+// У поломки три отметки: нашли → начали → закончили. Руководство видит,
+// сколько чинили и сколько поломка ждала, пока за неё взялись.
+function fmtMin(m){
+  if (m == null || isNaN(m)) return '—';
+  m = Math.max(0, Math.round(m));
+  if (m < 60) return `${m} мин`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h < 24) return `${h} ч ${String(mm).padStart(2, '0')} мин`;
+  return `${Math.floor(h / 24)} д ${h % 24} ч`;
+}
+function plural(n, one, few, many){ const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b > 1 && b < 5 ? few : many; }
+const nRep = n => `${n} ${plural(n, 'ремонт', 'ремонта', 'ремонтов')}`;
+function since(stamp){ const d = ACAI.parseTime(stamp); return d ? (Date.now() - d.getTime()) / 60000 : null; }
+// таймеры «идёт 45 мин» обновляются сами, пока страница открыта
+setInterval(() => document.querySelectorAll('[data-since]').forEach(el => { el.textContent = fmtMin(since(el.dataset.since)); }), 30000);
+
+function repairHTML(f){
+  const canFix = T.can_resolve.includes(f.kind);
+  if (f.resolved_at){
+    if (f.repair_min == null) return `<div class="meta">Устранено ${dmt(f.resolved_at)} · ${esc(f.resolved_by||'')} · время ремонта не отмечали</div>`;
+    return `<div class="dr-rep done">
+      <span><b>Ремонт ${fmtMin(f.repair_min)}</b> · ${esc(f.repaired_by||f.resolved_by||'')} · ${ACAI.shortTime(f.repair_started_at)}–${ACAI.shortTime(f.resolved_at)}, ${dm(f.resolved_at)}</span>
+      ${f.wait_min != null ? `<span class="sub">ждали до начала ${fmtMin(f.wait_min)}${f.down_min != null ? ` · от находки до починки ${fmtMin(f.down_min)}` : ''}</span>` : ''}
+      ${f.repair_note ? `<span class="sub">Сделано: ${esc(f.repair_note)}</span>` : ''}
+    </div>`;
+  }
+  const rep = f.repair || (OPEN.get(f.ref) || {}).repair;
+  if (rep){
+    return `<div class="dr-rep on"><span class="dot"></span><span><b>В работе:</b> ${esc(rep.started_name||'')} с ${ACAI.shortTime(rep.started_at)} · идёт <b data-since="${esc(rep.started_at)}">${fmtMin(since(rep.started_at))}</b></span></div>
+      ${canFix ? `<div class="dr-repform">
+        <textarea class="input textarea" data-role="note" placeholder="Что сделали (необязательно)" style="min-height:56px"></textarea>
+        <div class="acts"><button class="btn ok sm" data-act="finish">Закончил ремонт</button></div>
+      </div>` : ''}`;
+  }
+  const first = f.first_at || f.found_at;
+  if (!canFix) return `<div class="meta">Ремонт не начат · ждёт <span data-since="${esc(first)}">${fmtMin(since(first))}</span></div>`;
+  const nowLocal = ACAI.localDateTime().slice(0, 16).replace(' ', 'T');
+  return `<div class="meta">Ремонт не начат · ждёт <span data-since="${esc(first)}">${fmtMin(since(first))}</span></div>
+    <div class="acts">
+      <button class="btn primary sm" data-act="start">Начал ремонт</button>
+      <button class="btn secondary sm" data-act="late">Уже починил</button>
+    </div>
+    <div class="dr-repform" hidden>
+      <div class="field"><label>Во сколько начали ремонт</label>
+        <input type="datetime-local" class="input" data-role="start" max="${nowLocal}" value="${nowLocal}"></div>
+      <textarea class="input textarea" data-role="note" placeholder="Что сделали (необязательно)" style="min-height:56px"></textarea>
+      <div class="acts"><button class="btn ok sm" data-act="finish">Закончил ремонт</button></div>
+    </div>`;
+}
+
+// Общий обработчик для «Поломок» и экрана обхода. Закрыть ремонт —
+// в два нажатия: случайный тап в цеху не должен закрыть поломку.
+async function repairClick(ev, after){
+  const b = ev.target.closest('[data-act="start"],[data-act="late"],[data-act="finish"]');
+  if (!b) return false;
+  const card = b.closest('.dr-f'), id = card.dataset.f;
+  if (b.dataset.act === 'late'){
+    const form = card.querySelector('.dr-repform'); form.hidden = !form.hidden;
+    if (!form.hidden) form.querySelector('[data-role=start]').focus();
+    return true;
+  }
+  if (b.dataset.act === 'start'){
+    b.disabled = true; b.textContent = 'Записываем…';
+    try {
+      const r = await ACAI.post(`/api/duty-round/faults/${id}/start`, {});
+      ACAI.toast(`Ремонт начат в ${ACAI.shortTime(r.repair.started_at)}`, 'ok');
+      await loadFaults(); await after();
+    } catch (err){
+      b.disabled = false; b.textContent = 'Начал ремонт';
+      ACAI.toast(String(err.message || 'Нет связи с сервером'), 'danger');
+      await loadFaults(); await after();
+    }
+    return true;
+  }
+  // finish
+  if (b.dataset.armed !== '1'){ b.dataset.armed = '1'; b.textContent = 'Подтвердить: закончил'; return true; }
+  const body = {note: card.querySelector('[data-role=note]')?.value || ''};
+  const start = card.querySelector('[data-role=start]');
+  if (start){
+    if (!start.value){ ACAI.toast('Укажите, во сколько начали ремонт', 'warn'); start.focus(); b.dataset.armed = ''; b.textContent = 'Закончил ремонт'; return true; }
+    body.started_at = start.value;
+  }
+  b.disabled = true; b.textContent = 'Сохраняем…';
+  try {
+    const r = await ACAI.post(`/api/duty-round/faults/${id}/resolve`, body);
+    ACAI.toast(`Ремонт закрыт: ${fmtMin(r.repair.repair_min)}`, 'ok');
+    ROUND_CACHE = {};
+    await loadFaults(); await after();
+  } catch (err){
+    b.disabled = false; b.dataset.armed = ''; b.textContent = 'Закончил ремонт';
+    ACAI.toast('Не сохранилось: ' + (err.message || 'нет связи'), 'danger');
+  }
+  return true;
+}
+
+// ── вкладка «Ремонты»: сколько уходит на ремонт за месяц ──
+const MONTHS = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+const MONTHS_IN = ['январе','феврале','марте','апреле','мае','июне','июле','августе','сентябре','октябре','ноябре','декабре'];
+function monthName(m, inCase){ const [y, mm] = m.split('-').map(Number); return `${(inCase ? MONTHS_IN : MONTHS)[mm-1]} ${y}`; }
+
+async function renderRepairs(){
+  const box = $('repBody');
+  if (!$('repMonth').value) $('repMonth').value = ACAI.localDate().slice(0, 7);
+  const month = $('repMonth').value;
+  let r;
+  try { r = await ACAI.get('/api/duty-round/repairs?month=' + encodeURIComponent(month)); }
+  catch { box.innerHTML = '<div class="empty">Отчёт не загрузился: нет связи с сервером. Обновите страницу.</div>'; return; }
+  if (TAB !== 'repairs') return;
+
+  const diff = r.prev_count ? r.total_min - r.prev_total_min : null;
+  const cmp = diff == null ? '' : diff === 0 ? ` Столько же, сколько в ${MONTHS_IN[+r.prev_month.slice(5)-1]}.`
+    : ` ${diff > 0 ? 'Больше' : 'Меньше'}, чем в ${MONTHS_IN[+r.prev_month.slice(5)-1]}, на ${fmtMin(Math.abs(diff))}.`;
+  const rows = r.in_progress.map(x => ({level:'warning', what:`В работе: ${x.equipment} — ${x.item}`,
+    where:`${x.started_name||''} с ${dmt(x.started_at)} · идёт ${fmtMin(since(x.started_at))}`}));
+  ACAI.verdict('drVerdict', r.count
+    ? {title:`В ${monthName(month, true)} на ремонт ушло ${fmtMin(r.total_min)}`, sub:`${nRep(r.count)}, в среднем ${fmtMin(r.avg_min)}. До начала ремонта поломка ждала в среднем ${fmtMin(r.avg_wait_min)}.${cmp}`, rows}
+    : {title:`В ${monthName(month, true)} ремонтов не закрывали`, sub:'Здесь появится время, когда электрик или слесарь отметит «Начал ремонт» и «Закончил ремонт» у поломки.', rows});
+  // плашка с rows не показывает sub — тогда итог дублируем строкой
+  if (rows.length && r.count) $('drVerdict').querySelector('.v-head')?.insertAdjacentHTML('afterend',
+    `<div class="v-sub" style="padding:0 16px 10px">${esc(`${nRep(r.count)}, в среднем ${fmtMin(r.avg_min)}, ждали до начала ${fmtMin(r.avg_wait_min)}.${cmp}`)}</div>`);
+
+  const maxEq = Math.max(1, ...r.by_equipment.map(g => g.minutes));
+  const bars = (list, max) => list.map(g => `<div class="dr-barrow">
+      <span class="nm">${esc(g.name)}</span>
+      <span class="track"><i style="width:${Math.max(2, g.minutes / max * 100)}%"></i></span>
+      <span class="v">${fmtMin(g.minutes)}<small>${g.count} рем.</small></span></div>`).join('');
+  const maxP = Math.max(1, ...r.by_person.map(g => g.minutes));
+
+  box.innerHTML = `
+    <div class="dr-stats">
+      <div class="dr-stat"><b>${r.count}</b><span>${plural(r.count, 'ремонт', 'ремонта', 'ремонтов')}</span></div>
+      <div class="dr-stat"><b style="font-size:18px">${r.count ? fmtMin(r.total_min) : '—'}</b><span>всего на ремонт</span></div>
+      <div class="dr-stat"><b style="font-size:18px">${fmtMin(r.avg_min)}</b><span>средний ремонт</span></div>
+      <div class="dr-stat ${r.avg_wait_min > 120 ? 'skip' : ''}"><b style="font-size:18px">${fmtMin(r.avg_wait_min)}</b><span>ждали до начала</span></div>
+    </div>
+    <div class="dr-split">${Object.entries(r.by_kind).map(([k, v]) => `<div class="dr-stat"><b style="font-size:16px">${v.count ? fmtMin(v.minutes) : '—'}</b><span>${k === 'el' ? 'Электрика' : 'Механика'} · ${v.count} рем.</span></div>`).join('')}</div>
+    ${r.late_count ? `<div class="dr-hint">Начало ремонта вписано вручную (забыли нажать «Начал»): ${r.late_count} из ${r.count}. Это время записано по памяти.</div>` : ''}
+    ${r.in_progress.length ? `<div class="dr-h2">Сейчас в работе · ${r.in_progress.length}</div>${r.in_progress.map(x => `<div class="dr-f repair">
+        <div class="what">${esc(x.equipment)} — ${esc(x.item)}</div>
+        <div class="dr-rep on"><span class="dot"></span><span>${esc(x.started_name||'')} с ${dmt(x.started_at)} · идёт <b data-since="${esc(x.started_at)}">${fmtMin(since(x.started_at))}</b></span></div></div>`).join('')}` : ''}
+    ${r.count ? `
+      <div class="dr-h2">По станкам — где больше всего времени</div><div class="dr-bars">${bars(r.by_equipment, maxEq)}</div>
+      <div class="dr-h2">Кто ремонтировал</div><div class="dr-bars">${bars(r.by_person, maxP)}</div>
+      <div class="dr-h2">Все ремонты за ${monthName(month)}</div>
+      ${r.repairs.map(x => `<div class="dr-f">
+        <div class="what">${esc(x.equipment)} — ${esc(x.item)}</div>
+        <div class="dr-rep done"><span><b>Ремонт ${fmtMin(x.repair_min)}</b> · ${esc(x.started_name||'')} · ${dm(x.started_at)} ${ACAI.shortTime(x.started_at)}–${ACAI.shortTime(x.finished_at)}</span>${x.start_entered_late ? '<span><i class="tag watch">начало вписано вручную</i></span>' : ''}
+          <span class="sub">нашли ${dmt(x.found_at)} · ждали ${fmtMin(x.wait_min)} · от находки до починки ${fmtMin(x.down_min)}</span>
+          ${x.note ? `<span class="sub">Сделано: ${esc(x.note)}</span>` : ''}</div></div>`).join('')}
+      <div class="dr-h2">Отчёт за месяц текстом</div>
+      <pre class="dr-report" id="rep-month">${esc(r.report)}</pre>
+      <div class="dr-actions"><button class="btn secondary" id="copyMonth">Скопировать отчёт</button></div>` : ''}`;
+  $('copyMonth')?.addEventListener('click', () => copyReport('month'));
+}
+$('repMonth').addEventListener('change', renderRepairs);
+
+// ── вкладки ───────────────────────────────────────────────
+function setTab(tab, clearUrl = true){
+  TAB = tab; LAST_TAB = tab;
+  if (clearUrl && location.search.includes('round=')) history.replaceState(null, '', location.pathname);
+  $('drTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === tab));
+  $('vRound').hidden = tab !== 'round'; $('vLog').hidden = tab !== 'log'; $('vFaults').hidden = tab !== 'faults';
+  $('vRepairs').hidden = tab !== 'repairs';
+  $('vDetail').hidden = true;
+  if (tab === 'round'){ renderList(); renderProgress(); $('drSub').textContent = T.templates[KIND].full_title; }
+  if (tab === 'log'){ $('drSub').textContent = 'Все сданные обходы, новые сверху'; renderLog(); }
+  if (tab === 'faults'){ $('drSub').textContent = 'Найдено на обходах и ещё не отремонтировано'; renderFaults(); }
+  if (tab === 'repairs'){ $('drSub').textContent = 'Сколько времени уходит на ремонт'; renderRepairs(); }
+}
+$('drTabs').addEventListener('click', ev => { const b = ev.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); });
+
+// меню раньше содержимого: ссылки в выводе зависят от него
+initLayout().then(async ctx => {
+  USER = ctx?.user || {};
+  // номер обхода из ссылки читаем сразу: открытие вкладки чистит адрес
+  const rid = +new URLSearchParams(location.search).get('round');
+  try { T = await ACAI.get('/api/duty-round/template'); }
+  catch { ACAI.verdict('drVerdict', {title:'Страница не загрузилась', sub:'Нет связи с сервером. Обновите страницу.'}); return; }
+  await loadFaults();
+  // Кто лист не заполняет (мастер, руководство), тому форма не нужна —
+  // сразу журнал и неисправности. Кнопка есть — значит, работает.
+  if (T.can_conduct.length){
+    KIND = T.can_conduct[0];
+    $('tabRound').hidden = false; $('kindSeg').hidden = T.can_conduct.length < 2;
+    loadDraft(); renderRound(); setTab('round');
+  } else {
+    setTab(OPEN_LIST.length ? 'faults' : 'log');
+  }
+  // пришли по ссылке на обход — сразу в него; «Назад» тогда ведёт в журнал
+  if (rid){ LAST_TAB = 'log'; history.replaceState({round:rid}, '', '?round=' + rid); openRound(rid, false); }
+});
+</script>
+</body>
+</html>

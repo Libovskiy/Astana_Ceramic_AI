@@ -7,7 +7,7 @@
 <title>Аналитика — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=63">
+<link rel="stylesheet" href="/static/acai.css?v=65">
 <style>
 .period-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .period-tab{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
@@ -158,9 +158,9 @@
            «Данные идут» без истории — обещание. Здесь видно, сколько
            раз сбор вставал и насколько: по этим же показаниям
            считаются простои и исправность. -->
-      <div class="card">
+      <div class="card" id="outages" style="scroll-margin-top:70px">
         <div class="card-head">
-          <h2>Перерывы в сборе</h2>
+          <h2>Перерывы сигнала с датчиков</h2>
           <span id="outageSummary" style="font-size:11px;color:var(--text-dim)">—</span>
         </div>
         <div class="card-body" id="outageList" style="padding:0"></div>
@@ -170,10 +170,10 @@
   </div>
 </div>
 
-<script src="/static/icons.js?v=6"></script>
+<script src="/static/icons.js?v=7"></script>
 <script src="/static/sensor-names.js?v=4"></script>
-<script src="/static/acai_layout.js?v=64"></script>
-<script src="/static/mobile_nav_v2.js?v=6"></script>
+<script src="/static/acai_layout.js?v=67"></script>
+<script src="/static/mobile_nav_v2.js?v=7"></script>
 <script src="/static/xls-report.js?v=3"></script>
 <script>
 let currentPeriod='today';

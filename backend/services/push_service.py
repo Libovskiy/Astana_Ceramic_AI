@@ -512,11 +512,11 @@ def _check_sensors():
     stale = minutes >= SENSOR_ALERT_MIN
     if stale and not _alerted.get("sensors"):
         _alerted["sensors"] = True
-        send_to_roles(SYSTEM_ALERT_ROLES, f"📡 Датчики не пишутся {minutes} мин",
+        send_to_roles(SYSTEM_ALERT_ROLES, f"📡 Сигнал с датчиков не активен {minutes} мин",
                       "Откройте вкладку WebHMI на сервере и войдите в панель.", url="/settings", tag="sensors")
     elif not stale and _alerted.get("sensors"):
         _alerted["sensors"] = False
-        send_to_roles(SYSTEM_ALERT_ROLES, "📡 Датчики снова пишутся", "Сбор показаний восстановлен.", url="/settings", tag="sensors")
+        send_to_roles(SYSTEM_ALERT_ROLES, "📡 Сигнал с датчиков снова активен", "Данные с датчиков снова идут.", url="/settings", tag="sensors")
 
 
 def _check_backup():

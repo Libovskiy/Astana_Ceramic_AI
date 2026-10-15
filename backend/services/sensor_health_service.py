@@ -258,7 +258,7 @@ def state(now: datetime = None) -> dict:
     if last_data is None:
         return {
             "state": "never", "ok": False,
-            "text": "Показаний с датчиков не было ни разу",
+            "text": "Сигнал не активен: показаний с датчиков не было ни разу",
             "since": None, "minutes": None, "threshold": threshold,
             "last_data_at": None,
             "collector_seen_at": collector_seen.isoformat() if collector_seen else None,
@@ -270,7 +270,8 @@ def state(now: datetime = None) -> dict:
     if data_age < threshold:
         return {
             "state": "ok", "ok": True,
-            "text": "Данные с датчиков идут",
+            "text": (f"Сигнал активен: данные с датчиков идут, последнее показание "
+                     f"в {last_data.strftime('%H:%M')}"),
             "since": None, "minutes": data_age, "threshold": threshold,
             "last_data_at": last_data.isoformat(timespec="seconds"),
             "collector_seen_at": collector_seen.isoformat() if collector_seen else None,
@@ -286,7 +287,7 @@ def state(now: datetime = None) -> dict:
 
     return {
         "state": kind, "ok": False,
-        "text": (f"Данные с датчиков не поступают с "
+        "text": (f"Сигнал не активен: данные с датчиков не поступают с "
                  f"{last_data.strftime('%H:%M')}: {where}{detail}"),
         "since": last_data.isoformat(timespec="seconds"),
         "minutes": data_age,
@@ -430,7 +431,7 @@ def _notify(current: dict, conf: dict, now: datetime, send=None) -> bool:
     hours = current["minutes"] // 60
     how_long = f"{hours} ч {current['minutes'] % 60} мин" if hours else f"{current['minutes']} мин"
 
-    title = "Данные с датчиков не поступают"
+    title = "Сигнал с датчиков не активен"
     body = (f"С {at} — {how_long}. "
             + ("Панель не отвечает" if current["state"] == "panel"
                else "Расширение не на связи")

@@ -282,6 +282,18 @@ def checklist_page(request: Request):
     return templates.TemplateResponse(request=request, name="checklist.html")
 
 
+# ── Обход дежурного электрика и слесаря ───────────────────
+@router.get("/duty-round")
+def duty_round_page(request: Request):
+    return templates.TemplateResponse(request=request, name="duty_round.html")
+
+
+# ── Цех в 3D: учебный макет для новичков ──────────────────
+@router.get("/plant-3d")
+def plant_3d_page(request: Request):
+    return templates.TemplateResponse(request=request, name="plant_3d.html")
+
+
 # ── График ТО ─────────────────────────────────────────────
 @router.get("/maintenance")
 def maintenance_page(request: Request):

@@ -1,0 +1,32 @@
+ЗАПУСК НА WINDOWS (проверено 14.10.2026)
+
+В архиве только код. Базу (factory.db) и .env возьмите свои, с рабочего
+сайта — тогда работают ваши обычные логины и пароли. Архив их не
+заменяет: внутри нет ни базы, ни .env.
+
+1. Python 3.13 с python.org.
+
+2. Окружение ставить по КОРОТКОМУ пути — иначе библиотека torch не
+   распакуется (ограничение Windows 260 символов):
+     py -m venv C:\acai-venv
+
+3. Библиотеки — БЕЗ uvloop (он только для Mac/Linux). В папке проекта:
+     findstr /V /B "uvloop==" requirements.txt > req_win.txt
+     C:\acai-venv\Scripts\python -m pip install -r req_win.txt
+   Ставится несколько минут.
+
+4. Запуск (в папке проекта):
+     C:\acai-venv\Scripts\python -m uvicorn backend.api.main:app --port 8000
+   Открыть http://localhost:8000
+
+Новое: «Обход дежурного» (/duty-round) и «Цех в 3D» (/plant-3d) —
+подробнее в ЧТО_НОВОГО.txt.
+
+Если начинаете с ПУСТОЙ базой (без factory.db): после первого запуска
+прогоните старые миграции, иначе часть страниц упадёт
+(нет колонок users.brigade, users.hidden):
+  for %f in (scripts\archive_migrations\migrate_*.py) do C:\acai-venv\Scripts\python %f
+  C:\acai-venv\Scripts\python -c "import sqlite3;c=sqlite3.connect('factory.db');c.execute('ALTER TABLE users ADD COLUMN hidden INTEGER DEFAULT 0');c.commit()"
+
+В .env не оставляйте пустых строк вида MAX_AI_STEPS= — сервер на них
+падает. Либо значение, либо строку убрать.

@@ -320,6 +320,13 @@ const NAV_ITEMS = [
   // до своего же отчёта. Права зеркалит PAGE_ROLES в backend/api/main.py.
   { icon: 'production', label: 'Производство',  href: '/production',   labelFor: {worker: 'Сменный отчёт'}, roles: ['admin','worker','director','chief_engineer','production_chief','shift_supervisor','technologist','analyst','chief_mechanic','chief_electrician'] },
   { icon: 'checklist', label: 'Обход смены',   href: '/checklist',    roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','chief_electrician','analyst'] },
+  // Бывшие бумажные чек-листы дежурного электрика и слесаря: каждый
+  // проходит свой лист, руководство и мастер видят журнал и то, что
+  // ещё не устранено. Права зеркалит PAGE_ROLES в backend/api/main.py.
+  { icon: 'duty', label: 'Обход дежурного', href: '/duty-round',  roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  // Учебный 3D-макет цеха: где стоят станки из чек-листов и где на
+  // станке каждый пункт проверки. Права — как у «Обхода дежурного».
+  { icon: 'cube', label: 'Цех в 3D', href: '/plant-3d',  roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
   { icon: 'maintenance', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Аналитика' },
   { icon: 'analytics', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },
@@ -355,19 +362,19 @@ const NAV_ITEMS = [
 // пункты. Что не перечислено — встаёт после, в исходном порядке.
 const NAV_ORDER_BY_ROLE = {
   worker:            ['/cases', '/production', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
-  mechanic:          ['/cases', '/mechanics', '/parts', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
-  electrician:       ['/cases', '/electrical', '/parts', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
+  mechanic:          ['/duty-round', '/cases', '/mechanics', '/parts', '/plant-3d', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
+  electrician:       ['/duty-round', '/cases', '/electrical', '/parts', '/plant-3d', '/chat', '/messenger', '/knowledge', '/regulations', '/help'],
   lab_technician:    ['/lab', '/regulations', '/knowledge', '/messenger'],
   technologist:      ['/technolog', '/lab', '/production', '/', '/regulations', '/knowledge', '/messenger'],
-  shift_supervisor:  ['/production', '/checklist', '/cases', '/chat', '/equipment', '/',
+  shift_supervisor:  ['/production', '/checklist', '/duty-round', '/cases', '/chat', '/equipment', '/',
                       '/events', '/messenger', '/knowledge', '/regulations', '/help', '/settings'],
   production_chief:  ['/production', '/', '/analytics', '/cases', '/checklist', '/maintenance',
                       '/equipment', '/reports', '/chat', '/events', '/messenger',
                       '/knowledge', '/regulations', '/help', '/settings'],
-  chief_mechanic:    ['/', '/cases', '/mechanics', '/equipment', '/maintenance', '/parts',
+  chief_mechanic:    ['/', '/cases', '/mechanics', '/duty-round', '/equipment', '/maintenance', '/parts',
                       '/checklist', '/analytics', '/production', '/chat', '/reports',
                       '/events', '/messenger', '/knowledge', '/regulations', '/help', '/audit', '/settings'],
-  chief_electrician: ['/', '/cases', '/electrical', '/equipment', '/maintenance', '/parts',
+  chief_electrician: ['/', '/cases', '/electrical', '/duty-round', '/equipment', '/maintenance', '/parts',
                       '/checklist', '/analytics', '/production', '/chat', '/reports',
                       '/events', '/messenger', '/knowledge', '/regulations', '/help', '/audit', '/settings'],
 };
@@ -599,10 +606,18 @@ async function renderFactoryState(role) {
   // строкой и целиком в подсказке: «расширение не на связи» и «панель
   // не отвечает» чинят разные люди.
   box.innerHTML = row(d.alarms, d.alarms.state === 'ok' ? 'ok' : 'alert')
-                + row(d.sensors, d.sensors.state === 'ok' ? 'pulse' : 'offline',
-                      d.sensors.hint || '')
+                + (() => {
+                     // Куда вести: история перерывов в «Аналитике», если
+                     // она открыта этой роли; иначе строка без ссылки.
+                     const cls = `st-row st-signal ${d.sensors.state === 'live' ? 'is-live' : 'is-off'}`;
+                     const tip = d.sensors.hint ? `title="${String(d.sensors.hint).replace(/"/g, '&quot;')}"` : '';
+                     const inner = `<i class="st-dot" aria-hidden="true"></i><span>${d.sensors.text}</span>`;
+                     return ACAI.canOpen('/analytics')
+                       ? `<a class="${cls} st-link" href="/analytics#outages" ${tip}>${inner}</a>`
+                       : `<div class="${cls}" ${tip}>${inner}</div>`;
+                   })()
                 + (d.sensors.why
-                    ? `<div class="st-row st-warn" style="padding-left:26px;font-size:11px;opacity:.85">${d.sensors.why}</div>`
+                    ? `<div class="st-row st-signal is-off" style="padding-left:20px;font-size:11px;opacity:.85">${d.sensors.why}</div>`
                     : '')
                 + row(d.people, 'users', d.people_note || '');
 

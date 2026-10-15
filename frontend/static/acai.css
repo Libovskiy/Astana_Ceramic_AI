@@ -164,6 +164,28 @@ body.no-sidebar .main-content { margin-left: 0; }
 .st-row.st-none   { color: var(--text-dim); }
 .st-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Сигнал с датчиков: горящая точка вместо значка (08.10.2026).
+   Зелёная мерцает — данные идут, красная — сигнала нет. */
+.st-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  margin: 0 3px 0 2px;
+}
+.st-signal.is-live .st-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34,197,94,.25), 0 0 8px rgba(34,197,94,.9);
+  animation: st-glow 1.8s ease-in-out infinite;
+}
+.st-signal.is-off .st-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239,68,68,.25), 0 0 8px rgba(239,68,68,.85);
+}
+.st-signal.is-live { color: var(--text-dim); }
+.st-link { text-decoration: none; border-radius: 6px; }
+.st-link:hover span { text-decoration: underline; }
+.st-signal.is-off  { color: var(--danger); font-weight: 600; }
+@keyframes st-glow { 50% { box-shadow: 0 0 0 4px rgba(34,197,94,.12), 0 0 3px rgba(34,197,94,.5); } }
+@media (prefers-reduced-motion: reduce) { .st-signal.is-live .st-dot { animation: none; } }
+
 .sidebar-section {
   padding: 8px 12px 4px;
   font-size: 10px; font-weight: 600; color: var(--text-dim);
