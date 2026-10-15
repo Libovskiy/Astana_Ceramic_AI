@@ -39,6 +39,8 @@ var SHORT_LABELS = {
   '/electrical': 'Электрика',
   '/production': 'Выпуск',
   '/checklist': 'Обход',
+  '/duty-round': 'Обход',
+  '/plant-3d': 'Цех 3D',
   '/maintenance': 'График ТО',
   '/analytics': 'Аналитика',
   '/cases': 'Обращения',
@@ -64,8 +66,8 @@ var SHORT_BY_ROLE = {
 
 var BY_ROLE = {
   worker:            ['/production', '/cases', '/chat', '/knowledge'],
-  mechanic:          ['/cases', '/mechanics', '/parts', '/chat'],
-  electrician:       ['/cases', '/electrical', '/parts', '/chat'],
+  mechanic:          ['/duty-round', '/cases', '/mechanics', '/parts'],
+  electrician:       ['/duty-round', '/cases', '/electrical', '/parts'],
   shift_supervisor:  ['/production', '/checklist', '/cases', '/chat'],
   chief_mechanic:    ['/cases', '/mechanics', '/equipment', '/maintenance'],
   chief_electrician: ['/cases', '/electrical', '/equipment', '/maintenance'],

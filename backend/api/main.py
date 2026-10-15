@@ -146,6 +146,8 @@ app.include_router(voice_router)
 
 from backend.api.checklist_routes import router as checklist_router
 app.include_router(checklist_router)
+from backend.api.duty_round_routes import router as duty_round_router
+app.include_router(duty_round_router)
 
 from backend.api.task_assign_routes import router as task_assign_router
 app.include_router(task_assign_router)
@@ -281,6 +283,19 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     "/checklist": ("director", "chief_engineer", "production_chief",
                    "shift_supervisor", "chief_mechanic", "chief_electrician",
                        "analyst"),
+    # Обход дежурного: электрик и слесарь проходят каждый свой лист
+    # (бывшие бумажные «чек-листы дежурного»), руководство и мастер
+    # смотрят журнал и открытые неисправности. Совпадает с
+    # duty_round_service.VIEW_ROLES — сверяет tests/test_duty_round.py.
+    "/duty-round": ("director", "chief_engineer", "production_chief",
+                    "shift_supervisor", "chief_mechanic", "mechanic",
+                    "chief_electrician", "electrician", "analyst"),
+    # Цех в 3D — учебный макет к тому же обходу: где стоят станки из
+    # чек-листов и где на станке каждый пункт. Те же люди, что у
+    # «Обхода дежурного»: листы страница берёт из его же ручки.
+    "/plant-3d": ("director", "chief_engineer", "production_chief",
+                  "shift_supervisor", "chief_mechanic", "mechanic",
+                  "chief_electrician", "electrician", "analyst"),
     "/maintenance": ("director", "chief_engineer", "production_chief",
                      "chief_mechanic", "chief_electrician",
                          "analyst"),

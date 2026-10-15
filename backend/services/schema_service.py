@@ -37,6 +37,7 @@ def ensure_schema() -> None:
     from backend.services.availability_service import init_availability
     from backend.services.production_import_service import init_production_import
     from backend.services.downtime_cost_service import init_downtime_cost
+    from backend.services.duty_round_service import init_duty_rounds
 
     steps = (
         init_equipment, init_cases_tables, init_auth_tables, init_knowledge_base,
@@ -45,7 +46,7 @@ def ensure_schema() -> None:
         init_plc_error_table, init_protection_tables, init_shift_report_tables,
         init_team_chat, init_state_events, init_usage, init_push, init_observation,
         init_part_usage, init_availability, init_production_import,
-        init_downtime_cost,
+        init_downtime_cost, init_duty_rounds,
     )
 
     for step in steps:

@@ -819,7 +819,7 @@ def _sensor_notifications(user):
         "type": "sensors_stale",
         "severity": "critical" if minutes >= 60 else "warning",
         "icon": "pulse",
-        "title": f"Показания датчиков не пишутся {when}",
+        "title": f"Сигнал с датчиков не активен {when}",
         "subtitle": "Откройте вкладку WebHMI на сервере и войдите в панель",
         "url": "/settings",
     }]

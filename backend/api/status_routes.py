@@ -113,22 +113,33 @@ def header_status(user: dict = Depends(get_current_user)):
 
     health = sensor_health.state()
 
+    # Слова «Сигнал: активен / не активен» и точка вместо значка — по
+    # просьбе владельца (08.10.2026): зелёная горит — данные идут,
+    # красная — нет. Причину молчания по-прежнему пишем второй строкой.
     if health["state"] == "never":
-        sensors = {"state": "none", "text": "Датчики: данных нет"}
+        sensors = {"state": "off", "text": "Сигнал: не активен",
+                   "why": "данных ещё не было", "hint": health.get("text") or ""}
     elif health["ok"]:
-        sensors = {"state": "ok", "text": "Датчики: идут"}
+        sensors = {"state": "live", "text": "Сигнал: активен", "hint": health["text"]}
     else:
         since = (health.get("since") or "")[11:16]
         where = ("панель не отвечает" if health["state"] == "panel"
                  else "расширение не на связи")
         sensors = {
-            "state": "warn",
-            "text": f"Датчики молчат с {since}" if since else "Датчики молчат",
+            "state": "off",
+            "text": f"Сигнал: не активен с {since}" if since else "Сигнал: не активен",
             "why": where,
             "hint": health["text"],
         }
 
     sensors["kind"] = health["state"]
+    # Откуда сигнал: панель WebHMI → расширение в Chrome на заводском
+    # компьютере → POST /api/sensors/live → sensor_readings. «Активен» =
+    # последнее показание моложе порога тишины (настройка, по умолчанию
+    # 10 мин) — тот же порог, что у перерывов и уведомлений.
+    sensors["hint"] = (sensors.get("hint") or "") + (
+        f". Сигнал: панель WebHMI → расширение в Chrome → сервер. "
+        f"Активен, если последнее показание моложе {health.get('threshold')} мин.")
 
     if broken or open_cases:
         parts = []

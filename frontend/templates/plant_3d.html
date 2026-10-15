@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Цех в 3D — ACAI</title>
+<script src="/static/theme.js?v=2"></script>
+<link rel="stylesheet" href="/static/fonts.css?v=1">
+<link rel="stylesheet" href="/static/acai.css?v=65">
+<style>
+/* «Цех в 3D». Цвета — из темы сайта (acai.css), своё только для
+   подсветки узла и маршрутов электрика/слесаря. */
+.plant{--fg:var(--text);--muted:var(--text-dim);--line:var(--border);--on-accent:#fff;--hl:#e8590c;--el:#b7791f;--sl:#2f6fb5;
+  position:relative;width:100%;height:640px;border-radius:14px;overflow:hidden;background:var(--bg);border:1px solid var(--border);color:var(--text);}
+.plant button{font:inherit;color:inherit;cursor:pointer;}
+.plant :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.page.plant-page{padding:10px 12px;}
+#scene{position:absolute;inset:0;display:block;touch-action:none;}
+.labels{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;}
+.lbl{position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;border:0;background:var(--surface);color:var(--fg);border-radius:8px;
+  padding:4px 8px 4px 6px;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgb(0 0 0 / .2);display:flex;align-items:center;gap:6px;}
+.lbl::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--surface);border-bottom:0;}
+.lbl .n{min-width:20px;height:20px;border-radius:10px;display:none;place-items:center;font-size:11px;padding:0 5px;font-variant-numeric:tabular-nums;}
+.route-el .lbl.on-route .n{display:grid;background:var(--el);color:#14110a;}
+.route-sl .lbl.on-route .n{display:grid;background:var(--sl);color:#0a1220;}
+.lbl.sel{background:var(--accent);color:var(--on-accent);}
+.lbl.sel::after{border-top-color:var(--accent);}
+.route-el .lbl:not(.on-route), .route-sl .lbl:not(.on-route){opacity:.45;}
+.plbl{position:absolute;left:0;top:0;pointer-events:auto;border:1px solid rgb(255 255 255 / .25);background:rgb(12 20 32 / .82);color:#fff;border-radius:6px;padding:2px 7px;
+  font-size:11.5px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:5px;}
+.plbl::before{content:"";width:6px;height:6px;border-radius:50%;background:#7fb2ff;}
+.plbl.hot{background:var(--hl);border-color:var(--hl);z-index:4;}
+.plbl.hot::before{background:currentColor;}
+.zlbl{position:absolute;left:0;top:0;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:rgb(10 18 30 / .6);
+  padding:3px 8px;border-radius:6px;pointer-events:none;white-space:nowrap;}
+.top{z-index:10;position:absolute;left:12px;right:12px;top:12px;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;pointer-events:none;}
+.seg{pointer-events:auto;display:flex;gap:3px;background:var(--surface);border-radius:12px;padding:4px;box-shadow:var(--shadow);}
+.seg button{border:0;background:transparent;border-radius:8px;padding:7px 11px;font-weight:600;font-size:13px;color:var(--muted);}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);}
+.seg button[data-route="el"][aria-pressed="true"]{background:var(--el);color:#14110a;}
+.seg button[data-route="sl"][aria-pressed="true"]{background:var(--sl);color:#0a1220;}
+.views{pointer-events:auto;display:flex;gap:6px;}
+.iconbtn{border:0;background:var(--surface);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);font-size:13px;font-weight:600;}
+.panel{z-index:10;position:absolute;top:12px;right:12px;bottom:12px;width:min(390px,42vw);background:var(--surface);
+  border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;}
+.panel-h{padding:14px 16px 10px;border-bottom:1px solid var(--line);}
+.panel-b{padding:12px 16px 16px;overflow-y:auto;flex:1;min-height:0;}
+.crumb{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.panel h2{margin:4px 0 0;font-size:20px;font-weight:700;line-height:1.2;text-wrap:balance;}
+.panel h2 .code{font-family:var(--mono);font-size:14px;color:var(--accent);margin-left:6px;font-weight:600;}
+.panel h3{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;display:flex;align-items:center;gap:6px;}
+.panel p{margin:0;}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;}
+.checks{display:grid;gap:4px;}
+.ck{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;font-size:13.5px;padding:7px 9px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;}
+.ck .mk{color:var(--ok);font-weight:700;}
+.ck .go{margin-left:auto;font-size:11.5px;color:var(--accent);font-weight:600;white-space:nowrap;padding-left:6px;}
+.ck[aria-pressed="true"]{border-color:var(--hl);background:color-mix(in srgb,var(--hl) 12%,var(--surface));}
+.ck[aria-pressed="true"] .go{color:var(--hl);}
+.ck:disabled{cursor:default;color:var(--fg);}
+.parts{display:flex;flex-wrap:wrap;gap:6px;}
+.pchip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 10px;font-size:12.5px;font-weight:500;}
+.pchip[aria-pressed="true"]{border-color:var(--hl);background:var(--hl);color:#fff;}
+.pinfo{margin-top:8px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--hl) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--hl) 40%,var(--line));font-size:13.5px;}
+.pinfo b{display:block;margin-bottom:2px;}
+.none{color:var(--muted);font-size:13px;}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13px;margin-top:10px;}
+.facts dt{color:var(--muted);} .facts dd{margin:0;}
+.step{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.step .of{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:1;text-align:center;}
+.btn{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:9px 12px;font-weight:600;font-size:13px;}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+.btn:disabled{opacity:.4;cursor:default;}
+.list .zone{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;display:flex;align-items:center;gap:6px;}
+.list button{display:flex;width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:7px 8px;gap:8px;align-items:center;font-size:13.5px;}
+.list button:hover{background:var(--surface-2);}
+.list button .tags{margin-left:auto;display:flex;gap:4px;}
+.tag{font-size:10.5px;font-weight:700;border-radius:5px;padding:1px 5px;}
+.tag.el{background:color-mix(in srgb,var(--el) 22%,transparent);color:var(--el);}
+.tag.sl{background:color-mix(in srgb,var(--sl) 22%,transparent);color:var(--sl);}
+.intro{font-size:13.5px;color:var(--muted);}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px;}
+.legend span{display:inline-flex;align-items:center;gap:5px;}
+.hint{position:absolute;left:12px;bottom:12px;background:rgb(10 18 30 / .6);color:#fff;font-size:12px;border-radius:8px;padding:6px 10px;pointer-events:none;z-index:2;}
+.close{float:right;border:0;background:var(--surface-2);border-radius:8px;width:30px;height:30px;font-size:16px;line-height:1;}
+.fail{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);z-index:20;}
+.loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-weight:600;z-index:0;}
+@media (max-width:768px){
+  .page.plant-page{padding:6px;}
+  .panel{top:auto;left:8px;right:8px;width:auto;bottom:8px;max-height:46%;}
+  .panel.min{max-height:66px;}
+  .panel.min .panel-b{display:none;}
+  .hint{display:none;}
+  .top{left:8px;right:8px;top:8px;}
+  .seg button{padding:6px 8px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Цех в 3D</div>
+        <div class="topbar-sub">Где что стоит и что на станке проверять</div>
+      </div>
+      <div class="topbar-right"><span class="topbar-clock" id="topbarClock"></span></div>
+    </header>
+    <div class="page plant-page">
+      <!-- Учебный макет для новичков: станки из чек-листов дежурных,
+           узлы станков и маршрут обхода. Расположение сушилки, печи,
+           упаковки, компрессорной и склада угля — примерное, по логике
+           производства, а не по плану цеха. -->
+      <div class="plant" id="plant">
+        <div class="loading" id="loading">Строю цех…</div>
+        <canvas id="scene" aria-label="3D-макет цеха"></canvas>
+        <div class="labels" id="labels"></div>
+        <div class="top">
+          <div class="seg" role="group" aria-label="Маршрут обхода">
+            <button data-route="" aria-pressed="true">Весь цех</button>
+            <button data-route="el" aria-pressed="false">Обход электрика</button>
+            <button data-route="sl" aria-pressed="false">Обход слесаря</button>
+          </div>
+          <div class="views">
+            <button class="iconbtn" id="viewAll">⤢ Весь цех</button>
+            <button class="iconbtn" id="motion">❚❚ Пауза</button>
+          </div>
+        </div>
+        <aside class="panel" id="panel" aria-live="polite">
+          <div class="panel-h" id="panelHead"></div>
+          <div class="panel-b" id="panelBody"></div>
+        </aside>
+        <div class="hint">Крутить — зажать и тянуть · Приблизить — колесо или два пальца · Нажмите на станок, потом на его узел</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/icons.js?v=7"></script>
+<script src="/static/acai_layout.js?v=67"></script>
+<script src="/static/mobile_nav_v2.js?v=7"></script>
+<!-- Three.js лежит у нас: 3D открывается и без интернета, как весь сайт -->
+<script src="/static/vendor/three-0.128.0.min.js"></script>
+<script src="/static/vendor/three-0.128.0-OrbitControls.js"></script>
+<script>
+
+// ═══ Чек-листы дежурного электрика и слесаря ═══
+// Не копия: приходят с сервера из тех же листов, что у «Обхода
+// дежурного» (duty_round_service.TEMPLATES). Поменяли лист — 3D
+// показывает новое, разъехаться им не из чего.
+let EL = {}, SL = {}, ROUTE = {el:[], sl:[]};
+function eqTitleOf(g){ return g.n + (g.c ? " " + g.c : "") + (g.s ? ` (${g.s})` : ""); }
+function loadLists(T){
+  for (const [kind, store] of [["el", EL], ["sl", SL]]){
+    const tpl = T.templates[kind]; if (!tpl) continue;
+    for (const g of tpl.groups){ store[eqTitleOf(g)] = g.it.slice(); ROUTE[kind].push(eqTitleOf(g)); }
+  }
+}
+
+// ═══ Узлы станков: что это, словами для новичка ═══
+const PART = {
+  motor:{n:"Двигатель", t:"Электродвигатель — крутит станок. Синий рёбристый цилиндр, сзади кожух вентилятора. Проверяют нагрев (через перчатку или пирометром), гул и вибрацию."},
+  gearbox:{n:"Редуктор", t:"Коробка с шестернями: снижает обороты двигателя и даёт усилие на вал. Проверяют шум, нагрев, течь масла."},
+  belts:{n:"Ремни", t:"Клиноремённая передача от двигателя под жёлтым кожухом. Натяжение и износ ремней смотрят только на остановленном станке, кожух на ходу не снимать."},
+  bearings:{n:"Подшипники", t:"Корпуса подшипников на концах валов. Проверяют нагрев, посторонний шум, смазку."},
+  cabinet:{n:"Шкаф управления", t:"Серый шкаф: автоматы, частотники, кнопки. Дверь закрыта, нет запаха гари, горят нужные лампы."},
+  limits:{n:"Концевики", t:"Концевые выключатели у конвейера — красные коробочки с рычагом. Останавливают ленту при сходе или аварии. Рычаг должен ходить свободно."},
+  sensor:{n:"Датчик", t:"Датчик уровня или наличия материала: сообщает в систему, есть ли масса."},
+  beater:{n:"Бильный вал", t:"Вал с билами над лентой питателя — разбивает комья, чтобы материал шёл ровно."},
+  rollers:{n:"Вальцы", t:"Валки, между которыми раздавливается и перетирается масса. Смотрят износ поверхности и зазор."},
+  knives:{n:"Ножи", t:"Ножи на малом валке дезинтегратора — режут массу. Смотрят износ и крепление."},
+  scraper:{n:"Скребок", t:"Скребок счищает налипшую массу с валка или ленты."},
+  blades:{n:"Лопатки", t:"Лопатки на валах смесителя — перемешивают массу. Смотрят износ и крепление."},
+  belt:{n:"Лента", t:"Лента конвейера (у питателя — из стальных пластин). Смотрят порезы, сход, натяжение."},
+  drums:{n:"Барабаны", t:"Приводной и натяжной барабаны на концах конвейера. Смотрят налипание и подшипники."},
+  hopper:{n:"Бункер-воронка", t:"Приёмная воронка: сюда сыплется материал."},
+  water:{n:"Вода", t:"Синяя труба подачи воды с манометром и расходомером. Смотрят давление и расход."},
+  air:{n:"Сжатый воздух", t:"Жёлтая труба сжатого воздуха с манометром. Смотрят давление."},
+  lube:{n:"Центральная смазка", t:"Станция смазки: бачок с насосом и трубки к подшипникам. Смотрят уровень смазки и работу насоса."},
+  vacuum:{n:"Вакуум", t:"Вакуумная камера и насос: убирают воздух из глины, чтобы брус был плотным."},
+  auger:{n:"Шнек пресса", t:"Шнек в цилиндре пресса — давит массу к фильере."},
+  die:{n:"Фильера", t:"Формующая головка: через неё выходит брус глины нужного сечения."},
+  column:{n:"Брус глины", t:"Брус после пресса. Его осматривают — трещины, рваные края."},
+  cutter:{n:"Резчик", t:"Рамка со струнами режет брус на кирпичи."},
+  pusher:{n:"Толкатели", t:"Цилиндры, которые двигают кирпич или вагонетки."},
+  robot:{n:"Робот", t:"Робот-манипулятор: ставит сырец на вагонетки или снимает готовый кирпич."},
+  brake:{n:"Тормоз", t:"Тормоз удерживает состав вагонеток, чтобы они не накатывались."},
+  rails:{n:"Рельсы", t:"Рельсы для вагонеток с кирпичом."},
+  compressor:{n:"Компрессоры", t:"Винтовые компрессоры дают сжатый воздух цеху. На панели — давление, температура, ошибки."},
+  receiver:{n:"Ресивер", t:"Бак сжатого воздуха."},
+  drain:{n:"Слив конденсата", t:"Кран внизу ресивера — сюда сливают воду (конденсат)."},
+  thermo:{n:"Температура", t:"Датчики и табло температуры."},
+  fans:{n:"Вентиляторы", t:"Вентиляторы гонят горячий воздух. Смотрят шум, вибрацию, ремни."},
+  servo:{n:"Сервоприводы", t:"Синие сервоприводы открывают и закрывают заслонки по зонам."},
+  burners:{n:"Горелки", t:"Горелки сверху печи — подают топливо в зону обжига."},
+  hoses:{n:"Шланги", t:"Шланги подачи топлива и воздуха к горелкам. Смотрят трещины и подтёки."},
+  lights:{n:"Освещение", t:"Светильники над участком."},
+  chains:{n:"Цепные конвейеры", t:"Цепи везут пакеты кирпича. Смотрят натяжение и смазку."},
+  guides:{n:"Направляющие", t:"Жёлтые направляющие ровняют пакеты на конвейере."},
+  products:{n:"Готовая продукция", t:"Пакеты обожжённого кирпича (ГП). Смотрят сколы, трещины, обвязку."},
+  wrapper:{n:"Обвязка и плёнка", t:"Станция, которая обвязывает пакет и затягивает плёнкой."},
+  screw:{n:"Шнек угля", t:"Шнек подаёт уголь к печи."},
+  generator:{n:"Генератор", t:"Привод системы подачи топлива."},
+  feeder:{n:"Питатель PL 024", t:"Питатель под бункерами — выдаёт массу на ленту к вальцам."},
+  left:{n:"Левый запасник", t:"Левый отсек склада угля."}, right:{n:"Правый запасник", t:"Правый отсек склада угля."},
+  hydraulics:{n:"Гидравлика", t:"Гидроцилиндры держат зазор между валками."},
+};
+// пункт чек-листа → где это на станке
+const RULES = [
+  [/двигател/i, ["motor"]], [/подшипник/i, ["bearings"]], [/ремн/i, ["belts"]], [/редуктор/i, ["gearbox"]],
+  [/вибрац|шум/i, ["motor","bearings","fans"]], [/концев/i, ["limits"]], [/шкаф/i, ["cabinet"]],
+  [/датчик/i, ["sensor"]], [/бильн/i, ["beater"]], [/лент/i, ["belt"]], [/скреб/i, ["scraper"]],
+  [/вальц|валк/i, ["rollers"]], [/нож/i, ["knives"]], [/лопат/i, ["blades"]], [/барабан/i, ["drums"]],
+  [/^конвейер$|^конвейера$|конвейеров/i, ["belt","drums","limits"]],
+  [/вод/i, ["water"]], [/воздух/i, ["air"]], [/смазк/i, ["lube"]], [/формовк/i, ["column","die"]],
+  [/сервопривод/i, ["servo"]], [/вентилятор/i, ["fans"]], [/температур/i, ["thermo"]],
+  [/освещ|включение/i, ["lights"]], [/шланг/i, ["hoses"]], [/горелк/i, ["burners"]],
+  [/направляющ/i, ["guides"]], [/цепн/i, ["chains"]], [/робот/i, ["robot"]], [/толкател/i, ["pusher"]],
+  [/конденсат/i, ["drain","receiver"]], [/диагностик|^визуальный осмотр$|компрессор/i, ["compressor"]],
+  [/генератор/i, ["generator"]], [/шнек/i, ["screw"]], [/правый/i, ["right"]], [/левый/i, ["left"]],
+  [/ГП|зоны упаковки/, ["products","chains"]], [/PL 024/, ["feeder"]],
+];
+function partsFor(item, u){
+  const out = new Set();
+  for (const [re, kinds] of RULES) if (re.test(item)) kinds.forEach(k => { if (u.parts[k] && u.parts[k].length) out.add(k); });
+  return [...out];
+}
+
+// ═══ Участки и станки ═══
+const ZONES = [
+  {name:"Массоподготовка", x0:-66, x1:-9, z0:-17, z1:15, color:0xb08850},
+  {name:"Прессование и формовка", x0:-9, x1:34, z0:-14, z1:7, color:0x5a7fb0},
+  {name:"Сушка и обжиг", x0:34, x1:88, z0:3, z1:31, color:0xb06048},
+  {name:"Упаковка", x0:88, x1:104, z0:8, z1:34, color:0x4f9a6a},
+  {name:"Компрессорная", x0:2, x1:18, z0:-29, z1:-16, color:0x6c70a8},
+  {name:"Склад угля", x0:62, x1:88, z0:33, z1:47, color:0x505050},
+];
+const UNITS = [
+  {id:"clayhop", name:"Глина бункер", zone:"Массоподготовка", pos:[-56,0,-8], top:5.4, what:"Приёмный бункер над питателем: сюда погрузчик ссыпает глину. Внутри бильный вал разбивает комья, чтобы глина ровно ложилась на ленту.", where:"Начало линии, левый ряд. Это верх питателя глины."},
+  {id:"sandhop", name:"Песок бункер", zone:"Массоподготовка", pos:[-56,0,6], top:5.4, what:"Такой же приёмный бункер для песка, с бильным валом над лентой.", where:"Рядом с бункером глины."},
+  {id:"feedclay", name:"Питатель СМК 214 (глина)", code:"СМК 214", zone:"Массоподготовка", pos:[-56,0,-8], top:2.6, model:"feeder", mat:"clay",
+   what:"Ящичный пластинчатый питатель: длинный короб, по дну идёт лента из стальных пластин. Ровно подаёт глину на конвейер — первый компонент массы.",
+   where:"Под бункером глины. Привод сбоку: двигатель → ремни → редуктор.", facts:{"Лента":"стальные пластины 6 мм","Привод":"двигатель, ремни, редуктор"}},
+  {id:"feedsand", name:"Питатель СМК 214 (песок)", code:"СМК 214", zone:"Массоподготовка", pos:[-56,0,6], top:2.6, model:"feeder", mat:"sand",
+   what:"Такой же питатель, подаёт песок вторым компонентом. Сколько песка идёт в массу — задаёт скорость привода.", where:"Рядом с питателем глины. От него идёт свой конвейер с концевиками."},
+  {id:"dte", name:"Дробилка DTE 117", code:"DTE 117", zone:"Массоподготовка", pos:[-45,0,-1], top:3.8, model:"crusher",
+   what:"Первая дробилка: зубчатые валки раскалывают крупные и мёрзлые куски глины (до 500 мм на входе).", where:"Сразу после питателей — туда сходятся оба конвейера."},
+  {id:"pl601", name:"Дезинтегратор PL 601", code:"PL 601", zone:"Массоподготовка", pos:[-37,0,-1], top:4.4, model:"disint",
+   what:"Дезинтегратор: большой гладкий валок и малый валок с ножами крутятся навстречу и режут массу мельче.", where:"После дробилки. К нему подходят конвейеры №1 и №2."},
+  {id:"smk102", name:"Смеситель СМК 102", code:"СМК 102", zone:"Массоподготовка", pos:[-29,0,-1], top:4.2, model:"rollers",
+   what:"Вальцы тонкого помола: два гладких валка около 1 м, зазор до 1 мм, крутятся с разной скоростью — раздавливают и перетирают массу.", where:"Третий станок по линии.", facts:{"Валки":"Ø 1000 мм","Зазор":"до 1 мм"}},
+  {id:"usm40", name:"УСМ 40", code:"УСМ 40", zone:"Массоподготовка", pos:[-21,0,-1], top:4.2, model:"rollers", cab:true,
+   what:"Ещё одни вальцы тонкого помола, домалывают массу. Зазор 1–1,5 мм. Свой шкаф управления.", where:"После СМК 102."},
+  {id:"smk126", name:"СМК 126", code:"СМК 126", zone:"Массоподготовка", pos:[-13,0,-1], top:3.2, model:"mixer",
+   what:"Двухвальный лопастной смеситель: корыто, в нём два вала с лопатками. Перемешивает и увлажняет массу перед бункерами.", where:"Последний станок массоподготовки.", facts:{"Мощность":"до 37 кВт","Лопасти":"Ø 750 мм"}},
+  {id:"light", name:"Освещение массоподготовки", zone:"Массоподготовка", pos:[-36,0,-15], top:3.4, model:"lightpanel",
+   what:"Щит освещения участка и светильники над линией. Электрик проверяет, что свет включается.", where:"Щит — на стене участка, светильники — над линией."},
+  {id:"bunker", name:"Бункер", zone:"Прессование и формовка", pos:[-4,0,-1], top:10.2, model:"bunkers",
+   what:"Два накопительных бункера готовой массы. Наверху датчики уровня, внизу питатель PL 024 выдаёт массу на ленту.", where:"Между массоподготовкой и прессом — высокие, видно издалека.", facts:{"Датчики":"заполнение №1 и №2","Питатель":"PL 024"}},
+  {id:"optima", name:"OPTIMA 800H", code:"Verdés", zone:"Прессование и формовка", pos:[5,0,-1], top:4.4, model:"optima",
+   what:"Вальцы Verdés OPTIMA: тяжёлая рама, валки Ø 1000 мм, зазор держит гидравлика с точностью до сотых. Последний помол перед прессом.", where:"После бункеров, перед прессом.", facts:{"Производитель":"Verdés, Испания","Ширина валков":"800 мм"}},
+  {id:"conv", name:"Конвейера", zone:"Прессование и формовка", pos:[10.3,0,-1], top:2.4,
+   what:"Ленточные конвейеры возят массу между всеми станками. На концах — барабаны, скребки, концевики, у приводов — двигатели.", where:"Вся линия соединена лентами. Выбрали — подсветились все конвейеры цеха."},
+  {id:"press", name:"Пресс Magna 575", code:"Verdés", zone:"Прессование и формовка", pos:[18,0,-1], top:6.6, model:"press",
+   what:"Главный станок завода — вакуумный пресс Verdés Magna 575. Сверху смеситель, дальше вакуумная камера и шнек: выдавливает два бруса глины через фильеру под давлением 25–45 бар.",
+   where:"Центр цеха. К нему подходят вода, воздух и смазка.", facts:{"Давление":"25–45 бар","Формовка":"жёсткая, 2 бруса"}},
+  {id:"forming", name:"Зона формовки", zone:"Прессование и формовка", pos:[27.5,0,-1], top:4.4, model:"forming",
+   what:"После пресса: резчик режет брус на кирпичи, толкатели раздвигают ряды, робот-садчик ставит сырец на вагонетки.", where:"Сразу за прессом."},
+  {id:"brake", name:"Тормоз толкателя", zone:"Сушка и обжиг", pos:[36,0,9], top:2.8, model:"pusher",
+   what:"Толкатель продвигает вагонетки в сушилку и печь, тормоз удерживает состав, чтобы вагонетки не накатывались.", where:"На входе в сушилку, у рельсов."},
+  {id:"compr", name:"Компрессорная", zone:"Компрессорная", pos:[10,0,-23], top:5.2, model:"compressor",
+   what:"Компрессоры дают сжатый воздух прессу, роботам и пневматике. Дежурные сливают конденсат и смотрят температуру.", where:"Отдельное помещение рядом с прессом."},
+  {id:"dryer", name:"Сушилка", zone:"Сушка и обжиг", pos:[56,0,9], top:6.6, model:"dryer",
+   what:"Длинная камера: сырец на вагонетках медленно идёт через тёплый воздух. Температура разная по зонам, вентиляторы гонят воздух, сервоприводы двигают заслонки.", where:"Первая из двух длинных камер."},
+  {id:"kiln", name:"Печь", zone:"Сушка и обжиг", pos:[60,0,23], top:8.2, model:"kiln",
+   what:"Туннельная печь: вагонетки с высушенным кирпичом проезжают зону обжига. Топливо — уголь.", where:"Параллельно сушилке, камера с трубой."},
+  {id:"prog", name:"Прогматик", zone:"Сушка и обжиг", pos:[50,0,30], top:4.4, model:"progmatic",
+   what:"Система подачи топлива в печь: конвейер и шнек подают уголь, вентилятор дует воздух. Название уточните у мастера.", where:"Сбоку печи, со стороны склада угля."},
+  {id:"coal", name:"Углезапасник", zone:"Склад угля", pos:[75,0,40], top:5,model:"coal",
+   what:"Склад угля для печи: левый и правый запасник, над ними светильники.", where:"За печью, отдельный участок."},
+  {id:"pack", name:"Упаковка", zone:"Упаковка", pos:[96,0,21], top:5.8, model:"pack",
+   what:"Робот снимает обожжённый кирпич с вагонеток и собирает пакеты, цепные конвейеры везут их на обвязку и плёнку. Здесь же осматривают готовую продукцию (ГП).", where:"Конец линии, после печи."},
+];
+const BY_NAME = Object.fromEntries(UNITS.map(u => [u.name, u]));
+const BY_ID = Object.fromEntries(UNITS.map(u => [u.id, u]));
+UNITS.forEach(u => u.parts = {});
+
+// ═══ Сцена ═══
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let renderer, scene, camera, controls, raycaster;
+const pickables = [], ANIM = [], zoneLabels = [];
+let ROUTE_KIND = "", SELECTED = null, HOT = [], routeLine = null, ring = null;
+let RUN = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+let U = null; // станок, который сейчас строим
+let W = 800, H = 600; // размер сцены — это контейнер на странице, а не окно
+
+function isDark(){ const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; }
+
+const MC = {};
+function M(color, r = .55, m = .25, extra){ const k = color + "|" + r + "|" + m + (extra ? JSON.stringify(extra) : ""); return MC[k] || (MC[k] = new THREE.MeshStandardMaterial(Object.assign({color, roughness:r, metalness:m}, extra || {}))); }
+const COL = {body:0x2d5d9a, bodyD:0x1f416e, frame:0x3b4652, steel:0x9aa3ad, motor:0x3e6b9e, guard:0xe6c229, cab:0xc9cfd6,
+  clay:0x9c5a35, sand:0xcfae6c, brick:0xb5502c, concrete:0x9ea4aa, green:0x2e8b57, orange:0xef7d1a, pipeW:0x2f7fd0, pipeA:0xe0b020, red:0xd23a2a};
+
+function canvasTex(w, h, draw, rx = 1, ry = 1){
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t;
+}
+const TEX = {};
+function makeTextures(){
+  TEX.belt = canvasTex(64, 64, (g, w, h) => { g.fillStyle = "#24272b"; g.fillRect(0,0,w,h); g.fillStyle = "#383c42"; for (let x = 0; x < w; x += 16) g.fillRect(x, 0, 6, h); });
+  TEX.plates = canvasTex(64, 64, (g, w, h) => { g.fillStyle = "#4a4f55"; g.fillRect(0,0,w,h); g.fillStyle = "#26292d"; for (let x = 0; x < w; x += 16) g.fillRect(x, 0, 3, h); });
+  TEX.hazard = canvasTex(64, 64, (g, w, h) => { g.fillStyle = "#e6c229"; g.fillRect(0,0,w,h); g.fillStyle = "#1e1e1e"; g.save(); g.translate(w/2, h/2); g.rotate(Math.PI/4); for (let i = -w; i < w; i += 22) g.fillRect(i, -w, 9, 2*w); g.restore(); });
+  TEX.brickwall = canvasTex(128, 64, (g, w, h) => { g.fillStyle = "#5e3e30"; g.fillRect(0,0,w,h); g.fillStyle = "#8a5a44";
+    for (let y = 0; y < h; y += 16) for (let x = (y/16) % 2 ? -16 : 0; x < w; x += 32) g.fillRect(x + 1, y + 1, 30, 14); }, 10, 2);
+  TEX.floor = canvasTex(256, 256, (g, w, h) => { g.fillStyle = isDark() ? "#20262d" : "#b9bec3"; g.fillRect(0,0,w,h);
+    for (let i = 0; i < 2600; i++){ const v = Math.random() > .5; g.fillStyle = v ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.05)"; g.fillRect(Math.random()*w, Math.random()*h, 2, 2); }
+    g.strokeStyle = isDark() ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.08)"; g.strokeRect(0,0,w,h); }, 22, 12);
+  TEX.smoke = canvasTex(64, 64, (c, w, h) => { const gr = c.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0, "rgba(205,205,210,.7)"); gr.addColorStop(1, "rgba(205,205,210,0)"); c.fillStyle = gr; c.fillRect(0,0,w,h); });
+}
+
+function add(parent, mesh){ mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh; }
+function box(p, w, h, d, mat, x, y, z, ry = 0){ const m = add(p, new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat.isMaterial ? mat : M(mat))); m.position.set(x, y, z); m.rotation.y = ry; return m; }
+function cyl(p, r1, r2, h, mat, x, y, z, rx = 0, ry = 0, rz = 0, seg = 24){ const m = add(p, new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mat.isMaterial ? mat : M(mat, .45, .4))); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); return m; }
+const GLOW = {};
+const glow = (color, k = 1.2) => GLOW[color + '|' + k] || (GLOW[color + '|' + k] = new THREE.MeshStandardMaterial({color, emissive:color, emissiveIntensity:k}));
+let HAZ = null;
+// узел станка: к какому станку и какой части он относится
+function P(kind, obj, unit = U){ if (!unit) return obj; (unit.parts[kind] = unit.parts[kind] || []).push(obj); obj.traverse(o => { o.userData.part = kind; o.userData.unit = unit; }); return obj; }
+function spin(obj, axis, speed){ obj.userData.dyn = true; ANIM.push(dt => { obj.rotation[axis] += speed * dt; }); return obj; }
+const dyn = o => { o.userData.dyn = true; return o; };
+
+// ── типовые узлы ──
+function motor(p, x, y, z, len = 1.4, r = .42, dir = 1){
+  const g = new THREE.Group(); g.position.set(x, y, z); g.scale.x = dir;
+  const mb = M(COL.motor, .5, .35);
+  cyl(g, r, r, len, mb, 0, 0, 0, 0, 0, Math.PI/2, 28);
+  for (let i = 0; i < 10; i++){ const a = i/10*Math.PI*2; const f = box(g, len*.86, .05, .07, mb, 0, Math.cos(a)*r, Math.sin(a)*r); f.rotation.x = a; }
+  cyl(g, r*1.03, r*1.03, .28, M(0x2e3d52, .6, .3), -len/2 - .12, 0, 0, 0, 0, Math.PI/2, 28);
+  for (let k = 0; k < 3; k++) cyl(g, r*(.3 + .25*k), r*(.3 + .25*k) + .02, .02, M(0x111111), -len/2 - .27, 0, 0, 0, 0, Math.PI/2, 20);
+  cyl(g, r*1.05, r*1.05, .08, M(0x506a8a, .5, .4), len/2, 0, 0, 0, 0, Math.PI/2, 28);
+  box(g, .34, .2, .3, M(0x4a5d75), .1, r + .1, 0);
+  box(g, len*.7, .1, r*2.1, M(COL.frame), 0, -r - .05, 0);
+  const sh = dyn(cyl(g, .07, .07, .35, M(COL.steel, .3, .8), len/2 + .2, 0, 0, 0, 0, Math.PI/2, 10));
+  ANIM.push(dt => { sh.rotation.x += 14 * dt; });
+  p.add(g);
+  return P("motor", g);
+}
+function gearbox(p, x, y, z, w = 1, h = .9, d = .8){
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  box(g, w, h, d, M(0x2a4a74, .5, .3), 0, 0, 0);
+  for (let i = -2; i <= 2; i++) box(g, w*.9, .04, d + .04, M(0x223c60), 0, i*h/6, 0);
+  box(g, w*.5, .12, d*.5, M(0x2a4a74), 0, h/2 + .06, 0);
+  cyl(g, .05, .05, .15, M(0xcc2222), w*.3, h/2 + .12, 0, 0, 0, 0, 8);
+  p.add(g); return P("gearbox", g);
+}
+function guard(p, x, y, z, len = 1.2, h = 1.2, d = .3, ry = 0){
+  HAZ = HAZ || new THREE.MeshStandardMaterial({map:TEX.hazard, roughness:.6, metalness:.1});
+  return P("belts", box(p, len, h, d, HAZ, x, y, z, ry));
+}
+function pillow(p, x, y, z, s = 1, axis = "z"){
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  box(g, .5*s, .22*s, .3*s, M(0x3a3f45, .6, .4), 0, -.18*s, 0);
+  cyl(g, .2*s, .2*s, .28*s, M(0x4a5058, .5, .5), 0, 0, 0, axis === "z" ? Math.PI/2 : 0, 0, axis === "x" ? Math.PI/2 : 0, 16);
+  cyl(g, .03, .03, .1, M(0xd4af37, .3, .8), 0, .23*s, 0, 0, 0, 0, 8);
+  p.add(g); return P("bearings", g);
+}
+function cabinet(p, x, y, z, ry = 0, h = 1.9){
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry;
+  box(g, .9, h, .45, M(COL.cab, .5, .3), 0, h/2 + .1, 0);
+  box(g, .02, h*.9, .02, M(0x7a8088), 0, h/2 + .1, .235);
+  box(g, .05, .22, .05, M(0x333333), .3, h/2 + .1, .25);
+  [[0x22c55e, 1.4], [0xf59e0b, .3], [0xef4444, .3]].forEach(([c, k], i) => cyl(g, .045, .045, .04, glow(c, k), -.25 + i*.13, h - .1, .24, Math.PI/2, 0, 0, 12));
+  box(g, .6, .1, .4, M(0x8a9098), 0, .05, 0);
+  p.add(g); return P("cabinet", g);
+}
+function limitSw(p, x, y, z){
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  box(g, .16, .2, .12, M(COL.red, .5, .2), 0, 0, 0);
+  const arm = box(g, .04, .32, .04, M(0x222222), 0, .2, 0); arm.rotation.z = .5;
+  cyl(g, .05, .05, .04, M(0x111111), .08, .33, 0, Math.PI/2, 0, 0, 10);
+  p.add(g); return P("limits", g);
+}
+function sensor(p, x, y, z){
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  cyl(g, .07, .07, .45, M(0xd0d4d8, .3, .7), 0, 0, 0, 0, 0, 0, 12);
+  box(g, .18, .16, .18, M(0x1f6fd0), 0, .3, 0);
+  cyl(g, .02, .02, 1.2, M(0x111111), .25, .5, 0, 0, 0, Math.PI/3, 6);
+  p.add(g); return P("sensor", g);
+}
+// отрезок ленточного конвейера вдоль X
+function beltSeg(p, x0, x1, y, z, w = .9, tex = TEX.belt, speed = .6){
+  const len = Math.abs(x1 - x0), cx = (x0 + x1)/2;
+  box(p, len, .3, .12, M(COL.frame), cx, y - .2, z - w/2 - .02); box(p, len, .3, .12, M(COL.frame), cx, y - .2, z + w/2 + .02);
+  const t = tex.clone(); t.needsUpdate = true; t.repeat.set(len/1.2, 1);
+  const top = box(p, len, .06, w, new THREE.MeshStandardMaterial({map:t, roughness:.9}), cx, y, z);
+  ANIM.push(dt => { t.offset.x -= speed * dt / 1.2; });
+  P("belt", top);
+  for (const xx of [x0, x1]) P("drums", cyl(p, .2, .2, w + .1, M(0x6b7280, .4, .6), xx, y - .14, z, Math.PI/2, 0, 0, 16));
+  for (let xx = Math.min(x0, x1) + 1.2; xx < Math.max(x0, x1) - .6; xx += 2) for (const s of [-1, 1]) box(p, .1, y - .3, .1, M(COL.frame), xx, (y - .3)/2, z + s*(w/2 + .02));
+  return top;
+}
+
+// ═══ Модели станков (масса идёт по +X) ═══
+const MODELS = {
+  feeder(u){
+    const g = new THREE.Group(), body = u.mat === "sand" ? 0x2f7d50 : 0xc46a12, mat = u.mat === "sand" ? COL.sand : COL.clay;
+    const hop = BY_ID[u.mat === "sand" ? "sandhop" : "clayhop"];
+    box(g, 7.4, .35, .2, M(COL.frame), 0, 1.2, -1.25); box(g, 7.4, .35, .2, M(COL.frame), 0, 1.2, 1.25);
+    for (const x of [-3.4, -1, 1.4, 3.4]) for (const z of [-1.2, 1.2]) box(g, .22, 1.1, .22, M(COL.frame), x, .55, z);
+    beltSeg(g, -3.7, 3.7, 1.45, 0, 2.1, TEX.plates, .25);
+    const hw = M(body, .6, .25);
+    for (const s of [-1, 1]){ const w = box(g, 5.6, 2.0, .16, hw, -.5, 2.6, s*1.35); w.rotation.x = s*.22; P("hopper", w, hop); }
+    P("hopper", box(g, .16, 2.0, 3.0, hw, -3.3, 2.6, 0), hop);
+    for (let i = 0; i < 4; i++) box(g, .1, 2.0, .1, M(COL.bodyD), -3 + i*1.8, 2.6, 1.55);
+    const pile = cyl(g, 1.3, 2.0, 1.2, M(mat, 1, 0), -.8, 2.3, 0, 0, 0, 0, 9); pile.scale.z = .62;
+    const bv = new THREE.Group(); bv.position.set(2.4, 2.5, 0);
+    cyl(bv, .16, .16, 2.6, M(0x50565e, .4, .6), 0, 0, 0, Math.PI/2, 0, 0, 12);
+    for (let i = 0; i < 7; i++){ const b = box(bv, .55, .08, .1, M(COL.guard), 0, 0, -1.1 + i*.37); b.rotation.z = i*1.1; }
+    g.add(bv); spin(bv, "z", -3); P("beater", bv, hop);
+    const s = new THREE.Group(); g.add(s); s.position.set(-3.3, 3.8, 1.2);
+    cyl(s, .07, .07, .45, M(0xd0d4d8, .3, .7), 0, 0, 0, 0, 0, 0, 12); box(s, .18, .16, .18, M(0x1f6fd0), 0, .3, 0);
+    P("sensor", s, hop);
+    pillow(g, 3.6, 1.45, -1.45); pillow(g, 3.6, 1.45, 1.45); pillow(g, -3.6, 1.45, -1.45); pillow(g, -3.6, 1.45, 1.45);
+    gearbox(g, 3.0, 1.0, 2.1, 1.1, .9, .8);
+    motor(g, 1.4, .9, 2.2, 1.1, .34, 1);
+    guard(g, 2.2, 1.25, 2.7, 1.8, 1.0, .25);
+    P("scraper", box(g, .1, .1, 1.9, M(COL.guard), 3.75, 1.2, 0));
+    if (u.mat === "sand") limitSw(g, 4.2, 1.5, 1.1);
+    return g;
+  },
+  crusher(){
+    const g = new THREE.Group();
+    box(g, 4.6, .5, 3.4, M(COL.concrete, 1, 0), 0, .25, 0);
+    box(g, 3.4, 1.6, 2.4, M(COL.body), 0, 1.3, 0);
+    for (const x of [-1.3, 0, 1.3]) box(g, .12, 1.6, 2.5, M(COL.bodyD), x, 1.3, 0);
+    P("hopper", box(g, 3.6, .9, 2.8, M(COL.steel, .45, .55), 0, 3.05, 0));
+    for (const z of [-.42, .42]){
+      const r = new THREE.Group(); r.position.set(0, 2.25, z);
+      cyl(r, .38, .38, 2.8, M(0x575d65, .5, .6), 0, 0, 0, 0, 0, Math.PI/2, 14);
+      for (let i = -1.2; i <= 1.2; i += .3) for (let k = 0; k < 6; k++) box(r, .12, .14, .12, M(0x7a828c, .4, .7), i, Math.cos(k)*.42, Math.sin(k)*.42);
+      g.add(r); spin(r, "x", z > 0 ? 2 : -2); P("rollers", r);
+    }
+    for (const x of [-1.85, 1.85]) for (const z of [-.42, .42]) pillow(g, x, 2.25, z, 1, "x");
+    motor(g, -3.0, .95, 1.6, 1.5, .48, 1); guard(g, -2.0, 1.4, 1.95, 1.4, 1.6);
+    motor(g, -3.0, .95, -1.6, 1.5, .48, 1); guard(g, -2.0, 1.4, -1.95, 1.4, 1.6);
+    gearbox(g, -1.9, .9, 1.45, .8, .8, .6); gearbox(g, -1.9, .9, -1.45, .8, .8, .6);
+    return g;
+  },
+  disint(){
+    const g = new THREE.Group();
+    box(g, 4.8, .4, 3.6, M(COL.concrete, 1, 0), 0, .2, 0);
+    box(g, 3.6, 1.2, 2.6, M(COL.body), 0, 1.0, 0);
+    for (const z of [-1.3, 1.3]) box(g, 3.8, 2.6, .2, M(COL.bodyD), 0, 2.4, z);
+    const big = new THREE.Group(); big.position.set(-.4, 2.35, 0);
+    cyl(big, .95, .95, 2.4, M(0xa8b0b9, .25, .8), 0, 0, 0, Math.PI/2, 0, 0, 36);
+    box(big, .05, .1, 2.42, M(0x7a828c), .95, 0, 0);
+    g.add(big); spin(big, "z", 1.2); P("rollers", big);
+    const kn = new THREE.Group(); kn.position.set(1.15, 2.55, 0);
+    cyl(kn, .5, .5, 2.4, M(0x5a6068, .5, .6), 0, 0, 0, Math.PI/2, 0, 0, 20);
+    for (let i = 0; i < 8; i++){ const a = i/8*Math.PI*2; const k = box(kn, .14, .34, 2.3, M(0xd9dde2, .2, .9), Math.cos(a)*.55, Math.sin(a)*.55, 0); k.rotation.z = a; }
+    g.add(kn); spin(kn, "z", -5); P("knives", kn);
+    P("hopper", box(g, 3.2, .8, 2.4, M(COL.steel, .45, .55), .2, 3.9, 0));
+    P("scraper", box(g, .1, .1, 2.2, M(COL.guard), -1.4, 1.6, 0));
+    for (const x of [-.4, 1.15]) for (const z of [-1.55, 1.55]) pillow(g, x, x < 0 ? 2.35 : 2.55, z, 1.1);
+    motor(g, -3.2, 1.0, 2.2, 1.6, .5, 1); guard(g, -2.1, 1.7, 2.3, 1.6, 2.2, .3);
+    motor(g, 3.2, 1.0, 2.2, 1.3, .44, -1); guard(g, 2.2, 1.7, 2.3, 1.4, 2.0, .3);
+    gearbox(g, -1.6, 1.0, 2.1, .9, .9, .7);
+    limitSw(g, -2.6, 1.3, -.8); limitSw(g, 2.7, 1.3, -.8);
+    return g;
+  },
+  rollers(u){
+    const g = new THREE.Group();
+    box(g, 5.6, .45, 3.8, M(COL.concrete, 1, 0), 0, .22, 0);
+    box(g, 4.4, 1.2, 3.0, M(COL.body), 0, 1.05, 0);
+    for (const [x, s] of [[-.78, 1], [.78, -1]]){
+      const r = new THREE.Group(); r.position.set(x, 2.3, 0);
+      cyl(r, .72, .72, 2.4, M(0xb4bcc5, .2, .85), 0, 0, 0, Math.PI/2, 0, 0, 36);
+      for (let k = 0; k < 4; k++) box(r, .05, .05, 2.42, M(0x8a929b), Math.cos(k*1.57)*.72, Math.sin(k*1.57)*.72, 0);
+      g.add(r); spin(r, "z", s * (x < 0 ? 3 : 2)); P("rollers", r);
+      for (const z of [-1.5, 1.5]) pillow(g, x, 2.3, z, 1.6);
+    }
+    for (const z of [-1.5, 1.5]) box(g, 3.2, 1.0, .25, M(COL.bodyD), 0, 2.3, z);
+    P("hopper", box(g, 2.8, .9, 2.6, M(COL.steel, .45, .55), 0, 3.5, 0));
+    for (const x of [-1.25, 1.25]) P("scraper", box(g, .1, .1, 2.3, M(COL.guard), x, 1.75, 0));
+    motor(g, -3.6, 1.1, 2.4, 1.8, .58, 1); guard(g, -2.3, 1.8, 2.55, 2.2, 2.2, .35);
+    motor(g, 3.6, 1.1, 2.4, 1.8, .58, -1); guard(g, 2.3, 1.8, 2.55, 2.2, 2.2, .35);
+    gearbox(g, -2.2, 1.0, 2.0, .9, .9, .6);
+    if (u.cab) cabinet(g, 2.6, 0, -2.6, 0);
+    limitSw(g, 2.9, 1.3, -.9);
+    return g;
+  },
+  mixer(){
+    const g = new THREE.Group();
+    for (const x of [-2.8, -.9, .9, 2.8]) for (const z of [-1, 1]) box(g, .25, 1.0, .25, M(COL.frame), x, .5, z);
+    box(g, 6.2, .2, 2.4, M(COL.body), 0, 1.05, 0);
+    for (const z of [-1.2, 1.2]) box(g, 6.2, 1.2, .16, M(COL.body), 0, 1.7, z);
+    for (const x of [-3.1, 3.1]) box(g, .16, 1.2, 2.4, M(COL.body), x, 1.7, 0);
+    for (let x = -2.6; x <= 2.6; x += .55) box(g, .05, .05, 2.4, M(0x9aa3ad), x, 2.32, 0);
+    for (const [z, s] of [[-.55, 1], [.55, -1]]){
+      const sh = new THREE.Group(); sh.position.set(0, 1.6, z);
+      cyl(sh, .1, .1, 6.6, M(0x50565e, .4, .6), 0, 0, 0, 0, 0, Math.PI/2, 10);
+      for (let i = 0; i < 12; i++){ const b = box(sh, .1, .52, .22, M(0xb8c0c8, .3, .8), -2.75 + i*.5, 0, 0); b.rotation.x = i*.9; b.rotation.y = .35; }
+      g.add(sh); spin(sh, "x", s*2.4); P("blades", sh);
+      for (const x of [-3.35, 3.35]) pillow(g, x, 1.6, z, 1.1, "x");
+    }
+    gearbox(g, 4.1, 1.3, 0, 1.3, 1.3, 1.8);
+    motor(g, 5.6, 1.3, .3, 1.5, .5, -1);
+    guard(g, 4.9, 1.5, .95, 1.2, 1.2, .25);
+    cabinet(g, -2.4, 0, -2.2, 0);
+    P("water", cyl(g, .06, .06, 6, M(COL.pipeW, .4, .5), 0, 2.55, -.9, 0, 0, Math.PI/2, 8));
+    limitSw(g, 3.4, 1.3, 1.2);
+    return g;
+  },
+  lightpanel(){
+    const g = new THREE.Group();
+    box(g, 3, 3.2, .3, M(0xb9c0c8, .9, 0), 0, 1.6, -.5);
+    const sh = new THREE.Group(); g.add(sh); sh.position.set(0, 0, 0);
+    box(sh, .9, 1.6, .45, M(COL.cab, .5, .3), 0, .9, 0); box(sh, .3, .3, .05, glow(0x22c55e, 1.2), 0, 1.4, .24);
+    const lamps = new THREE.Group();
+    for (let x = -26; x <= 26; x += 6.5){
+      box(lamps, .05, 2.5, .05, M(0x333333), x, 10.6, 15);
+      box(lamps, 1.6, .14, .45, glow(0xfff3c4, 1.2), x, 9.3, 15);
+    }
+    g.add(lamps);
+    P("lights", lamps); P("lights", sh);
+    return g;
+  },
+  bunkers(){
+    const g = new THREE.Group();
+    for (const [z, n] of [[-3.4, 1], [3.4, 2]]){
+      cyl(g, 2.2, 2.2, 4.4, M(0xc4cbd2, .4, .6), 0, 6.4, z, 0, 0, 0, 36);
+      for (let y = 4.6; y <= 8.4; y += .9) cyl(g, 2.23, 2.23, .06, M(0xa6aeb7, .4, .6), 0, y, z, 0, 0, 0, 36);
+      cyl(g, 2.2, .55, 2.4, M(0xb1b9c1, .4, .6), 0, 3.0, z, 0, 0, 0, 36);
+      for (const a of [.6, 2.2, 3.8, 5.4]) box(g, .22, 8.6, .22, M(COL.frame), Math.cos(a)*2.05, 4.3, z + Math.sin(a)*2.05);
+      for (let y = .5; y < 8.6; y += .4) box(g, .05, .05, .5, M(COL.guard), 2.45, y, z);
+      box(g, .05, 8.6, .05, M(COL.guard), 2.45, 4.3, z - .25); box(g, .05, 8.6, .05, M(COL.guard), 2.45, 4.3, z + .25);
+      sensor(g, .6, 8.95, z);
+    }
+    box(g, 3.2, .1, 8.0, M(0x6b7280, .6, .5), 0, 8.7, 0);
+    for (let z = -3.8; z <= 3.8; z += 1.9) box(g, .05, 1, .05, M(COL.guard), -1.6, 9.2, z);
+    const f = new THREE.Group();
+    box(f, 2.2, .9, 9.4, M(COL.body), 0, .95, 0);
+    motor(f, 1.5, .85, 4.9, 1.0, .34, 1); gearbox(f, .5, .9, 4.9, .7, .7, .6);
+    g.add(f); P("feeder", f);
+    beltSeg(g, -1.0, 1.0, 1.5, 0, 2, TEX.belt, .3);
+    limitSw(g, 1.2, 1.6, -1.1);
+    return g;
+  },
+  optima(){
+    const g = new THREE.Group();
+    box(g, 6.0, 1.1, 4.2, M(0x264f86, .5, .35), 0, .55, 0);
+    for (const x of [-2.6, 2.6]) box(g, .3, 1.1, 4.3, M(0x1d3e6b), x, .55, 0);
+    for (const [x, s] of [[-.85, 1], [.85, -1]]){
+      const r = new THREE.Group(); r.position.set(x, 2.15, 0);
+      cyl(r, .8, .8, 2.2, M(0xbcc4cc, .18, .9), 0, 0, 0, Math.PI/2, 0, 0, 40);
+      box(r, .05, .05, 2.22, M(0x8a929b), .8, 0, 0);
+      g.add(r); spin(r, "z", s*2.5); P("rollers", r);
+      for (const z of [-1.4, 1.4]){ box(g, 1.1, 1.4, .6, M(0x264f86), x, 2.15, z); pillow(g, x, 2.95, z, 1.2); }
+    }
+    for (const z of [-1.75, 1.75]){ P("hydraulics", cyl(g, .18, .18, 1.3, M(0xd4d9df, .2, .9), 0, 2.15, z, 0, 0, Math.PI/2, 14)); cyl(g, .07, .07, .9, M(0x111111), 0, 2.6, z, 0, 0, 0, 6); }
+    P("hopper", box(g, 3.0, 1.0, 2.6, M(COL.steel, .45, .55), 0, 3.6, 0));
+    for (const x of [-1.5, 1.5]) P("scraper", box(g, .1, .1, 2.2, M(COL.guard), x, 1.6, 0));
+    motor(g, -4.0, 1.4, 2.6, 2.0, .65, 1); guard(g, -2.6, 2.0, 2.7, 2.4, 2.4, .35);
+    motor(g, 4.0, 1.4, 2.6, 2.0, .65, -1); guard(g, 2.6, 2.0, 2.7, 2.4, 2.4, .35);
+    cabinet(g, -2.6, 0, -3.0, 0, 2.1);
+    limitSw(g, 3.3, 1.3, -1.1);
+    return g;
+  },
+  press(){
+    const g = new THREE.Group();
+    box(g, 12, .7, 5.0, M(COL.concrete, 1, 0), 0, .35, 0);
+    box(g, 4.2, 1.6, 2.4, M(COL.body), -3.0, 4.2, 0);
+    const bl = new THREE.Group(); bl.position.set(-3.0, 4.3, 0);
+    cyl(bl, .1, .1, 4.4, M(0x50565e), 0, 0, 0, 0, 0, Math.PI/2, 10);
+    for (let i = 0; i < 8; i++){ const b = box(bl, .1, .5, .2, M(0xb8c0c8, .3, .8), -1.8 + i*.5, 0, 0); b.rotation.x = i; }
+    g.add(bl); spin(bl, "x", 2.5); P("blades", bl);
+    for (let x = -4.8; x <= -1.2; x += .45) box(g, .04, .04, 2.4, M(0x9aa3ad), x, 5.02, 0);
+    P("vacuum", cyl(g, 1.3, 1.3, 2.2, M(COL.bodyD, .45, .45), -.4, 2.9, 0, 0, 0, 0, 32));
+    cyl(g, .28, .28, .1, new THREE.MeshStandardMaterial({color:0x99ccff, transparent:true, opacity:.7, roughness:.1}), -.4, 3.3, 1.32, Math.PI/2, 0, 0, 20);
+    P("vacuum", cyl(g, .45, .45, 1.4, M(0x8d969f, .4, .6), -1.0, 1.3, -2.1, 0, 0, Math.PI/2, 20));
+    P("auger", cyl(g, 1.0, 1.0, 5.0, M(COL.body, .4, .45), 2.6, 2.1, 0, 0, 0, Math.PI/2, 32));
+    for (let x = .5; x <= 4.8; x += 1.05) cyl(g, 1.08, 1.08, .14, M(COL.bodyD), x, 2.1, 0, 0, 0, Math.PI/2, 32);
+    cyl(g, 1.0, .7, 1.0, M(COL.steel, .3, .7), 5.6, 2.1, 0, 0, 0, Math.PI/2, 32);
+    P("die", box(g, .55, 1.2, 1.9, M(0x6b7280, .3, .8), 6.35, 2.1, 0));
+    for (const s of [-1, 1]) P("sensor", cyl(g, .07, .07, .5, M(0xd0d4d8, .3, .7), 5.6, 2.9, s*.4, 0, 0, 0, 10));
+    const col = dyn(new THREE.Group()); g.add(col);
+    const bars = [];
+    for (const z of [-.42, .42]) for (let i = 0; i < 4; i++) bars.push(box(col, 1.25, .5, .62, M(COL.brick, .9, 0), 7.2 + i*1.3, 2.0, z));
+    P("column", col);
+    ANIM.push(dt => { for (const b of bars){ b.position.x += .55*dt; if (b.position.x > 12.2) b.position.x -= 5.2; } });
+    gearbox(g, -3.4, 1.9, 0, 2.4, 2.2, 2.4);
+    motor(g, -6.4, 1.6, 0, 2.6, .95, 1);
+    guard(g, -4.95, 2.1, 1.35, 1.6, 2.4, .35);
+    pillow(g, .3, 2.1, -1.2, 1.4); pillow(g, .3, 2.1, 1.2, 1.4);
+    cabinet(g, -4.2, 0, -3.2, 0, 2.2);
+    const w = new THREE.Group();
+    cyl(w, .09, .09, 9, M(COL.pipeW, .4, .5), -.5, .95, 2.4, 0, 0, Math.PI/2, 10);
+    cyl(w, .09, .09, 1.4, M(COL.pipeW, .4, .5), 3.9, 1.6, 2.4, 0, 0, 0, 10);
+    cyl(w, .18, .18, .08, M(0xffffff, .3, .2), 1.5, 1.25, 2.5, Math.PI/2, 0, 0, 20);
+    box(w, .4, .3, .3, M(0x1f6fd0), -2.5, .95, 2.4);
+    g.add(w); P("water", w);
+    const a = new THREE.Group();
+    cyl(a, .07, .07, 8, M(COL.pipeA, .4, .5), 0, .85, -2.5, 0, 0, Math.PI/2, 10);
+    cyl(a, .15, .15, .07, M(0xffffff, .3, .2), 2.2, 1.12, -2.55, Math.PI/2, 0, 0, 20);
+    g.add(a); P("air", a);
+    const lu = new THREE.Group();
+    box(lu, .7, .9, .5, M(0xd04020, .5, .3), 1.2, 1.15, -2.0);
+    cyl(lu, .2, .2, .5, new THREE.MeshStandardMaterial({color:0xf2d27a, transparent:true, opacity:.85, roughness:.4}), 1.2, 1.85, -2.0, 0, 0, 0, 14);
+    for (let i = 0; i < 4; i++) cyl(lu, .025, .025, 2.4, M(0x222222), .2 + i*.6, 1.6, -1.6, Math.PI/2.4, 0, 0, 6);
+    g.add(lu); P("lube", lu);
+    P("scraper", box(g, .1, .1, 1.8, M(COL.guard), 6.9, 1.6, 0));
+    beltSeg(g, -9, -5.6, 1.2, 0, 1.1, TEX.belt, .6); limitSw(g, -5.4, 1.3, .8);
+    box(g, 4.6, .1, 1.1, M(0x6b7280), -3, 3.3, -1.9);
+    for (let x = -5.2; x <= -.8; x += 1.1) box(g, .05, 1, .05, M(COL.guard), x, 3.8, -2.4);
+    box(g, 4.6, .05, .05, M(COL.guard), -3, 4.3, -2.4);
+    return g;
+  },
+  forming(){
+    const g = new THREE.Group();
+    beltSeg(g, -3.4, 3.4, 1.2, 0, 2.2, TEX.belt, .8);
+    const cut = new THREE.Group(); cut.position.set(-1.8, 0, 0);
+    for (const z of [-1.4, 1.4]) box(cut, .2, 3.0, .2, M(COL.orange), 0, 1.5, z);
+    box(cut, .3, .3, 3.0, M(COL.orange), 0, 3.0, 0);
+    const wire = dyn(new THREE.Group()); for (let i = 0; i < 5; i++) box(wire, .02, .02, 2.8, M(0xdddddd, .2, .9), -.3 + i*.15, 0, 0);
+    cut.add(wire); g.add(cut); P("cutter", cut);
+    let ct = 0; ANIM.push(dt => { ct += dt; wire.position.y = 1.8 + Math.abs(Math.sin(ct*1.6))*1.0; });
+    const bricks = [];
+    for (let i = 0; i < 10; i++) for (const z of [-.5, .5]) bricks.push(dyn(box(g, .48, .3, .7, M(COL.brick, .9, 0), -1.3 + i*.5, 1.4, z)));
+    ANIM.push(dt => { for (const b of bricks){ b.position.x += .8*dt; if (b.position.x > 3.2) b.position.x -= 5; } });
+    for (const z of [-1.5, 1.5]) P("pusher", cyl(g, .12, .12, 1.2, M(0xd4d9df, .2, .9), 1.6, 1.8, z, Math.PI/2, 0, 0, 10));
+    pillow(g, 3.4, 1.0, -1.3); pillow(g, 3.4, 1.0, 1.3);
+    const rb = dyn(new THREE.Group()); rb.position.set(4.6, 0, 2.6);
+    cyl(rb, .7, .9, .5, M(COL.orange, .45, .3), 0, .25, 0, 0, 0, 0, 20);
+    const turn = new THREE.Group(); turn.position.y = .5; rb.add(turn);
+    cyl(turn, .45, .45, .8, M(COL.orange, .45, .3), 0, .4, 0, 0, 0, 0, 18);
+    const arm1 = new THREE.Group(); arm1.position.y = .9; turn.add(arm1);
+    box(arm1, .38, 2.2, .38, M(COL.orange, .45, .3), 0, 1.1, 0);
+    const arm2 = new THREE.Group(); arm2.position.y = 2.2; arm1.add(arm2);
+    box(arm2, 2.0, .32, .32, M(COL.orange, .45, .3), -1.0, 0, 0);
+    box(arm2, .9, .2, .8, M(0x333333), -2.0, -.25, 0);
+    g.add(rb); P("robot", rb);
+    let rt = 0; ANIM.push(dt => { rt += dt; turn.rotation.y = Math.sin(rt*.8)*1.1; arm1.rotation.z = .25 + Math.sin(rt*1.6)*.18; });
+    return g;
+  },
+  pusher(){
+    const g = new THREE.Group();
+    for (const z of [-1.5, 1.5]) P("rails", box(g, 6, .14, .16, M(0x6b7280, .4, .7), 1, .07, z));
+    box(g, 2.6, .8, 1.6, M(COL.frame), -2.6, .4, 0);
+    P("pusher", cyl(g, .26, .26, 2.6, M(0x5a6068, .4, .6), -1.2, 1.1, 0, 0, 0, Math.PI/2, 16));
+    const rod = dyn(cyl(g, .1, .1, 2.6, M(0xdfe3e8, .15, .95), .3, 1.1, 0, 0, 0, Math.PI/2, 10));
+    const head = dyn(box(g, .3, 1.2, 1.8, M(COL.guard), 1.6, 1.1, 0));
+    P("pusher", rod); P("pusher", head);
+    let pt = 0; ANIM.push(dt => { pt += dt; const k = (Math.sin(pt*.5) + 1)/2*1.2; rod.position.x = .3 + k; head.position.x = 1.6 + k; });
+    motor(g, -3.6, .9, 1.4, 1.0, .34, 1); gearbox(g, -2.6, .9, 1.4, .8, .7, .6);
+    const br = new THREE.Group(); br.position.set(-2.2, .95, -1.3);
+    cyl(br, .4, .4, .18, M(0xc0392b, .5, .4), 0, 0, 0, Math.PI/2, 0, 0, 22); box(br, .5, .6, .3, M(0x7b1e14), 0, .4, -.1);
+    g.add(br); P("brake", br);
+    pillow(g, -1.5, .95, 1.2); pillow(g, -1.5, .95, -.6);
+    return g;
+  },
+  compressor(){
+    const g = new THREE.Group();
+    box(g, 13, .2, 10, M(0x7b8188, 1, 0), 0, .1, 0);
+    box(g, 13, 4.4, .3, M(0xb9c0c8, .9, 0), 0, 2.2, -5);
+    box(g, .3, 4.4, 10, M(0xb9c0c8, .9, 0), -6.5, 2.2, 0); box(g, .3, 4.4, 10, M(0xb9c0c8, .9, 0), 6.5, 2.2, 0);
+    const cp = new THREE.Group();
+    for (const x of [-3.4, .2]){
+      box(cp, 3.0, 2.2, 1.9, M(COL.green, .55, .2), x, 1.3, -2.2);
+      for (let i = 0; i < 6; i++) box(cp, .04, 1.4, .02, M(0x1a4d33), x - 1 + i*.4, 1.4, -1.24);
+      box(cp, .5, .35, .04, M(0x0b1320), x + .9, 2.0, -1.23);
+      box(cp, .44, .28, .02, glow(0x22c55e, 1), x + .9, 2.0, -1.2);
+    }
+    g.add(cp); P("compressor", cp);
+    P("thermo", box(g, .5, .3, .03, glow(0x3b82f6, 1), -2.5, 2.0, -1.19));
+    const rc = new THREE.Group();
+    cyl(rc, .9, .9, 3.4, M(0xdfe3e8, .35, .6), 4.0, 2.1, 1.6, 0, 0, 0, 28);
+    cyl(rc, .2, .2, .07, M(0xffffff), 4.0, 3.0, 2.5, Math.PI/2, 0, 0, 18);
+    g.add(rc); P("receiver", rc);
+    const dr = new THREE.Group();
+    cyl(dr, .05, .05, .5, M(0x8a929b, .3, .8), 4.0, .25, 1.6, 0, 0, 0, 8); box(dr, .25, .08, .08, M(COL.red), 4.15, .35, 1.6);
+    g.add(dr); P("drain", dr);
+    cyl(g, .12, .12, 9, M(COL.pipeA, .4, .5), 0, 3.6, -4.2, 0, 0, Math.PI/2, 10);
+    return g;
+  },
+  dryer(){
+    const g = new THREE.Group(), L = 36;
+    box(g, L, .3, 7.6, M(0x8a8f96, 1, 0), 0, .15, 0);
+    box(g, L, 4.4, .35, M(0xc9a882, .95, 0), 0, 2.4, -3.6);
+    box(g, L, .4, 7.6, M(0x9a7b5c, .9, 0), 0, 4.8, 0);
+    box(g, L, 4.4, .08, new THREE.MeshStandardMaterial({color:0xd9c4a8, transparent:true, opacity:.2, roughness:.2, depthWrite:false}), 0, 2.4, 3.65);
+    for (let x = -L/2; x <= L/2; x += 6) box(g, .35, 4.6, .4, M(0x9a7b5c), x, 2.4, 3.65);
+    const fans = new THREE.Group();
+    for (let x = -15; x <= 15; x += 6){
+      const fan = new THREE.Group(); fan.position.set(x, 5.4, -1.2);
+      cyl(fan, .9, .9, .5, M(0x8d969f, .4, .6), 0, 0, 0, 0, 0, 0, 24);
+      const blade = new THREE.Group();
+      for (let i = 0; i < 5; i++){ const b = box(blade, .75, .04, .22, M(0xd0d5db, .3, .7), Math.cos(i*1.256)*.4, .28, Math.sin(i*1.256)*.4); b.rotation.y = -i*1.256; }
+      fan.add(blade); spin(blade, "y", 6); fans.add(fan);
+      motor(g, x + 1.6, 5.4, -1.2, .9, .3, -1);
+      pillow(g, x, 5.15, -.3, .8);
+    }
+    g.add(fans); P("fans", fans);
+    for (let x = -15; x <= 15; x += 7.5) P("servo", box(g, .5, .9, .35, M(0x1f6fd0, .4, .3), x, 3.6, 3.95));
+    for (let x = -12; x <= 12; x += 8) P("thermo", box(g, .5, .32, .06, glow(0xff7a1a, .9), x, 2.6, 3.95));
+    cabinet(g, -L/2 - 1.2, 0, 2.2, Math.PI/2, 2.1);
+    const lt = new THREE.Group(); for (let x = -15; x <= 15; x += 10) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 4.5, 2.6);
+    g.add(lt); P("lights", lt);
+    for (const z of [-1.4, 1.4]) P("rails", box(g, L + 12, .12, .15, M(0x6b7280, .4, .7), -2, .32, z));
+    return g;
+  },
+  kiln(){
+    const g = new THREE.Group(), L = 44;
+    const bw = new THREE.MeshStandardMaterial({map:TEX.brickwall, roughness:.95});
+    box(g, L, .3, 8.4, M(0x7a7f86, 1, 0), 0, .15, 0);
+    box(g, L, 5.4, .5, bw, 0, 2.9, -4);
+    box(g, L, .6, 8.4, M(0x4f3a30, .9, 0), 0, 5.8, 0);
+    box(g, L, 5.4, .08, new THREE.MeshStandardMaterial({color:0xe8b090, transparent:true, opacity:.16, roughness:.2, depthWrite:false}), 0, 2.9, 4.05);
+    for (let x = -L/2; x <= L/2; x += 5.5) box(g, .4, 5.6, .5, M(0x5a4034), x, 2.9, 4.05);
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(14, 4.6, 7.2), new THREE.MeshBasicMaterial({color:0xff6a1a, transparent:true, opacity:.22, depthWrite:false}));
+    gl.position.set(2, 2.7, 0); g.add(dyn(gl));
+    const fire = new THREE.PointLight(0xff7a2e, 2.2, 22, 2); fire.position.set(2, 3, 0); g.add(fire);
+    let ft = 0; ANIM.push(dt => { ft += dt; fire.intensity = 2 + Math.sin(ft*7)*.3 + Math.sin(ft*13)*.2; gl.material.opacity = .2 + Math.sin(ft*5)*.04; });
+    const bu = new THREE.Group(), ho = new THREE.Group();
+    for (let x = -5; x <= 9; x += 1.75) for (const z of [-1.6, 1.6]){
+      cyl(bu, .16, .16, .9, M(0x9aa3ad, .3, .7), x, 6.5, z, 0, 0, 0, 10);
+      cyl(ho, .05, .05, 1.6, M(0x111111), x + .5, 6.9, z, 0, 0, Math.PI/2.6, 6);
+    }
+    cyl(ho, .12, .12, 16, M(0x333333), 2, 7.2, 0, 0, 0, Math.PI/2, 10);
+    g.add(bu); g.add(ho); P("burners", bu); P("hoses", ho);
+    const fans = new THREE.Group();
+    for (const x of [-17, 17]){
+      const fan = new THREE.Group(); fan.position.set(x, 6.6, 2.2);
+      cyl(fan, 1.0, 1.0, .6, M(0x8d969f, .4, .6), 0, 0, 0, 0, 0, 0, 24);
+      const bl = new THREE.Group(); for (let i = 0; i < 6; i++){ const b = box(bl, .8, .05, .24, M(0xd0d5db, .3, .7), Math.cos(i*1.05)*.42, .33, Math.sin(i*1.05)*.42); b.rotation.y = -i*1.05; }
+      fan.add(bl); spin(bl, "y", 7); fans.add(fan);
+      motor(g, x + 1.9, 6.6, 2.2, 1.0, .34, -1); guard(g, x + 1.2, 7.1, 2.85, 1.2, 1, .25); pillow(g, x, 6.25, 3.2, .9);
+    }
+    g.add(fans); P("fans", fans);
+    cyl(g, .9, 1.15, 15, M(0x6b6f75, .8, .3), 19.5, 9.4, -2.6, 0, 0, 0, 20);
+    const lt = new THREE.Group(); for (let x = -18; x <= 18; x += 9) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 5.3, 3.4);
+    g.add(lt); P("lights", lt);
+    for (const z of [-1.5, 1.5]) P("rails", box(g, L + 14, .12, .15, M(0x6b7280, .4, .7), 0, .32, z));
+    const smoke = [];
+    for (let i = 0; i < 14; i++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({map:TEX.smoke, transparent:true, depthWrite:false})); s.userData.t = i/14; g.add(s); smoke.push(s); }
+    const moveSmoke = dt => { for (const s of smoke){ s.userData.t = (s.userData.t + dt*.12) % 1; const t = s.userData.t; s.position.set(19.5 + t*3, 17 + t*9, -2.6 - t*1.5); s.scale.setScalar(1.5 + t*5); s.material.opacity = (1 - t)*.7; } };
+    moveSmoke(0); ANIM.push(moveSmoke);
+    return g;
+  },
+  progmatic(){
+    const g = new THREE.Group();
+    const gen = new THREE.Group(); box(gen, 2.4, 2.0, 1.8, M(0x5f6b78, .5, .4), 0, 1.0, 0); box(gen, 2.0, .3, 1.4, M(0x47515c), 0, 2.15, 0);
+    for (let i = 0; i < 5; i++) box(gen, .04, 1.4, .02, M(0x2f3640), -.8 + i*.4, 1.1, .91);
+    g.add(gen); P("generator", gen);
+    const sc = new THREE.Group(); sc.position.set(4.2, 1.2, 0);
+    cyl(sc, .42, .42, 6, new THREE.MeshStandardMaterial({color:0x9aa3ad, transparent:true, opacity:.45, roughness:.35, metalness:.6, depthWrite:false}), 0, 0, 0, 0, 0, Math.PI/2, 20);
+    const helix = new THREE.Group(); for (let i = 0; i < 26; i++){ const b = box(helix, .06, .7, .14, M(0x4a5058, .4, .7), -2.8 + i*.22, 0, 0); b.rotation.x = i*.5; }
+    sc.add(helix); spin(helix, "x", 5); g.add(sc); P("screw", sc);
+    const fan = new THREE.Group(); fan.position.set(-2.4, 1.6, 0);
+    cyl(fan, 1.0, 1.0, .8, M(0x8d969f, .4, .6), 0, 0, 0, Math.PI/2, 0, 0, 26);
+    const fb = new THREE.Group(); for (let i = 0; i < 6; i++){ const b = box(fb, .08, .8, .2, M(0xd0d5db), Math.cos(i*1.05)*.4, Math.sin(i*1.05)*.4, .42); b.rotation.z = i*1.05; }
+    fan.add(fb); spin(fb, "z", 8); g.add(fan); P("fans", fan);
+    motor(g, -2.4, .7, -1.3, 1.0, .32, 1);
+    const cv = new THREE.Group(); g.add(cv); cv.position.set(0, 0, 1.9);
+    beltSeg(cv, -1, 6, 2.6, 0, .9, TEX.belt, .5);
+    pillow(g, 1.2, 1.2, -.5); pillow(g, 7.2, 1.2, 0);
+    return g;
+  },
+  coal(){
+    const g = new THREE.Group();
+    box(g, 24, .2, 12, M(0x3d3f42, 1, 0), 0, .1, 0);
+    for (const [x, k] of [[-6, "left"], [6, "right"]]){
+      const pile = new THREE.Group();
+      const geo = new THREE.ConeGeometry(4.8, 3.6, 12, 3); const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) if (pos.getY(i) < 1.7){ const f = 1 + (Math.sin(i*12.9898)*.5)*.15; pos.setX(i, pos.getX(i)*f); pos.setZ(i, pos.getZ(i)*f); }
+      geo.computeVertexNormals();
+      const m = add(pile, new THREE.Mesh(geo, M(0x18181a, .95, .1))); m.position.y = 1.8; m.scale.z = .9;
+      pile.position.x = x; g.add(pile); P(k, pile);
+    }
+    for (const x of [-12, 0, 12]) box(g, .4, 3.6, 12, M(0x9ea4aa, 1, 0), x, 1.8, 0);
+    box(g, 24, 3.6, .4, M(0x9ea4aa, 1, 0), 0, 1.8, -6);
+    const lt = new THREE.Group();
+    for (const x of [-6, 6]){ box(lt, .06, 4, .06, M(0x333333), x, 6, 0); box(lt, 1.6, .14, .4, glow(0xfff0c0, 1.2), x, 7.8, 0); }
+    g.add(lt); P("lights", lt);
+    return g;
+  },
+  pack(){
+    const g = new THREE.Group();
+    const ch = new THREE.Group(); g.add(ch);
+    for (const z of [-4.6, -3.4]){
+      box(ch, 12, .5, .25, M(COL.frame), 0, .55, z);
+      const t = TEX.plates.clone(); t.needsUpdate = true; t.repeat.set(10, .3);
+      box(ch, 12, .06, .22, new THREE.MeshStandardMaterial({map:t, roughness:.6, metalness:.5}), 0, .83, z);
+      ANIM.push(dt => { t.offset.x -= .25*dt; });
+    }
+    P("chains", ch);
+    const prods = new THREE.Group(); g.add(prods);
+    const packs = [];
+    for (let i = 0; i < 4; i++){ const pk = dyn(new THREE.Group()); box(pk, 1.8, 1.5, 1.8, M(COL.brick, .9, 0), 0, .75, 0);
+      for (const y of [.4, 1.1]) box(pk, 1.84, .05, 1.84, M(0x222222), 0, y, 0); pk.position.set(-5 + i*3, .86, -4); prods.add(pk); packs.push(pk); }
+    for (let i = 0; i < 3; i++){ const pk = new THREE.Group(); box(pk, 1.8, 1.5, 1.8, M(0xc65f3a, .9, 0), 0, .75, 0); pk.position.set(-3 + i*2.6, 0, 6); prods.add(pk); }
+    P("products", prods);
+    ANIM.push(dt => { for (const pk of packs){ pk.position.x += .35*dt; if (pk.position.x > 6) pk.position.x -= 12; } });
+    for (const z of [-5.3, -2.7]) P("guides", box(g, 12, .2, .08, M(COL.guard), 0, 1.4, z));
+    const wr = new THREE.Group(); box(wr, .3, 3.8, .3, M(COL.green), 0, 1.9, -1.8); box(wr, .3, 3.8, .3, M(COL.green), 0, 1.9, -6.2); box(wr, .3, .3, 4.7, M(COL.green), 0, 3.8, -4);
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.6, .08, 8, 28), M(0x2f343a)); ring2.rotation.y = Math.PI/2; ring2.position.set(0, 1.6, -4); wr.add(dyn(ring2));
+    let wt = 0; ANIM.push(dt => { wt += dt; ring2.position.y = 1.4 + Math.abs(Math.sin(wt*.7))*1.2; });
+    wr.position.x = 3.5; g.add(wr); P("wrapper", wr);
+    const rb = dyn(new THREE.Group()); rb.position.set(-3, 0, 1.6);
+    cyl(rb, .8, 1.0, .6, M(COL.orange, .45, .3), 0, .3, 0, 0, 0, 0, 20);
+    const turn = new THREE.Group(); turn.position.y = .6; rb.add(turn);
+    cyl(turn, .5, .5, .9, M(COL.orange, .45, .3), 0, .45, 0, 0, 0, 0, 18);
+    const a1 = new THREE.Group(); a1.position.y = 1; turn.add(a1); box(a1, .42, 2.6, .42, M(COL.orange, .45, .3), 0, 1.3, 0);
+    const a2 = new THREE.Group(); a2.position.y = 2.6; a1.add(a2); box(a2, 2.6, .36, .36, M(COL.orange, .45, .3), 1.3, 0, 0); box(a2, 1.2, .3, 1.2, M(0x333333), 2.6, -.35, 0);
+    g.add(rb); P("robot", rb);
+    let rt = 0; ANIM.push(dt => { rt += dt; turn.rotation.y = -.6 + Math.sin(rt*.7)*1.3; a1.rotation.z = -.2 + Math.sin(rt*1.4)*.2; });
+    cabinet(g, 5.5, 0, 2.6, 0, 2.1);
+    for (const x of [-4, 0, 4]) sensor(g, x, 1.2, -2.6);
+    return g;
+  },
+};
+
+// ═══ Объединение неподвижных деталей ═══
+// Две тысячи отдельных деталей — это две тысячи вызовов отрисовки, и
+// телефон не тянет. Неподвижное у каждого станка склеиваем по узлу и
+// материалу: подсветка и подписи работают по-прежнему по узлам.
+function mergeGeoms(geos){
+  let n = 0; for (const g of geos) n += g.attributes.position.count;
+  const pos = new Float32Array(n*3), nor = new Float32Array(n*3), uv = new Float32Array(n*2);
+  let o = 0;
+  for (const g of geos){
+    pos.set(g.attributes.position.array, o*3); nor.set(g.attributes.normal.array, o*3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, o*2);
+    o += g.attributes.position.count;
+  }
+  const m = new THREE.BufferGeometry();
+  m.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  m.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+  m.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  m.computeBoundingSphere(); m.computeBoundingBox();
+  return m;
+}
+function flipWinding(g){
+  for (const name of ["position", "normal", "uv"]){
+    const a = g.attributes[name]; if (!a) continue;
+    const s = a.itemSize, arr = a.array, tmpA = new Float32Array(s);
+    for (let i = 0; i < a.count; i += 3){
+      const i1 = (i + 1)*s, i2 = (i + 2)*s;
+      tmpA.set(arr.subarray(i1, i1 + s)); arr.copyWithin(i1, i2, i2 + s); arr.set(tmpA, i2);
+    }
+  }
+}
+function optimize(root){
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map(), remove = [];
+  root.traverse(o => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    for (let a = o; a && a !== root; a = a.parent) if (a.userData.dyn) return;
+    const unit = o.userData.unit, key = (unit ? unit.id : "") + "|" + (o.userData.part || "") + "|" + o.material.uuid;
+    const mtx = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(mtx);
+    if (mtx.determinant() < 0) flipWinding(g);
+    if (!buckets.has(key)) buckets.set(key, {mat:o.material, unit, part:o.userData.part, geos:[], shadow:o.castShadow});
+    buckets.get(key).geos.push(g);
+    remove.push(o);
+  });
+  for (const o of remove) o.parent.remove(o);
+  for (const b of buckets.values()){
+    const mesh = new THREE.Mesh(mergeGeoms(b.geos), b.mat);
+    mesh.castShadow = b.shadow; mesh.receiveShadow = true;
+    mesh.userData = {unit:b.unit, part:b.part};
+    root.add(mesh);
+  }
+}
+// после объединения узлы станков — это уже новые объекты
+function rebuildParts(){
+  UNITS.forEach(u => u.parts = {});
+  scene.traverse(o => { const u = o.userData.unit, k = o.userData.part; if (o.isMesh && u && k){ (u.parts[k] = u.parts[k] || []).push(o); } });
+}
+
+// ═══ Мир ═══
+function init(){
+  if (!window.THREE || !THREE.OrbitControls){ $("plant").insertAdjacentHTML("beforeend", '<div class="fail">3D не загрузился: браузер не смог открыть библиотеку Three.js. Обновите страницу.</div>'); $("loading").remove(); return; }
+  const canvas = $("scene");
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth <= 768 ? 1.5 : 1.75));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(42, 1, .3, 700);
+  controls = new THREE.OrbitControls(camera, canvas);
+  Object.assign(controls, {enableDamping:true, dampingFactor:.08, maxPolarAngle:Math.PI*.48, minDistance:3, maxDistance:240, screenSpacePanning:false});
+  raycaster = new THREE.Raycaster();
+  makeTextures();
+  buildWorld();
+  resize(); addEventListener("resize", resize);
+  viewAll(true); bindPicking(canvas);
+  $("loading").remove();
+  let last = performance.now();
+  (function loop(now){
+    requestAnimationFrame(loop);
+    const dt = Math.min(.05, (now - last)/1000); last = now;
+    if (RUN) for (const f of ANIM) f(dt);
+    tick(dt, now);
+  })(last);
+}
+
+function buildWorld(){
+  const dark = isDark();
+  scene.background = new THREE.Color(dark ? 0x0e151d : 0xdde4ec);
+  scene.fog = new THREE.Fog(scene.background, 170, 420);
+  scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x1c242d : 0x8e98a3, dark ? .55 : .7));
+  scene.add(new THREE.AmbientLight(0xffffff, dark ? .12 : .18));
+  const sun = new THREE.DirectionalLight(0xfff6ea, dark ? .75 : 1.0);
+  sun.position.set(-45, 95, 55); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0004;
+  Object.assign(sun.shadow.camera, {left:-115, right:115, top:75, bottom:-75, near:1, far:280}); scene.add(sun);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(230, 125), new THREE.MeshStandardMaterial({map:TEX.floor, roughness:.95}));
+  floor.rotation.x = -Math.PI/2; floor.position.set(20, 0, 9); floor.receiveShadow = true; scene.add(floor);
+
+  // корпус цеха: колонны и фермы без крыши — чтобы было видно внутрь
+  const shell = new THREE.Group();
+  for (let x = -68; x <= 106; x += 14){
+    for (const z of [-31, 49]) box(shell, .7, 13, .7, M(0x8e969f, .7, .4), x, 6.5, z);
+  }
+  box(shell, 176, .5, .5, M(0x9aa2ab), 19, 13, -31); box(shell, 176, .5, .5, M(0x9aa2ab), 19, 13, 49);
+  box(shell, 176, 1.4, .3, M(0xa9b0b8, .9, 0), 19, .7, -31); box(shell, 176, 1.4, .3, M(0xa9b0b8, .9, 0), 19, .7, 49);
+  scene.add(shell); optimize(shell);
+
+  const lineM = new THREE.MeshBasicMaterial({color:0xe6c229});
+  for (const [x0, x1, z] of [[-66, 104, 16.5], [-66, 34, -14.5], [34, 104, 32]]){
+    const l = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, .25), lineM); l.rotation.x = -Math.PI/2; l.position.set((x0 + x1)/2, .03, z); scene.add(l);
+  }
+  for (const z of ZONES){
+    const w = z.x1 - z.x0, d = z.z1 - z.z0;
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({color:z.color, roughness:1, transparent:true, opacity:dark ? .28 : .2, depthWrite:false}));
+    pad.rotation.x = -Math.PI/2; pad.position.set(z.x0 + w/2, .04, z.z0 + d/2); pad.receiveShadow = true; scene.add(pad);
+    const el = document.createElement("div"); el.className = "zlbl"; el.textContent = z.name; $("labels").appendChild(el);
+    zoneLabels.push({el, pos:new THREE.Vector3(z.x0 + w/2, .2, z.z1 - 1.6)});
+  }
+
+  // конвейеры цеха — это пункт «Конвейера» из чек-листа
+  U = BY_ID.conv;
+  const CONV = [[[-52.2,-8],[-49,-8],[-49,-1],[-47.3,-1]], [[-52.2,6],[-49,6]], [[-42.6,-1],[-39.6,-1]], [[-34.4,-1],[-31.8,-1]],
+    [[-26.2,-1],[-23.8,-1]], [[-18.2,-1],[-16.4,-1]], [[-9.6,-1],[-6.3,-1]], [[-1.7,-1],[1.8,-1]], [[8.3,-1],[12.2,-1]], [[33.2,-1],[33.2,9],[33.6,9]]];
+  const convRoot = new THREE.Group(); scene.add(convRoot);
+  for (const path of CONV) for (let k = 0; k < path.length - 1; k++) conveyor(convRoot, path[k], path[k+1], k === path.length - 2);
+  U = null;
+  optimize(convRoot); pickables.push(convRoot);
+  flow(CONV);
+
+  for (const u of UNITS){
+    U = u;
+    const g = u.model ? MODELS[u.model](u) : new THREE.Group();
+    U = null;
+    g.position.set(...u.pos);
+    g.traverse(o => { if (o.isMesh){ o.userData.unit = o.userData.unit || u; o.castShadow = o.receiveShadow = !o.material.transparent; } });
+    scene.add(g); optimize(g);
+    // движущиеся узлы склеиваем внутри себя: крутятся целиком
+    const dyns = []; g.traverse(o => { if (o !== g && o.userData.dyn && !o.isMesh) dyns.push(o); });
+    dyns.forEach(optimize);
+    u.group = g; pickables.push(g);
+    const el = document.createElement("button"); el.className = "lbl"; el.type = "button";
+    el.innerHTML = `<span class="n"></span><span>${esc(u.name)}</span>`;
+    el.addEventListener("click", () => select(u, true));
+    $("labels").appendChild(el);
+    u.label = el; u.anchor = new THREE.Vector3(u.pos[0], u.top || 3, u.pos[2]);
+  }
+  cars();
+  rebuildParts();
+
+  ring = new THREE.Mesh(new THREE.RingGeometry(3.2, 3.7, 56), new THREE.MeshBasicMaterial({color:0x3b82f6, transparent:true, opacity:.85, side:THREE.DoubleSide, depthWrite:false}));
+  ring.rotation.x = -Math.PI/2; ring.visible = false; scene.add(ring);
+}
+
+function conveyor(root, a, b, last){
+  const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
+  if (len < .4) return;
+  const g = new THREE.Group();
+  beltSeg(g, -len/2, len/2, 1.25, 0, .85, TEX.belt, .9);
+  if (len > 3){ motor(g, len/2 - .9, .75, .95, .8, .26, -1); pillow(g, len/2, 1.1, -.6, .7); pillow(g, len/2, 1.1, .6, .7); }
+  if (last) limitSw(g, len/2 - .3, 1.45, -.55);
+  P("scraper", box(g, .08, .08, .8, M(COL.guard), len/2 + .15, 1.0, 0));
+  g.position.set(a[0] + dx/2, 0, a[1] + dz/2); g.rotation.y = -Math.atan2(dz, dx);
+  g.traverse(o => { if (o.isMesh){ o.userData.unit = BY_ID.conv; } });
+  root.add(g);
+}
+
+// комья массы едут по лентам
+function flow(paths){
+  const segs = []; for (const p of paths) for (let k = 0; k < p.length - 1; k++) segs.push([p[k], p[k+1]]);
+  const per = 5, n = segs.length*per;
+  const inst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(.17, 0), M(COL.clay, .95, 0), n);
+  inst.castShadow = true; scene.add(inst);
+  const st = [], o = new THREE.Object3D();
+  segs.forEach(s => { for (let k = 0; k < per; k++) st.push({s, t:k/per, r:Math.random()*6}); });
+  const draw = () => { st.forEach((p, i) => { const [a, b] = p.s; o.position.set(a[0] + (b[0] - a[0])*p.t, 1.42, a[1] + (b[1] - a[1])*p.t); o.rotation.set(p.r, p.r*2, 0); o.scale.setScalar(.8 + (p.r % 1)*.6); o.updateMatrix(); inst.setMatrixAt(i, o.matrix); }); inst.instanceMatrix.needsUpdate = true; };
+  draw();
+  ANIM.push(dt => { for (const p of st){ const [a, b] = p.s; const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; p.t += .9*dt/len; if (p.t > 1) p.t -= 1; } draw(); });
+}
+
+// вагонетки: сушилка, потом печь
+function cars(){
+  const lines = [{z:9, x0:34, x1:76, n:9, unit:"dryer", fired:false}, {z:23, x0:36, x1:90, n:11, unit:"kiln", fired:true}];
+  for (const L of lines){
+    const arr = [];
+    for (let i = 0; i < L.n; i++){
+      const g = new THREE.Group(); box(g, 2.6, .45, 2.9, M(0x34383d, .6, .5), 0, .65, 0);
+      for (const x of [-.9, .9]) for (const z of [-1.5, 1.5]) cyl(g, .2, .2, .12, M(0x111111), x, .4, z, Math.PI/2, 0, 0, 12);
+      for (let k = 0; k < 3; k++) box(g, 2.2, .45, 2.4, M(L.fired ? 0xc65f3a : 0xb98a6a, .95, 0), 0, 1.13 + k*.48, 0);
+      g.position.set(L.x0 + i*(L.x1 - L.x0)/L.n, 0, L.z); scene.add(g); arr.push(g);
+      g.traverse(o => { if (o.isMesh){ o.userData.unit = BY_ID[L.unit]; } }); optimize(g);
+    }
+    ANIM.push(dt => { for (const c of arr){ c.position.x += .9*dt; if (c.position.x > L.x1) c.position.x -= (L.x1 - L.x0); } });
+  }
+}
+
+function fitStage(){
+  // сцена занимает всё место под шапкой; на телефоне — над нижней панелью
+  const st = $("plant"), top = st.getBoundingClientRect().top + scrollY;
+  const reserve = innerWidth <= 768 ? 84 : 14;
+  st.style.height = Math.max(420, innerHeight - top - reserve) + "px";
+}
+function resize(){
+  if (!renderer) return;
+  fitStage();
+  const rc = $("plant").getBoundingClientRect();
+  const w = W = Math.round(rc.width), h = H = Math.round(rc.height);
+  renderer.setSize(w, h, false); camera.aspect = w/h;
+  const panel = $("panel").getBoundingClientRect();
+  if (innerWidth > 768){ camera.fov = 42; const off = panel.width + 24; camera.setViewOffset(w + off, h, off, 0, w, h); }
+  else { const off = Math.min(panel.height, h*.5) + 8; camera.fov = 2*Math.atan(Math.tan(21*Math.PI/180)*(h + off)/h)*180/Math.PI; camera.setViewOffset(w, h + off, 0, off, w, h); }
+  camera.updateProjectionMatrix();
+}
+
+// ── камера ──
+let fly = null;
+function flyTo(target, dist, instant){
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  if (!isFinite(dir.x) || dir.lengthSq() < .1) dir.set(.55, .7, .9).normalize();
+  dir.y = Math.max(dir.y, .45); dir.normalize();
+  const endPos = target.clone().add(dir.multiplyScalar(dist));
+  if (instant || matchMedia("(prefers-reduced-motion: reduce)").matches){ controls.target.copy(target); camera.position.copy(endPos); controls.update(); fly = null; return; }
+  fly = {t:0, fromT:controls.target.clone(), toT:target.clone(), fromP:camera.position.clone(), toP:endPos};
+}
+function viewAll(instant){
+  const narrow = innerWidth <= 768, target = new THREE.Vector3(narrow ? 18 : 22, 0, narrow ? 8 : 14);
+  const pos = new THREE.Vector3(target.x - 26, narrow ? 160 : 98, target.z + (narrow ? 125 : 82));
+  if (instant){ camera.position.copy(pos); controls.target.copy(target); controls.update(); return; }
+  fly = {t:0, fromT:controls.target.clone(), toT:target, fromP:camera.position.clone(), toP:pos};
+}
+
+const tmp = new THREE.Vector3(), box3 = new THREE.Box3();
+let partLabels = [];
+function tick(dt, now){
+  if (fly){
+    fly.t = Math.min(1, fly.t + dt*1.8);
+    const k = fly.t < .5 ? 2*fly.t*fly.t : 1 - Math.pow(-2*fly.t + 2, 2)/2;
+    controls.target.lerpVectors(fly.fromT, fly.toT, k); camera.position.lerpVectors(fly.fromP, fly.toP, k);
+    if (fly.t >= 1) fly = null;
+  }
+  controls.update();
+  if (ring.visible) ring.material.opacity = .5 + Math.sin(now/300)*.3;
+  const pulse = .75 + Math.sin(now/220)*.55;
+  for (const h of HOT) h.material.emissiveIntensity = pulse;
+  renderer.render(scene, camera);
+  placeLabels();
+}
+
+function project(v){ tmp.copy(v).project(camera); return {x:(tmp.x*.5 + .5)*W, y:(-tmp.y*.5 + .5)*H, vis:tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1}; }
+function placeLabels(){
+  const camDist = camera.position.distanceTo(controls.target);
+  // названия станков без наложений: важные (выбранный, на маршруте) — первыми
+  const taken = [];
+  const units = UNITS.slice().sort((a, b) => (b === SELECTED) - (a === SELECTED) || b.label.classList.contains("on-route") - a.label.classList.contains("on-route"));
+  for (const u of units){
+    const p = project(u.anchor), routed = ROUTE_KIND && u.label.classList.contains("on-route");
+    let show = p.vis && (camDist < (innerWidth <= 768 ? 250 : 190) || u === SELECTED || routed) && !(SELECTED === u && camDist < 26 && partLabels.length);
+    if (show){
+      const w = u.lw || (u.lw = u.name.length*6.8 + (routed ? 46 : 22)), r = {x0:p.x - w/2, x1:p.x + w/2, y0:p.y - 26, y1:p.y};
+      if (u !== SELECTED && taken.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) show = false;
+      else taken.push(r);
+    }
+    u.label.style.display = show ? "" : "none";
+    if (show){ u.label.style.transform = `translate(${p.x}px,${p.y}px) translate(-50%,-100%)`; u.label.style.zIndex = u === SELECTED ? 5 : routed ? 3 : 1; }
+  }
+  for (const z of zoneLabels){ const p = project(z.pos); z.el.style.display = p.vis ? "" : "none"; if (p.vis) z.el.style.transform = `translate(${p.x}px,${p.y}px) translate(-50%,-50%)`; }
+  const placed = [], focus = HOT.length > 0;
+  const order = partLabels.slice().sort((a, b) => b.el.classList.contains("hot") - a.el.classList.contains("hot"));
+  for (const pl of order){
+    const hot = pl.el.classList.contains("hot");
+    const p = project(pl.pos);
+    let show = p.vis && camDist < 48 && (!focus || hot);
+    if (show){
+      const w = pl.w || (pl.w = Math.max(60, pl.el.textContent.length*6.6 + 24)), h = 22;
+      const r = {x0:p.x - w/2, x1:p.x + w/2, y0:p.y - h/2, y1:p.y + h/2};
+      if (placed.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) show = false;
+      else placed.push(r);
+    }
+    pl.el.style.display = show ? "" : "none";
+    if (show) pl.el.style.transform = `translate(${p.x}px,${p.y}px) translate(-50%,-50%)`;
+  }
+}
+
+function bindPicking(canvas){
+  let down = null; const pt = new THREE.Vector2();
+  canvas.addEventListener("pointerdown", e => { down = {x:e.clientX, y:e.clientY}; fly = null; });
+  canvas.addEventListener("pointerup", e => {
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+    const r = canvas.getBoundingClientRect();
+    pt.set((e.clientX - r.left)/r.width*2 - 1, -(e.clientY - r.top)/r.height*2 + 1);
+    raycaster.setFromCamera(pt, camera);
+    const hit = raycaster.intersectObjects(pickables, true).find(h => h.object.userData.unit);
+    if (!hit) return;
+    const u = hit.object.userData.unit, part = hit.object.userData.part;
+    if (u === SELECTED && part && u.parts[part] && PART[part]) showPart(part);
+    else select(u, true);
+  });
+}
+
+// ═══ Узлы: подписи и подсветка ═══
+function centerOf(objs){ box3.makeEmpty(); for (const o of objs){ o.updateWorldMatrix(true, true); box3.expandByObject(o); } return {c:box3.getCenter(new THREE.Vector3()), size:box3.getSize(new THREE.Vector3()), top:box3.max.y}; }
+function clearHot(){ for (const h of HOT) h.mesh.material = h.orig; HOT = []; partLabels.forEach(p => p.el.classList.remove("hot")); }
+function highlight(kinds){
+  clearHot();
+  const u = SELECTED; if (!u) return;
+  for (const k of kinds) for (const o of u.parts[k] || []) o.traverse(m => {
+    if (!m.isMesh) return;
+    const orig = m.material, c = orig.clone(); c.emissive = new THREE.Color(0xff5a00); c.emissiveIntensity = 1; if (c.map) c.map = orig.map;
+    m.material = c; HOT.push({mesh:m, orig, material:c});
+  });
+  partLabels.forEach(p => p.el.classList.toggle("hot", kinds.includes(p.kind)));
+}
+function buildPartLabels(u){
+  partLabels.forEach(p => p.el.remove()); partLabels = [];
+  if (!u || u.id === "conv") return;
+  for (const [kind, objs] of Object.entries(u.parts)){
+    if (!PART[kind] || !objs.length) continue;
+    const {c, top} = centerOf(objs.slice(0, 6));
+    const el = document.createElement("button"); el.className = "plbl"; el.type = "button"; el.textContent = PART[kind].n;
+    el.addEventListener("click", () => showPart(kind));
+    $("labels").appendChild(el);
+    partLabels.push({el, kind, pos:new THREE.Vector3(c.x, Math.min(top + .25, c.y + 1.2), c.z)});
+  }
+}
+let ACTIVE = {kind:null, item:null};
+function showPart(kind, item){
+  ACTIVE = {kind, item:item || null};
+  const kinds = item ? partsFor(item, SELECTED) : [kind];
+  highlight(kinds);
+  const objs = kinds.flatMap(k => SELECTED.parts[k] || []);
+  if (objs.length && SELECTED.id !== "conv"){ const {c, size} = centerOf(objs); const dist = Math.max(7, Math.min(40, Math.max(size.x, size.z)*1.6 + 5)); flyTo(c, dist*(camera.aspect < 1 ? 1.6 : 1)); }
+  renderPanel();
+}
+
+// ═══ Панель ═══
+function zoneDot(name){ const z = ZONES.find(z => z.name === name); return z ? "#" + z.color.toString(16).padStart(6, "0") : "#888"; }
+function unitSize(u){ return {dryer:20, kiln:24, compressor:8, coal:13, pack:9, bunkers:6, press:7.5, mixer:5, lightpanel:4, feeder:5, forming:6}[u.model] || 4.6; }
+function select(u, fly2 = true){
+  SELECTED = u; ACTIVE = {kind:null, item:null}; clearHot();
+  for (const x of UNITS) x.label.classList.toggle("sel", x === u);
+  const s = unitSize(u);
+  ring.visible = u.id !== "conv"; ring.position.set(u.pos[0], .08, u.pos[2]); ring.scale.setScalar(s/3.5);
+  buildPartLabels(u);
+  renderPanel(); resize();
+  if (u.id === "conv"){ highlight(["belt"]); if (fly2) viewAll(false); return; }
+  if (fly2) flyTo(new THREE.Vector3(u.pos[0], 1.5, u.pos[2]), Math.max(16, s*2.4)*(camera.aspect < 1 ? 1.9 : 1));
+}
+function checksHTML(list){
+  if (!list || !list.length) return `<p class="none">Этого пункта нет в его чек-листе.</p>`;
+  return `<div class="checks">${list.map(it => {
+    const has = partsFor(it, SELECTED).length, on = ACTIVE.item === it;
+    return `<button class="ck" ${has ? `data-item="${esc(it)}"` : "disabled"} aria-pressed="${on}"><span class="mk">✓</span><span>${esc(it)}</span>${has ? `<span class="go">${on ? "◉ показано" : "показать"}</span>` : ""}</button>`;
+  }).join("")}</div>`;
+}
+function renderPanel(){
+  const head = $("panelHead"), body = $("panelBody");
+  $("panel").classList.remove("min");
+  if (!SELECTED){
+    const r = ROUTE_KIND;
+    head.innerHTML = `<div class="crumb">${r ? (r === "el" ? "Маршрут дежурного электрика" : "Маршрут дежурного слесаря") : "Как пользоваться"}</div><h2>${r ? `${ROUTE[r].length} точек обхода` : "Где что стоит в цехе"}</h2>`;
+    body.innerHTML = `<p class="intro">${r ? "Номера на станках — порядок обхода, как в чек-листе. «Начать обход» проведёт камеру по всем точкам."
+      : "Станки из чек-листов дежурных. Нажмите на станок: увидите, из чего он состоит, а нажатие на пункт проверки подсветит нужное место на станке."}</p>
+      ${r ? `<div class="step"><button class="btn primary" id="startRoute" style="flex:1">Начать обход →</button></div>` : ""}
+      <div class="legend"><span><span class="dot" style="background:var(--el)"></span> проверяет электрик</span><span><span class="dot" style="background:var(--sl)"></span> проверяет слесарь</span><span><span class="dot" style="background:var(--hl)"></span> подсвеченный узел</span></div>
+      <div class="list">${listHTML()}</div>`;
+    $("startRoute")?.addEventListener("click", () => select(BY_NAME[ROUTE[r][0]]));
+    body.querySelectorAll("[data-u]").forEach(b => b.addEventListener("click", () => select(BY_NAME[b.dataset.u])));
+    return;
+  }
+  const u = SELECTED, r = ROUTE_KIND, idx = r ? ROUTE[r].indexOf(u.name) : -1;
+  head.innerHTML = `<button class="close" id="closeSel" aria-label="Закрыть">×</button>
+    <div class="crumb"><span class="dot" style="background:${zoneDot(u.zone)}"></span> ${esc(u.zone)}${idx >= 0 ? ` · точка ${idx + 1} из ${ROUTE[r].length}` : ""}</div>
+    <h2>${esc(u.name)}${u.code && !u.name.includes(u.code) ? `<span class="code">${esc(u.code)}</span>` : ""}</h2>
+    ${r ? `<div class="step"><button class="btn" id="prevStep" ${idx <= 0 ? "disabled" : ""}>← Назад</button>
+      <span class="of">${idx >= 0 ? `${idx + 1} / ${ROUTE[r].length}` : "не на маршруте"}</span>
+      <button class="btn primary" id="nextStep" ${idx < 0 || idx >= ROUTE[r].length - 1 ? "disabled" : ""}>Дальше →</button></div>` : ""}`;
+  const kinds = Object.keys(u.parts).filter(k => PART[k] && u.parts[k].length);
+  const info = ACTIVE.kind && !ACTIVE.item ? PART[ACTIVE.kind] : null;
+  const itemInfo = ACTIVE.item ? partsFor(ACTIVE.item, u).map(k => PART[k]) : [];
+  const facts = u.facts ? `<dl class="facts">${Object.entries(u.facts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
+  const elB = `<h3><span class="dot" style="background:var(--el)"></span> Проверяет электрик</h3>${checksHTML(EL[u.name])}`;
+  const slB = `<h3><span class="dot" style="background:var(--sl)"></span> Проверяет слесарь</h3>${checksHTML(SL[u.name])}`;
+  body.innerHTML = `
+    <h3>Что это</h3><p>${esc(u.what)}</p>
+    <h3>Где найти</h3><p>${esc(u.where)}</p>${facts}
+    ${kinds.length ? `<h3>Из чего состоит</h3><div class="parts">${kinds.map(k => `<button class="pchip" data-part="${k}" aria-pressed="${ACTIVE.kind === k && !ACTIVE.item}">${esc(PART[k].n)}</button>`).join("")}</div>` : ""}
+    ${info ? `<div class="pinfo"><b>${esc(info.n)}</b>${esc(info.t)}</div>` : ""}
+    ${itemInfo.length ? `<div class="pinfo"><b>«${esc(ACTIVE.item)}» — где смотреть</b>${itemInfo.map(p => `${esc(p.n)}: ${esc(p.t)}`).join("<br>")}</div>` : ""}
+    ${r === "sl" ? slB + elB : elB + slB}`;
+  $("closeSel").addEventListener("click", () => { SELECTED = null; clearHot(); ring.visible = false; buildPartLabels(null); UNITS.forEach(x => x.label.classList.remove("sel")); renderPanel(); resize(); });
+  $("prevStep")?.addEventListener("click", () => select(BY_NAME[ROUTE[r][idx - 1]]));
+  $("nextStep")?.addEventListener("click", () => select(BY_NAME[ROUTE[r][idx + 1]]));
+  body.querySelectorAll("[data-part]").forEach(b => b.addEventListener("click", () => showPart(b.dataset.part)));
+  body.querySelectorAll("[data-item]").forEach(b => b.addEventListener("click", () => showPart(null, b.dataset.item)));
+}
+function listHTML(){
+  let h = "", last = null;
+  for (const u of UNITS){
+    if (ROUTE_KIND && !ROUTE[ROUTE_KIND].includes(u.name)) continue;
+    if (u.zone !== last){ h += `<div class="zone"><span class="dot" style="background:${zoneDot(u.zone)}"></span> ${esc(u.zone)}</div>`; last = u.zone; }
+    const n = ROUTE_KIND ? ROUTE[ROUTE_KIND].indexOf(u.name) + 1 : 0;
+    h += `<button data-u="${esc(u.name)}">${n ? `<b style="min-width:22px;font-variant-numeric:tabular-nums">${n}.</b>` : ""}<span>${esc(u.name)}</span>
+      <span class="tags">${EL[u.name] ? '<span class="tag el">Э</span>' : ""}${SL[u.name] ? '<span class="tag sl">С</span>' : ""}</span></button>`;
+  }
+  return h;
+}
+function setRoute(kind){
+  ROUTE_KIND = kind;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.route === kind));
+  $("plant").classList.toggle("route-el", kind === "el"); $("plant").classList.toggle("route-sl", kind === "sl");
+  for (const u of UNITS){ if (!u.label) continue; const i = kind ? ROUTE[kind].indexOf(u.name) : -1; u.label.classList.toggle("on-route", i >= 0); u.label.querySelector(".n").textContent = i >= 0 ? i + 1 : ""; }
+  if (routeLine){ scene.remove(routeLine); routeLine = null; }
+  if (kind && scene){
+    UNITS.forEach(u => u.lw = 0);
+    const pts = ROUTE[kind].map(n => BY_NAME[n]).filter(Boolean).map(u => new THREE.Vector3(u.pos[0], .3, u.pos[2] + (u.id.endsWith("hop") ? -2.4 : 0)));
+    routeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({color:kind === "el" ? 0xf0b24c : 0x5b9cff, dashSize:1.6, gapSize:.9}));
+    routeLine.computeLineDistances(); scene.add(routeLine);
+  }
+  if (SELECTED && kind && !ROUTE[kind].includes(SELECTED.name)){ SELECTED = null; clearHot(); if (ring) ring.visible = false; buildPartLabels(null); UNITS.forEach(x => x.label && x.label.classList.remove("sel")); }
+  renderPanel();
+}
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => setRoute(b.dataset.route)));
+$("viewAll").addEventListener("click", () => { if (renderer) viewAll(false); });
+const motionBtn = $("motion");
+function paintMotion(){ motionBtn.textContent = RUN ? "❚❚ Пауза" : "▶ Движение"; motionBtn.setAttribute("aria-label", RUN ? "Остановить движение" : "Запустить движение"); }
+motionBtn.addEventListener("click", () => { RUN = !RUN; paintMotion(); });
+paintMotion();
+$("panelHead").addEventListener("click", e => { if (innerWidth <= 768 && !e.target.closest("button")){ $("panel").classList.toggle("min"); resize(); } });
+
+initLayout().then(async () => {
+  let T;
+  try { T = await ACAI.get('/api/duty-round/template'); }
+  catch {
+    $("loading").textContent = "Не удалось загрузить чек-листы обхода. Обновите страницу.";
+    return;
+  }
+  loadLists(T);
+  renderPanel();
+  fitStage();
+  init();
+  // переход из «Обхода дежурного»: сразу к станку и, если указан, к пункту
+  const q = new URLSearchParams(location.search), u = BY_NAME[q.get("unit") || ""];
+  if (u && renderer){ select(u, true); const item = q.get("item"); if (item && partsFor(item, u).length) setTimeout(() => showPart(null, item), 650); }
+});
+</script>
+</body>
+</html>

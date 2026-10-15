@@ -7,7 +7,7 @@
 <title>Настройки — ACAI</title>
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
-<link rel="stylesheet" href="/static/acai.css?v=63">
+<link rel="stylesheet" href="/static/acai.css?v=65">
 <style>
 .user-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--surface-2);margin-bottom:6px;}
 .u-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
@@ -174,9 +174,9 @@
 </div>
 <div class="overlay hidden" id="_overlay"><div class="modal" id="_modal" style="width:480px;max-width:95vw"></div></div>
 
-<script src="/static/icons.js?v=6"></script>
-<script src="/static/acai_layout.js?v=64"></script>
-<script src="/static/mobile_nav_v2.js?v=6"></script>
+<script src="/static/icons.js?v=7"></script>
+<script src="/static/acai_layout.js?v=67"></script>
+<script src="/static/mobile_nav_v2.js?v=7"></script>
 <script>
 // Должности — те же слова, что в ROLE_LABELS на сервере
 // (backend/api/main.py). Начальника производства тут не было вовсе, и
@@ -293,8 +293,8 @@ async function loadSensorsWatch(role){
   }catch{ watchUsers=[]; }
 
   document.getElementById('sensorsWatchState').textContent =
-    health.ok ? 'данные идут'
-    : health.state==='never' ? 'показаний не было ни разу'
+    health.ok ? 'сигнал активен — данные идут'
+    : health.state==='never' ? 'сигнал не активен — показаний не было ни разу'
     : health.text;
 
   renderSensorsWatch();
