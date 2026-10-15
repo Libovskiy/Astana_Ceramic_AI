@@ -8,7 +8,29 @@
 <script src="/static/theme.js?v=2"></script>
 <link rel="stylesheet" href="/static/fonts.css?v=1">
 <link rel="stylesheet" href="/static/acai.css?v=65">
+<script src="/static/sensor-names.js"></script>
+<script>
+  /* Развёрнуто с «Главной» (?embed=1) — убираем меню и шапку: окно
+     подписано снаружи, а место лучше отдать цеху. Тема приходит
+     параметром от «Главной», как у карты линии. */
+  (function () {
+    var q;
+    try { q = new URLSearchParams(location.search); } catch (e) { q = null; }
+    var theme = q && q.get('theme');
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.style.colorScheme = theme;
+    }
+    if (q && q.get('embed') === '1') document.documentElement.classList.add('acai-embed');
+  })();
+</script>
 <style>
+/* Режим «в окне»: без меню и шапки, сцена во весь экран. */
+.acai-embed .sidebar, .acai-embed .topbar, .acai-embed .mobile-nav { display:none !important; }
+.acai-embed .main-content { margin:0 !important; padding:0 !important; }
+.acai-embed .page.plant-page { padding:0 !important; }
+.acai-embed .plant { border-radius:0; border:0; }
+
 /* «Цех в 3D». Цвета — из темы сайта (acai.css), своё только для
    подсветки узла и маршрутов электрика/слесаря. */
 .plant{--fg:var(--text);--muted:var(--text-dim);--line:var(--border);--on-accent:#fff;--hl:#e8590c;--el:#b7791f;--sl:#2f6fb5;
@@ -41,6 +63,15 @@
 .seg button[data-route="el"][aria-pressed="true"]{background:var(--el);color:#14110a;}
 .seg button[data-route="sl"][aria-pressed="true"]{background:var(--sl);color:#0a1220;}
 .views{pointer-events:auto;display:flex;gap:6px;}
+/* Показания с панели — тонкой строкой над подсказкой, чтобы не
+   спорить ни с подписями станков, ни с карточкой справа. */
+.live{position:absolute;left:12px;bottom:46px;z-index:2;display:flex;flex-wrap:wrap;gap:4px 14px;
+  max-width:min(620px,70%);padding:7px 12px;border-radius:10px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:0 2px 10px rgb(0 0 0 / .18);font-size:12px;color:var(--text-dim);}
+.live[hidden]{display:none;}
+.live b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;}
+.live .warnText{color:var(--warn);}
+@media (max-width:768px){ .live{display:none;} }
 .iconbtn{border:0;background:var(--surface);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);font-size:13px;font-weight:600;}
 .panel{z-index:10;position:absolute;top:12px;right:12px;bottom:12px;width:min(390px,42vw);background:var(--surface);
   border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;}
@@ -132,6 +163,10 @@
           <div class="panel-h" id="panelHead"></div>
           <div class="panel-b" id="panelBody"></div>
         </aside>
+        <!-- Живых показаний у завода четыре: загрузка двух бункеров и
+             частоты питателей глины и песка. Они же на «Главной» и на
+             карте линии; остальные станки панель не присылает. -->
+        <div class="live" id="live" hidden></div>
         <div class="hint">Крутить — зажать и тянуть · Приблизить — колесо или два пальца · Нажмите на станок, потом на его узел</div>
       </div>
     </div>
@@ -229,58 +264,68 @@ function partsFor(item, u){
 }
 
 // ═══ Участки и станки ═══
+// Планировка — по заводским схемам, та же, что была в
+// «Производственной цепочке»: главный корпус с печью и сушилками на
+// западе, формовка в середине, разгрузка и упаковка на юго-востоке,
+// корпус Оптимы и бункеров восточнее, массаподготовка — отдельным
+// корпусом за ним, склад ГП и уголь на улице.
 const ZONES = [
-  {name:"Массаподготовка", x0:-66, x1:-9, z0:-17, z1:15, color:0xb08850},
-  {name:"Прессование и формовка", x0:-9, x1:34, z0:-14, z1:7, color:0x5a7fb0},
-  {name:"Сушка и обжиг", x0:34, x1:88, z0:3, z1:31, color:0xb06048},
-  {name:"Упаковка", x0:88, x1:104, z0:8, z1:34, color:0x4f9a6a},
-  {name:"Компрессорная", x0:2, x1:18, z0:-29, z1:-16, color:0x6c70a8},
-  {name:"Склад угля", x0:62, x1:88, z0:33, z1:47, color:0x505050},
+  {name:"Массаподготовка", x0:72, x1:132, z0:33, z1:60, color:0xb08850},
+  {name:"Оптима", x0:47, x1:69.5, z0:13, z1:57, color:0x7a8fb8},
+  {name:"Бункеры 1 и 2", x0:47.2, x1:60.4, z0:48.4, z1:55.4, color:0x4f80a8},
+  {name:"Формовка", x0:0, x1:40, z0:10, z1:38, color:0x5a7fb0},
+  {name:"Печь обжига", x0:-40.5, x1:-12, z0:15.8, z1:25.8, color:0xb06048},
+  {name:"Сушилка 1", x0:-40.5, x1:-17.5, z0:26.8, z1:35.2, color:0xb08a48},
+  {name:"Сушилка 2", x0:-40.5, x1:-17.5, z0:36.6, z1:45, color:0xb08a48},
+  {name:"Разгрузка и упаковка", x0:22, x1:46, z0:33, z1:57, color:0x4f9a6a},
+  {name:"Склад ГП", x0:5, x1:45, z0:61, z1:77, color:0x6f7f8f},
+  {name:"Уголь и Проматик", x0:-47.5, x1:-26, z0:-4.8, z1:12.5, color:0x505050},
+  {name:"Компрессорная и отопление", x0:16.5, x1:47, z0:6, z1:13, color:0x6c70a8},
 ];
 const UNITS = [
-  {id:"clayhop", name:"Глина бункер", zone:"Массаподготовка", pos:[-56,0,-8], top:5.4, what:"Приёмный бункер над питателем: сюда погрузчик ссыпает глину. Внутри бильный вал разбивает комья, чтобы глина ровно ложилась на ленту.", where:"Начало линии, левый ряд. Это верх питателя глины."},
-  {id:"sandhop", name:"Песок бункер", zone:"Массаподготовка", pos:[-56,0,6], top:5.4, what:"Такой же приёмный бункер для песка, с бильным валом над лентой.", where:"Рядом с бункером глины."},
-  {id:"feedclay", name:"Питатель СМК 214 (глина)", code:"СМК 214", zone:"Массаподготовка", pos:[-56,0,-8], top:2.6, model:"feeder", mat:"clay",
+  {id:"clayhop", name:"Глина бункер", zone:"Массаподготовка", pos:[79,0,40], top:5.4, what:"Приёмный бункер над питателем: сюда погрузчик ссыпает глину. Внутри бильный вал разбивает комья, чтобы глина ровно ложилась на ленту.", where:"Начало линии, левый ряд. Это верх питателя глины."},
+  {id:"sandhop", name:"Песок бункер", zone:"Массаподготовка", pos:[90,0,40], top:5.4, what:"Такой же приёмный бункер для песка, с бильным валом над лентой.", where:"Рядом с бункером глины."},
+  {id:"feedclay", name:"Питатель СМК 214 (глина)", code:"СМК 214", zone:"Массаподготовка", pos:[79,0,40], top:2.6, model:"feeder", mat:"clay",
    what:"Ящичный пластинчатый питатель: длинный короб, по дну идёт лента из стальных пластин. Ровно подаёт глину на конвейер — первый компонент массы.",
    where:"Под бункером глины. Привод сбоку: двигатель → ремни → редуктор.", facts:{"Лента":"стальные пластины 6 мм","Привод":"двигатель, ремни, редуктор"}},
-  {id:"feedsand", name:"Питатель СМК 214 (песок)", code:"СМК 214", zone:"Массаподготовка", pos:[-56,0,6], top:2.6, model:"feeder", mat:"sand",
+  {id:"feedsand", name:"Питатель СМК 214 (песок)", code:"СМК 214", zone:"Массаподготовка", pos:[90,0,40], top:2.6, model:"feeder", mat:"sand",
    what:"Такой же питатель, подаёт песок вторым компонентом. Сколько песка идёт в массу — задаёт скорость привода.", where:"Рядом с питателем глины. От него идёт свой конвейер с концевиками."},
-  {id:"dte", name:"Дробилка ДТЕ117", code:"ДТЕ117", zone:"Массаподготовка", pos:[-45,0,-1], top:3.8, model:"crusher",
+  {id:"dte", name:"Дробилка ДТЕ117", code:"ДТЕ117", zone:"Массаподготовка", pos:[100,0,44], top:3.8, model:"crusher",
    what:"Первая дробилка: зубчатые валки раскалывают крупные и мёрзлые куски глины (до 500 мм на входе).", where:"Сразу после питателей — туда сходятся оба конвейера."},
-  {id:"pl601", name:"Дезинтегратор PL 601", code:"PL 601", zone:"Массаподготовка", pos:[-37,0,-1], top:4.4, model:"disint",
+  {id:"pl601", name:"Дезинтегратор PL 601", code:"PL 601", zone:"Массаподготовка", pos:[111,0,44], top:4.4, model:"disint",
    what:"Дезинтегратор: большой гладкий валок и малый валок с ножами крутятся навстречу и режут массу мельче.", where:"После дробилки. К нему подходят конвейеры №1 и №2."},
-  {id:"smk102", name:"Смеситель СМК 102", code:"СМК 102", zone:"Массаподготовка", pos:[-29,0,-1], top:4.2, model:"rollers",
+  {id:"smk102", name:"Смеситель СМК 102", code:"СМК 102", zone:"Массаподготовка", pos:[121,0,51.8], top:4.2, model:"rollers",
    what:"Вальцы тонкого помола: два гладких валка около 1 м, зазор до 1 мм, крутятся с разной скоростью — раздавливают и перетирают массу.", where:"Третий станок по линии.", facts:{"Валки":"Ø 1000 мм","Зазор":"до 1 мм"}},
-  {id:"usm40", name:"УСМ 40", code:"УСМ 40", zone:"Массаподготовка", pos:[-21,0,-1], top:4.2, model:"rollers", cab:true,
+  {id:"usm40", name:"УСМ 40", code:"УСМ 40", zone:"Массаподготовка", pos:[107,0,51.8], top:4.2, model:"rollers", cab:true,
    what:"Ещё одни вальцы тонкого помола, домалывают массу. Зазор 1–1,5 мм. Свой шкаф управления.", where:"После СМК 102."},
-  {id:"smk126", name:"СМК 126", code:"СМК 126", zone:"Массаподготовка", pos:[-13,0,-1], top:3.2, model:"mixer",
+  {id:"smk126", name:"СМК 126", code:"СМК 126", zone:"Массаподготовка", pos:[92,0,51.8], top:3.2, model:"mixer",
    what:"Двухвальный лопастной смеситель: корыто, в нём два вала с лопатками. Перемешивает и увлажняет массу перед бункерами.", where:"Последний станок массаподготовки.", facts:{"Мощность":"до 37 кВт","Лопасти":"Ø 750 мм"}},
-  {id:"light", name:"Освещение массаподготовки", zone:"Массаподготовка", pos:[-36,0,-15], top:3.4, model:"lightpanel",
+  {id:"light", name:"Освещение массаподготовки", zone:"Массаподготовка", pos:[100,0,57], top:3.4, model:"lightpanel",
    what:"Щит освещения участка и светильники над линией. Электрик проверяет, что свет включается.", where:"Щит — на стене участка, светильники — над линией."},
-  {id:"bunker", name:"Бункер", zone:"Прессование и формовка", pos:[-4,0,-1], top:10.2, model:"bunkers",
+  {id:"bunker", name:"Бункер", zone:"Прессование и формовка", pos:[53.7,0,51.8], top:10.2, model:"bunkers",
    what:"Два накопительных бункера готовой массы. Наверху датчики уровня, внизу питатель PL 024 выдаёт массу на ленту.", where:"Между массоподготовкой и прессом — высокие, видно издалека.", facts:{"Датчики":"заполнение №1 и №2","Питатель":"PL 024"}},
-  {id:"optima", name:"OPTIMA 800H", code:"Verdés", zone:"Прессование и формовка", pos:[5,0,-1], top:4.4, model:"optima",
+  {id:"optima", name:"OPTIMA 800H", code:"Verdés", zone:"Прессование и формовка", pos:[54,0,33], top:4.4, model:"optima",
    what:"Вальцы Verdés OPTIMA: тяжёлая рама, валки Ø 1000 мм, зазор держит гидравлика с точностью до сотых. Последний помол перед прессом.", where:"После бункеров, перед прессом.", facts:{"Производитель":"Verdés, Испания","Ширина валков":"800 мм"}},
-  {id:"conv", name:"Конвейера", zone:"Прессование и формовка", pos:[10.3,0,-1], top:2.4,
+  {id:"conv", name:"Конвейера", zone:"Прессование и формовка", pos:[50,0,28], top:2.4,
    what:"Ленточные конвейеры возят массу между всеми станками. На концах — барабаны, скребки, концевики, у приводов — двигатели.", where:"Вся линия соединена лентами. Выбрали — подсветились все конвейеры цеха."},
-  {id:"press", name:"Пресс Magna 575", code:"Verdés", zone:"Прессование и формовка", pos:[18,0,-1], top:6.6, model:"press",
+  {id:"press", name:"Пресс Magna 575", code:"Verdés", zone:"Прессование и формовка", pos:[27,0,24], top:6.6, model:"press",
    what:"Главный станок завода — вакуумный пресс Verdés Magna 575. Сверху смеситель, дальше вакуумная камера и шнек: выдавливает два бруса глины через фильеру под давлением 25–45 бар.",
    where:"Центр цеха. К нему подходят вода, воздух и смазка.", facts:{"Давление":"25–45 бар","Формовка":"жёсткая, 2 бруса"}},
-  {id:"forming", name:"Зона формовки", zone:"Прессование и формовка", pos:[27.5,0,-1], top:4.4, model:"forming",
+  {id:"forming", name:"Зона формовки", zone:"Прессование и формовка", pos:[10,0,24], top:4.4, model:"forming",
    what:"После пресса: резчик режет брус на кирпичи, толкатели раздвигают ряды, робот-садчик ставит сырец на вагонетки.", where:"Сразу за прессом."},
-  {id:"brake", name:"Тормоз толкателя", zone:"Сушка и обжиг", pos:[36,0,9], top:2.8, model:"pusher",
+  {id:"brake", name:"Тормоз толкателя", zone:"Сушка и обжиг", pos:[-9,0,29], top:2.8, model:"pusher",
    what:"Толкатель продвигает вагонетки в сушилку и печь, тормоз удерживает состав, чтобы вагонетки не накатывались.", where:"На входе в сушилку, у рельсов."},
-  {id:"compr", name:"Компрессорная", zone:"Компрессорная", pos:[10,0,-23], top:5.2, model:"compressor",
+  {id:"compr", name:"Компрессорная", zone:"Компрессорная", pos:[26,0,9.5], top:5.2, model:"compressor",
    what:"Компрессоры дают сжатый воздух прессу, роботам и пневматике. Дежурные сливают конденсат и смотрят температуру.", where:"Отдельное помещение рядом с прессом."},
-  {id:"dryer", name:"Сушилка", zone:"Сушка и обжиг", pos:[56,0,9], top:6.6, model:"dryer",
+  {id:"dryer", name:"Сушилка", zone:"Сушка и обжиг", pos:[-29,0,31], top:6.6, model:"dryer",
    what:"Длинная камера: сырец на вагонетках медленно идёт через тёплый воздух. Температура разная по зонам, вентиляторы гонят воздух, сервоприводы двигают заслонки.", where:"Первая из двух длинных камер."},
-  {id:"kiln", name:"Печь", zone:"Сушка и обжиг", pos:[60,0,23], top:8.2, model:"kiln",
+  {id:"kiln", name:"Печь", zone:"Сушка и обжиг", pos:[-26,0,20.8], top:8.2, model:"kiln",
    what:"Туннельная печь: вагонетки с высушенным кирпичом проезжают зону обжига. Топливо — уголь.", where:"Параллельно сушилке, камера с трубой."},
-  {id:"prog", name:"Прогматик", zone:"Сушка и обжиг", pos:[50,0,30], top:4.4, model:"progmatic",
+  {id:"prog", name:"Прогматик", zone:"Сушка и обжиг", pos:[-36,0,10], top:4.4, model:"progmatic",
    what:"Система подачи топлива в печь: конвейер и шнек подают уголь, вентилятор дует воздух. Название уточните у мастера.", where:"Сбоку печи, со стороны склада угля."},
-  {id:"coal", name:"Углезапасник", zone:"Склад угля", pos:[75,0,40], top:5,model:"coal",
+  {id:"coal", name:"Углезапасник", zone:"Склад угля", pos:[-37,0,1], top:5,model:"coal",
    what:"Склад угля для печи: левый и правый запасник, над ними светильники.", where:"За печью, отдельный участок."},
-  {id:"pack", name:"Упаковка", zone:"Упаковка", pos:[96,0,21], top:5.8, model:"pack",
+  {id:"pack", name:"Упаковка", zone:"Упаковка", pos:[34,0,45], top:5.8, model:"pack",
    what:"Робот снимает обожжённый кирпич с вагонеток и собирает пакеты, цепные конвейеры везут их на обвязку и плёнку. Здесь же осматривают готовую продукцию (ГП).", where:"Конец линии, после печи."},
 ];
 const BY_NAME = Object.fromEntries(UNITS.map(u => [u.name, u]));
@@ -883,6 +928,60 @@ function rebuildParts(){
 }
 
 // ═══ Мир ═══
+// Esc: в окне с «Главной» закрывает окно (сначала снимает выбор
+// станка), на своей странице — просто снимает выбор.
+addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (SELECTED){ select(null); return; }
+  if (document.documentElement.classList.contains("acai-embed")){
+    try { parent.postMessage("acai-twin-close", location.origin); } catch (err) {}
+  }
+});
+
+// ── Живые показания с панели ──────────────────────────────────
+// Те же четыре регистра и те же правила, что на «Главной»: имена из
+// справочника, сбор остановлен — чисел не показываем вовсе.
+const LIVE_REG = {"pl024_1_загрузка_проц":null, "pl024_2_загрузка_проц":null,
+                  "питатель_1_гц":null, "питатель_2_гц":null};
+
+async function refreshLive(){
+  const box = $("live");
+  if (!box || !window.ACAISensors) return;
+  try { await ACAISensors.load(); } catch (e) {}
+
+  let health = null;
+  try { health = await ACAISensors.health(); } catch (e) {}
+
+  if (health && !health.ok && health.state !== "never"){
+    const since = (health.since || "").slice(11, 16);
+    const why = health.state === "panel" ? "панель не отвечает"
+              : health.state === "collector" ? "расширение не на связи" : "сбор остановлен";
+    box.innerHTML = `<span class="warnText">Показаний нет${since ? " с " + since : ""} — ${esc(why)}</span>`;
+    box.hidden = false;
+    return;
+  }
+
+  let live = null;
+  try { const r = await fetch("/api/sensors/live", {credentials:"include"}); live = r.ok ? await r.json() : null; }
+  catch (e) {}
+  if (!live) return;
+
+  const parts = [];
+  for (const key of Object.keys(LIVE_REG)){
+    const row = live[key];
+    if (!row) continue;
+    const shown = ACAISensors.value(key, row.value);
+    const text = parseFloat(row.value) === 0 && key.endsWith("_гц") ? "стоит" : shown.text;
+    parts.push(`${esc(ACAISensors.short(key))} <b>${text}</b>`);
+  }
+  if (!parts.length) return;
+
+  const at = health && health.last_data_at ? new Date(health.last_data_at) : null;
+  if (at) parts.push(`снято в <b>${at.toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit", second:"2-digit"})}</b>`);
+  box.innerHTML = parts.join("<span>·</span>");
+  box.hidden = false;
+}
+
 function init(){
   if (!window.THREE || !THREE.OrbitControls){ $("plant").insertAdjacentHTML("beforeend", '<div class="fail">3D не загрузился: браузер не смог открыть библиотеку Three.js. Обновите страницу.</div>'); $("loading").remove(); return; }
   const canvas = $("scene");
@@ -901,6 +1000,9 @@ function init(){
   viewAll(true); bindPicking(canvas);
   $("loading").remove();
   let last = performance.now();
+  refreshLive();
+  setInterval(() => { if (!document.hidden) refreshLive(); }, 30000);
+
   (function loop(now){
     requestAnimationFrame(loop);
     const dt = Math.min(.05, (now - last)/1000); last = now;
@@ -919,20 +1021,32 @@ function buildWorld(){
   sun.position.set(-45, 95, 55); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0004;
   Object.assign(sun.shadow.camera, {left:-115, right:115, top:75, bottom:-75, near:1, far:280}); scene.add(sun);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(230, 125), new THREE.MeshStandardMaterial({map:TEX.floor, roughness:.95}));
-  floor.rotation.x = -Math.PI/2; floor.position.set(20, 0, 9); floor.receiveShadow = true; scene.add(floor);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(240, 130), new THREE.MeshStandardMaterial({map:TEX.floor, roughness:.95}));
+  floor.rotation.x = -Math.PI/2; floor.position.set(42, 0, 33); floor.receiveShadow = true; scene.add(floor);
 
-  // корпус цеха: колонны и фермы без крыши — чтобы было видно внутрь
+  // Корпуса: колонны по углам и низкие стены без крыши — чтобы было
+  // видно внутрь. Три здания, как на заводских схемах: главный корпус
+  // (печь, сушилки, формовка, упаковка), корпус Оптимы с бункерами и
+  // корпус массаподготовки.
   const shell = new THREE.Group();
-  for (let x = -68; x <= 106; x += 14){
-    for (const z of [-31, 49]) box(shell, .7, 13, .7, M(0x8e969f, .7, .4), x, 6.5, z);
+  function building(x0, z0, x1, z1, step){
+    step = step || 16;
+    const w = x1 - x0, d = z1 - z0, cx = x0 + w/2, cz = z0 + d/2;
+    for (const [z, h] of [[z0, .9], [z1, .9]]) box(shell, w, 2.6, .5, M(0xa9b0b8, .9, 0), cx, 1.3, z);
+    for (const x of [x0, x1]) box(shell, .5, 2.6, d, M(0xa9b0b8, .9, 0), x, 1.3, cz);
+    for (const [z] of [[z0], [z1]]) box(shell, w, .4, .7, M(0x9aa2ab), cx, 2.75, z);
+    for (let x = x0; x <= x1 + .1; x += step){
+      for (const z of [z0, z1]) box(shell, .7, 11, .7, M(0x8e969f, .7, .4), Math.min(x, x1), 5.5, z);
+    }
   }
-  box(shell, 176, .5, .5, M(0x9aa2ab), 19, 13, -31); box(shell, 176, .5, .5, M(0x9aa2ab), 19, 13, 49);
-  box(shell, 176, 1.4, .3, M(0xa9b0b8, .9, 0), 19, .7, -31); box(shell, 176, 1.4, .3, M(0xa9b0b8, .9, 0), 19, .7, 49);
+  building(-47, 13, 47, 57);     // главный корпус
+  building(47, 13, 69.5, 57);    // Оптима и бункеры
+  building(72, 33, 132, 60);     // массаподготовка
   scene.add(shell); optimize(shell);
 
+  // Жёлтая разметка проходов — вдоль главной линии и по массаподготовке.
   const lineM = new THREE.MeshBasicMaterial({color:0xe6c229});
-  for (const [x0, x1, z] of [[-66, 104, 16.5], [-66, 34, -14.5], [34, 104, 32]]){
+  for (const [x0, x1, z] of [[-44, 45, 11.5], [-44, 45, 38.5], [74, 130, 47.8]]){
     const l = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, .25), lineM); l.rotation.x = -Math.PI/2; l.position.set((x0 + x1)/2, .03, z); scene.add(l);
   }
   for (const z of ZONES){
@@ -945,8 +1059,14 @@ function buildWorld(){
 
   // конвейеры цеха — это пункт «Конвейера» из чек-листа
   U = BY_ID.conv;
-  const CONV = [[[-52.2,-8],[-49,-8],[-49,-1],[-47.3,-1]], [[-52.2,6],[-49,6]], [[-42.6,-1],[-39.6,-1]], [[-34.4,-1],[-31.8,-1]],
-    [[-26.2,-1],[-23.8,-1]], [[-18.2,-1],[-16.4,-1]], [[-9.6,-1],[-6.3,-1]], [[-1.7,-1],[1.8,-1]], [[8.3,-1],[12.2,-1]], [[33.2,-1],[33.2,9],[33.6,9]]];
+  // Порядок тот же, что в регламенте и на карте линии: питатели →
+  // ДТЕ117 → PL 601 → поворот → СМК 102 → УСМ 40 → СМК 126 →
+  // бункеры → Оптима → пресс → формовка.
+  const CONV = [[[79,41.5],[79,44]], [[90,41.5],[90,44]],
+    [[79,44],[97,44]], [[103,44],[108,44]], [[114,44],[121,44]],
+    [[123,46],[123,50]],
+    [[118,51.8],[110,51.8]], [[104,51.8],[95,51.8]], [[88,51.8],[58,51.8]],
+    [[53.7,47],[53.7,37]], [[52,30],[52,25.5]], [[49,24],[31,24]], [[23,24],[14,24]]];
   const convRoot = new THREE.Group(); scene.add(convRoot);
   for (const path of CONV) for (let k = 0; k < path.length - 1; k++) conveyor(convRoot, path[k], path[k+1], k === path.length - 2);
   U = null;
@@ -970,6 +1090,16 @@ function buildWorld(){
     $("labels").appendChild(el);
     u.label = el; u.anchor = new THREE.Vector3(u.pos[0], u.top || 3, u.pos[2]);
   }
+  // Сушилок на плане две, в чек-листе дежурного — одна позиция.
+  // Вторую ставим как часть цеха и привязываем к тому же пункту:
+  // нажали на любую — открылась «Сушилка».
+  if (MODELS.dryer){
+    const second = MODELS.dryer(BY_ID.dryer);
+    second.position.set(-29, 0, 41);
+    second.traverse(o => { if (o.isMesh){ o.userData.unit = BY_ID.dryer; o.castShadow = o.receiveShadow = !o.material.transparent; } });
+    scene.add(second); optimize(second); pickables.push(second);
+  }
+
   cars();
   rebuildParts();
 
@@ -1005,7 +1135,10 @@ function flow(paths){
 
 // вагонетки: сушилка, потом печь
 function cars(){
-  const lines = [{z:9, x0:34, x1:76, n:9, unit:"dryer", fired:false}, {z:23, x0:36, x1:90, n:11, unit:"kiln", fired:true}];
+  // Два пути сушилок и путь печи — там же, где рельсы на плане.
+  const lines = [{z:31, x0:-40, x1:-18, n:9, unit:"dryer", fired:false},
+                 {z:41, x0:-40, x1:-18, n:9, unit:"dryer", fired:false},
+                 {z:20.8, x0:-40, x1:-20, n:9, unit:"kiln", fired:true}];
   for (const L of lines){
     const arr = [];
     for (let i = 0; i < L.n; i++){
@@ -1048,8 +1181,10 @@ function flyTo(target, dist, instant){
   fly = {t:0, fromT:controls.target.clone(), toT:target.clone(), fromP:camera.position.clone(), toP:endPos};
 }
 function viewAll(instant){
-  const narrow = innerWidth <= 768, target = new THREE.Vector3(narrow ? 18 : 22, 0, narrow ? 8 : 14);
-  const pos = new THREE.Vector3(target.x - 26, narrow ? 160 : 98, target.z + (narrow ? 125 : 82));
+  // Завод вытянут с запада на восток почти на 180 м: от угля и печи
+  // до корпуса массаподготовки. Отходим дальше, иначе края не влезают.
+  const narrow = innerWidth <= 768, target = new THREE.Vector3(narrow ? 33 : 34, 0, 32);
+  const pos = new THREE.Vector3(target.x - 54, narrow ? 260 : 190, target.z + (narrow ? 210 : 162));
   if (instant){ camera.position.copy(pos); controls.target.copy(target); controls.update(); return; }
   fly = {t:0, fromT:controls.target.clone(), toT:target, fromP:camera.position.clone(), toP:pos};
 }

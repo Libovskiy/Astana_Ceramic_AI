@@ -193,12 +193,14 @@
         </div>
       </div>
 
-      <!-- Цифровой двойник: весь завод. Устроен так же, как карта
-           линии ниже — отдельная страница в iframe по нажатию. -->
+      <!-- Весь завод в объёме. Открывается та же страница «Цех в 3D»,
+           что и в меню: планировка по заводским схемам, станки из
+           чек-листов дежурного, подсветка узлов. Отдельная страница в
+           iframe по нажатию — как и карта линии ниже. -->
       <div class="overlay massa-overlay hidden" id="twinOverlay">
         <div class="massa-modal">
           <div class="massa-modal-head">
-            <span class="massa-modal-title"><span data-icon=cube></span> Цифровой двойник завода</span>
+            <span class="massa-modal-title"><span data-icon=cube></span> Цех в 3D — планировка завода</span>
             <button type="button" class="ss-expand" onclick="closeTwin()">
               <span data-icon=close></span> Свернуть
             </button>
@@ -232,7 +234,7 @@
                  Кнопка здесь, а не отдельным пунктом меню: это не новый
                  раздел, а развёрнутый вид этой же карточки. -->
             <button type="button" class="ss-expand" id="twinExpand" onclick="openTwin()"
-                    title="Цифровой двойник завода: все участки одной сценой">
+                    title="Цех в 3D: планировка завода, станки и их узлы">
               <span data-icon=cube></span> Развернуть
             </button>
           </div>
@@ -660,13 +662,17 @@ function renderSensors(lv){
      </div>`;
 }
 
-// ── ЦИФРОВОЙ ДВОЙНИК ЗАВОДА ───────────────────────────────
-// Устроен ровно как карта линии ниже: адрес ставится в iframe по
-// нажатию и снимается при закрытии.
+// ── ЦЕХ В 3D ──────────────────────────────────────────────
+// «Производственная цепочка» разворачивается в ту же сцену, что
+// лежит в меню отдельным разделом: планировка завода, станки из
+// чек-листов дежурного, подсветка узлов. Своей сцены у цепочки
+// больше нет — две почти одинаковые карты одного завода только
+// путали. Адрес ставится в iframe по нажатию и снимается при
+// закрытии, как у карты линии ниже.
 function openTwin(){
   const frame=document.getElementById('twinFrame');
   const theme=(window.acaiTheme&&window.acaiTheme.get())||'dark';
-  frame.src='/twin?theme='+theme;
+  frame.src='/plant-3d?theme='+theme+'&embed=1';
   document.getElementById('twinOverlay').classList.remove('hidden');
   document.body.style.overflow='hidden';
 }

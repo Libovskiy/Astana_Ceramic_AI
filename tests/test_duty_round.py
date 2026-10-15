@@ -73,9 +73,18 @@ check("PAGE_ROLES = список сервиса", page_roles == set(svc.VIEW_ROL
 check("NAV_ITEMS = PAGE_ROLES", nav_roles == page_roles, f"{nav_roles ^ page_roles}")
 m3 = re.search(r'"/plant-3d":\s*\(([^)]*)\)', main_src)
 n3 = re.search(r"href: '/plant-3d',\s*roles: \[([^\]]*)\]", layout)
-check("«Цех в 3D»: те же права, что у обхода (листы берёт из его ручки)",
-      m3 and set(re.findall(r'"(\w+)"', m3.group(1))) == set(svc.VIEW_ROLES)
-      and n3 and set(re.findall(r"'(\w+)'", n3.group(1))) - {"admin"} == set(svc.VIEW_ROLES))
+# «Цех в 3D» показывает чек-листы обхода, поэтому все, кто видит
+# обход, должны видеть и его. Но с 15.10.2026 эта же сцена
+# разворачивается с «Главной» из «Производственной цепочки», и прав у
+# неё стало больше: добавился технолог, который обход не ведёт.
+# Поэтому не равенство, а «не меньше».
+plant_page = set(re.findall(r'"(\w+)"', m3.group(1))) if m3 else set()
+plant_nav = (set(re.findall(r"'(\w+)'", n3.group(1))) - {"admin"}) if n3 else set()
+check("«Цех в 3D»: кто видит обход, видит и его (листы берёт из его ручки)",
+      set(svc.VIEW_ROLES) <= plant_page and set(svc.VIEW_ROLES) <= plant_nav,
+      f"не хватает: {sorted(set(svc.VIEW_ROLES) - plant_page)}")
+check("«Цех в 3D»: меню и сервер сходятся",
+      plant_page == plant_nav, f"{sorted(plant_page ^ plant_nav)}")
 for kind, roles in svc.CONDUCT_ROLES.items():
     check(f"кто сдаёт «{kind}», тот видит страницу", set(roles) <= page_roles)
 

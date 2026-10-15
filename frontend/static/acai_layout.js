@@ -326,7 +326,7 @@ const NAV_ITEMS = [
   { icon: 'duty', label: 'Обход дежурного', href: '/duty-round',  roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
   // Учебный 3D-макет цеха: где стоят станки из чек-листов и где на
   // станке каждый пункт проверки. Права — как у «Обхода дежурного».
-  { icon: 'cube', label: 'Цех в 3D', href: '/plant-3d',  roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst'] },
+  { icon: 'cube', label: 'Цех в 3D', href: '/plant-3d',  roles: ['admin','director','chief_engineer','production_chief','shift_supervisor','chief_mechanic','mechanic','chief_electrician','electrician','analyst','technologist'] },
   { icon: 'maintenance', label: 'График ТО',    href: '/maintenance',  roles: ['admin','director','chief_engineer','production_chief','chief_mechanic','chief_electrician','analyst'] },
   { section: 'Аналитика' },
   { icon: 'analytics', label: 'Аналитика',     href: '/analytics',    roles: ['admin','director','chief_engineer','production_chief','analyst','chief_mechanic','chief_electrician'] },

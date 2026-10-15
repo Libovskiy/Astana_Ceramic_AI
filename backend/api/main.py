@@ -293,9 +293,12 @@ PAGE_ROLES: dict[str, tuple[str, ...] | str] = {
     # Цех в 3D — учебный макет к тому же обходу: где стоят станки из
     # чек-листов и где на станке каждый пункт. Те же люди, что у
     # «Обхода дежурного»: листы страница берёт из его же ручки.
+    # technologist — потому что «Цех в 3D» разворачивается с «Главной»
+    # из карточки «Производственная цепочка», а её он видит.
     "/plant-3d": ("director", "chief_engineer", "production_chief",
                   "shift_supervisor", "chief_mechanic", "mechanic",
-                  "chief_electrician", "electrician", "analyst"),
+                  "chief_electrician", "electrician", "analyst",
+                  "technologist"),
     "/maintenance": ("director", "chief_engineer", "production_chief",
                      "chief_mechanic", "chief_electrician",
                          "analyst"),
