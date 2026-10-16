@@ -325,6 +325,16 @@ const UNITS = [
    what:"Система подачи топлива в печь: конвейер и шнек подают уголь, вентилятор дует воздух. Название уточните у мастера.", where:"Сбоку печи, со стороны склада угля."},
   {id:"coal", name:"Углезапасник", zone:"Склад угля", pos:[-37,0,1], top:5,model:"coal",
    what:"Склад угля для печи: левый и правый запасник, над ними светильники.", where:"За печью, отдельный участок."},
+  // Три передаточные тележки — ими и держится круг вагонеток.
+  {id:"tb1", name:"Трансбордер 1 — формовка и печь", zone:"Сушка и обжиг", pos:[-10,0,33], top:2.6,
+   what:"Передаточная тележка у торца сушилок. Берёт гружёную вагонетку с пути формовки и ставит её на путь сушилки; обожжённую забирает с пути печи и отдаёт на упаковку.",
+   where:"Между формовкой и сушилками, в яме поперёк путей."},
+  {id:"tb2", name:"Трансбордер 2 — из сушилки в печь", zone:"Сушка и обжиг", pos:[-44,0,26], top:2.6,
+   what:"Задняя передаточная тележка. Вытаскивает высушенную вагонетку из сушилки и подаёт её на путь печи.",
+   where:"С дальнего торца сушилок и печи."},
+  {id:"tb3", name:"Трансбордер 3 — возврат под формовку", zone:"Разгрузка и упаковка", pos:[44,0,34.5], top:2.6,
+   what:"Возвратная тележка. Когда упаковка сняла весь кирпич, пустая вагонетка уходит вперёд, и тележка переставляет её на путь формовки — под загрузку сырцом. Круг замыкается.",
+   where:"За зоной упаковки, в конце пути."},
   {id:"pack", name:"Упаковка", zone:"Упаковка", pos:[34,0,45], top:5.8, model:"pack",
    what:"Робот снимает обожжённый кирпич с вагонеток и собирает пакеты, цепные конвейеры везут их на обвязку и плёнку. Здесь же осматривают готовую продукцию (ГП).", where:"Конец линии, после печи."},
 ];
@@ -731,14 +741,17 @@ const MODELS = {
     return g;
   },
   dryer(){
-    const g = new THREE.Group(), L = 36;
+    // Длина — по плану (путь сушилки между трансбордерами), а не
+    // произвольная: иначе камера накрывала бы трансбордерные ямы.
+    // Крыша просвечивает: иначе сверху не видно, как идут вагонетки.
+    const g = new THREE.Group(), L = 24;
     box(g, L, .3, 7.6, M(0x8a8f96, 1, 0), 0, .15, 0);
     box(g, L, 4.4, .35, M(0xc9a882, .95, 0), 0, 2.4, -3.6);
-    box(g, L, .4, 7.6, M(0x9a7b5c, .9, 0), 0, 4.8, 0);
+    box(g, L, .4, 7.6, new THREE.MeshStandardMaterial({color:0x9a7b5c, transparent:true, opacity:.3, roughness:.9, depthWrite:false}), 0, 4.8, 0);
     box(g, L, 4.4, .08, new THREE.MeshStandardMaterial({color:0xd9c4a8, transparent:true, opacity:.2, roughness:.2, depthWrite:false}), 0, 2.4, 3.65);
     for (let x = -L/2; x <= L/2; x += 6) box(g, .35, 4.6, .4, M(0x9a7b5c), x, 2.4, 3.65);
     const fans = new THREE.Group();
-    for (let x = -15; x <= 15; x += 6){
+    for (let x = -L/2 + 3; x <= L/2 - 3; x += 6){
       const fan = new THREE.Group(); fan.position.set(x, 5.4, -1.2);
       cyl(fan, .9, .9, .5, M(0x8d969f, .4, .6), 0, 0, 0, 0, 0, 0, 24);
       const blade = new THREE.Group();
@@ -748,35 +761,37 @@ const MODELS = {
       pillow(g, x, 5.15, -.3, .8);
     }
     g.add(fans); P("fans", fans);
-    for (let x = -15; x <= 15; x += 7.5) P("servo", box(g, .5, .9, .35, M(0x1f6fd0, .4, .3), x, 3.6, 3.95));
-    for (let x = -12; x <= 12; x += 8) P("thermo", box(g, .5, .32, .06, glow(0xff7a1a, .9), x, 2.6, 3.95));
+    for (let x = -L/2 + 3; x <= L/2 - 3; x += 7.5) P("servo", box(g, .5, .9, .35, M(0x1f6fd0, .4, .3), x, 3.6, 3.95));
+    for (let x = -L/2 + 4; x <= L/2 - 4; x += 8) P("thermo", box(g, .5, .32, .06, glow(0xff7a1a, .9), x, 2.6, 3.95));
     cabinet(g, -L/2 - 1.2, 0, 2.2, Math.PI/2, 2.1);
-    const lt = new THREE.Group(); for (let x = -15; x <= 15; x += 10) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 4.5, 2.6);
+    const lt = new THREE.Group(); for (let x = -L/2 + 3; x <= L/2 - 3; x += 8) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 4.5, 2.6);
     g.add(lt); P("lights", lt);
-    for (const z of [-1.4, 1.4]) P("rails", box(g, L + 12, .12, .15, M(0x6b7280, .4, .7), -2, .32, z));
+    for (const z of [-1.4, 1.4]) P("rails", box(g, L + 6, .12, .15, M(0x6b7280, .4, .7), 0, .32, z));
     return g;
   },
   kiln(){
-    const g = new THREE.Group(), L = 44;
+    // Длина — по плану печи на схеме; свод просвечивает, чтобы было
+    // видно вагонетки внутри.
+    const g = new THREE.Group(), L = 26;
     const bw = new THREE.MeshStandardMaterial({map:TEX.brickwall, roughness:.95});
     box(g, L, .3, 8.4, M(0x7a7f86, 1, 0), 0, .15, 0);
     box(g, L, 5.4, .5, bw, 0, 2.9, -4);
-    box(g, L, .6, 8.4, M(0x4f3a30, .9, 0), 0, 5.8, 0);
+    box(g, L, .6, 8.4, new THREE.MeshStandardMaterial({color:0x4f3a30, transparent:true, opacity:.32, roughness:.9, depthWrite:false}), 0, 5.8, 0);
     box(g, L, 5.4, .08, new THREE.MeshStandardMaterial({color:0xe8b090, transparent:true, opacity:.16, roughness:.2, depthWrite:false}), 0, 2.9, 4.05);
     for (let x = -L/2; x <= L/2; x += 5.5) box(g, .4, 5.6, .5, M(0x5a4034), x, 2.9, 4.05);
-    const gl = new THREE.Mesh(new THREE.BoxGeometry(14, 4.6, 7.2), new THREE.MeshBasicMaterial({color:0xff6a1a, transparent:true, opacity:.22, depthWrite:false}));
-    gl.position.set(2, 2.7, 0); g.add(dyn(gl));
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(L*.45, 4.6, 7.2), new THREE.MeshBasicMaterial({color:0xff6a1a, transparent:true, opacity:.22, depthWrite:false}));
+    gl.position.set(1, 2.7, 0); g.add(dyn(gl));
     const fire = new THREE.PointLight(0xff7a2e, 2.2, 22, 2); fire.position.set(2, 3, 0); g.add(fire);
     let ft = 0; ANIM.push(dt => { ft += dt; fire.intensity = 2 + Math.sin(ft*7)*.3 + Math.sin(ft*13)*.2; gl.material.opacity = .2 + Math.sin(ft*5)*.04; });
     const bu = new THREE.Group(), ho = new THREE.Group();
-    for (let x = -5; x <= 9; x += 1.75) for (const z of [-1.6, 1.6]){
+    for (let x = -L/2 + 5; x <= L/2 - 5; x += 1.75) for (const z of [-1.6, 1.6]){
       cyl(bu, .16, .16, .9, M(0x9aa3ad, .3, .7), x, 6.5, z, 0, 0, 0, 10);
       cyl(ho, .05, .05, 1.6, M(0x111111), x + .5, 6.9, z, 0, 0, Math.PI/2.6, 6);
     }
-    cyl(ho, .12, .12, 16, M(0x333333), 2, 7.2, 0, 0, 0, Math.PI/2, 10);
+    cyl(ho, .12, .12, L*.6, M(0x333333), 1, 7.2, 0, 0, 0, Math.PI/2, 10);
     g.add(bu); g.add(ho); P("burners", bu); P("hoses", ho);
     const fans = new THREE.Group();
-    for (const x of [-17, 17]){
+    for (const x of [-L/2 + 2, L/2 - 2]){
       const fan = new THREE.Group(); fan.position.set(x, 6.6, 2.2);
       cyl(fan, 1.0, 1.0, .6, M(0x8d969f, .4, .6), 0, 0, 0, 0, 0, 0, 24);
       const bl = new THREE.Group(); for (let i = 0; i < 6; i++){ const b = box(bl, .8, .05, .24, M(0xd0d5db, .3, .7), Math.cos(i*1.05)*.42, .33, Math.sin(i*1.05)*.42); b.rotation.y = -i*1.05; }
@@ -784,13 +799,13 @@ const MODELS = {
       motor(g, x + 1.9, 6.6, 2.2, 1.0, .34, -1); guard(g, x + 1.2, 7.1, 2.85, 1.2, 1, .25); pillow(g, x, 6.25, 3.2, .9);
     }
     g.add(fans); P("fans", fans);
-    cyl(g, .9, 1.15, 15, M(0x6b6f75, .8, .3), 19.5, 9.4, -2.6, 0, 0, 0, 20);
-    const lt = new THREE.Group(); for (let x = -18; x <= 18; x += 9) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 5.3, 3.4);
+    cyl(g, .9, 1.15, 15, M(0x6b6f75, .8, .3), L/2 - 2, 9.4, -2.6, 0, 0, 0, 20);
+    const lt = new THREE.Group(); for (let x = -L/2 + 3; x <= L/2 - 3; x += 9) box(lt, 1.4, .1, .3, glow(0xfff0c0, 1.1), x, 5.3, 3.4);
     g.add(lt); P("lights", lt);
-    for (const z of [-1.5, 1.5]) P("rails", box(g, L + 14, .12, .15, M(0x6b7280, .4, .7), 0, .32, z));
+    for (const z of [-1.5, 1.5]) P("rails", box(g, L + 6, .12, .15, M(0x6b7280, .4, .7), 0, .32, z));
     const smoke = [];
     for (let i = 0; i < 14; i++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({map:TEX.smoke, transparent:true, depthWrite:false})); s.userData.t = i/14; g.add(s); smoke.push(s); }
-    const moveSmoke = dt => { for (const s of smoke){ s.userData.t = (s.userData.t + dt*.12) % 1; const t = s.userData.t; s.position.set(19.5 + t*3, 17 + t*9, -2.6 - t*1.5); s.scale.setScalar(1.5 + t*5); s.material.opacity = (1 - t)*.7; } };
+    const moveSmoke = dt => { for (const s of smoke){ s.userData.t = (s.userData.t + dt*.12) % 1; const t = s.userData.t; s.position.set(L/2 - 2 + t*3, 17 + t*9, -2.6 - t*1.5); s.scale.setScalar(1.5 + t*5); s.material.opacity = (1 - t)*.7; } };
     moveSmoke(0); ANIM.push(moveSmoke);
     return g;
   },
@@ -1134,22 +1149,147 @@ function flow(paths){
 }
 
 // вагонетки: сушилка, потом печь
+// ══ Круг вагонетки ══════════════════════════════════════════════
+// Формовка грузит сырец → трансбордер 1 ставит вагонетку на сушилку →
+// трансбордер 2 сзади перетаскивает её из сушилки в печь →
+// трансбордер 1 забирает из печи и отдаёт на упаковку → после
+// разгрузки трансбордер 3 возвращает пустую вагонетку под формовку.
+// Круг не прерывается. Если трансбордер занят, вагонетка ждёт — так
+// и на заводе, и это видно на схеме: стоящая вагонетка это простой.
+const RAIL = {load:24, dry1:31, dry2:41, kiln:20.8, pack:45};
+const TBX = {front:-10, back:-44, ret:44};
+const END = {dryE:-18, dryW:-40, kilnW:-40, kilnE:-14, loadX:8, packX:34};
+
+// шаг пути: сколько секунд, где едет и что на вагонетке
+const WAY = [
+  {t:9,  stand:[END.loadX, RAIL.load], load:"raw",  say:"грузят сырец"},
+  {t:8,  x:[END.loadX, TBX.front],     z:RAIL.load},
+  {t:5,  tb:"front", x:TBX.front,      z:[RAIL.load, RAIL.dry1]},
+  {t:3,  x:[TBX.front, END.dryE],      z:RAIL.dry1},
+  {t:16, x:[END.dryE, END.dryW],       z:RAIL.dry1, say:"сушка"},
+  {t:2,  x:[END.dryW, TBX.back],       z:RAIL.dry1},
+  {t:5,  tb:"back",  x:TBX.back,       z:[RAIL.dry1, RAIL.kiln]},
+  {t:2,  x:[TBX.back, END.kilnW],      z:RAIL.kiln},
+  {t:19, x:[END.kilnW, END.kilnE],     z:RAIL.kiln, say:"обжиг", load:"fired"},
+  {t:2,  x:[END.kilnE, TBX.front],     z:RAIL.kiln},
+  {t:6,  tb:"front", x:TBX.front,      z:[RAIL.kiln, RAIL.pack]},
+  {t:10, x:[TBX.front, END.packX],     z:RAIL.pack},
+  {t:8,  stand:[END.packX, RAIL.pack], load:"empty", say:"снимают кирпич"},
+  {t:4,  x:[END.packX, TBX.ret],       z:RAIL.pack},
+  {t:6,  tb:"ret",   x:TBX.ret,        z:[RAIL.pack, RAIL.load]},
+  {t:8,  x:[TBX.ret, END.loadX],       z:RAIL.load},
+];
+
+function rails(x0, x1, z){
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) box(g, x1 - x0, .16, .22, M(0xb7bec6, .5, .6), (x0 + x1)/2, .3, z + s*.85);
+  for (let x = x0 + 1.2; x < x1; x += 2.4) box(g, .5, .12, 2.4, M(0x6b7177, .9, 0), x, .22, z);
+  scene.add(g); optimize(g); return g;
+}
+
+// трансбордер: яма с рельсами поперёк и тележка, которая по ней ходит
+function transfer(x, z0, z1, u){
+  const g = new THREE.Group(); g.position.set(x, 0, (z0 + z1)/2);
+  const len = Math.abs(z1 - z0) + 6;
+  box(g, 5.6, .3, len, M(0x4a5057, .95, 0), 0, .15, 0);
+  for (const s of [-1, 1]) box(g, .22, .18, len, M(0xb7bec6, .5, .6), s*1.9, .36, 0);
+  const car = new THREE.Group(); g.add(car);
+  box(car, 5, .5, 4.4, M(0x2f3439, .6, .45), 0, .62, 0);
+  for (const s of [-1, 1]) box(car, 4.6, .16, .22, M(0xb7bec6, .5, .6), 0, .92, s*1.4);
+  for (const s of [-1, 1]) for (const q of [-1, 1]) cyl(car, .3, .3, .25, M(0x111111), s*1.9, .42, q*1.6, 0, 0, Math.PI/2, 12);
+  cabinet(car, 2.9, 0, 0, Math.PI/2, 1.5);
+  scene.add(g); optimize(g);
+  g.traverse(o => { if (o.isMesh) o.userData.unit = u; });
+  pickables.push(g);
+  return {group:g, car, mid:(z0 + z1)/2};
+}
+
 function cars(){
-  // Два пути сушилок и путь печи — там же, где рельсы на плане.
-  const lines = [{z:31, x0:-40, x1:-18, n:9, unit:"dryer", fired:false},
-                 {z:41, x0:-40, x1:-18, n:9, unit:"dryer", fired:false},
-                 {z:20.8, x0:-40, x1:-20, n:9, unit:"kiln", fired:true}];
-  for (const L of lines){
-    const arr = [];
-    for (let i = 0; i < L.n; i++){
-      const g = new THREE.Group(); box(g, 2.6, .45, 2.9, M(0x34383d, .6, .5), 0, .65, 0);
-      for (const x of [-.9, .9]) for (const z of [-1.5, 1.5]) cyl(g, .2, .2, .12, M(0x111111), x, .4, z, Math.PI/2, 0, 0, 12);
-      for (let k = 0; k < 3; k++) box(g, 2.2, .45, 2.4, M(L.fired ? 0xc65f3a : 0xb98a6a, .95, 0), 0, 1.13 + k*.48, 0);
-      g.position.set(L.x0 + i*(L.x1 - L.x0)/L.n, 0, L.z); scene.add(g); arr.push(g);
-      g.traverse(o => { if (o.isMesh){ o.userData.unit = BY_ID[L.unit]; } }); optimize(g);
+  // пути под вагонетки: загрузка, две сушилки, печь, упаковка
+  rails(TBX.ret, TBX.front, RAIL.load);
+  rails(TBX.front, TBX.ret, RAIL.pack);
+  rails(END.dryW, END.dryE, RAIL.dry1);
+  rails(END.dryW, END.dryE, RAIL.dry2);
+  rails(END.kilnW, END.kilnE, RAIL.kiln);
+
+  const TB = {
+    front: transfer(TBX.front, RAIL.kiln, RAIL.pack, BY_ID.tb1),
+    back:  transfer(TBX.back,  RAIL.kiln, RAIL.dry1, BY_ID.tb2),
+    ret:   transfer(TBX.ret,   RAIL.load, RAIL.pack, BY_ID.tb3),
+  };
+  const busy = {front:null, back:null, ret:null};
+
+  const CYCLE = WAY.reduce((a, s) => a + s.t, 0);
+  const N = 7;
+  const wagons = [];
+  for (let i = 0; i < N; i++){
+    const g = new THREE.Group();
+    box(g, 2.6, .45, 2.9, M(0x34383d, .6, .5), 0, .65, 0);
+    for (const x of [-.9, .9]) for (const z of [-1.5, 1.5]) cyl(g, .2, .2, .12, M(0x111111), x, .4, z, Math.PI/2, 0, 0, 12);
+    const raw = new THREE.Group(), fired = new THREE.Group();
+    for (let k = 0; k < 3; k++){
+      box(raw, 2.2, .45, 2.4, M(0xb98a6a, .95, 0), 0, 1.13 + k*.48, 0);
+      box(fired, 2.2, .45, 2.4, M(0xc65f3a, .95, 0), 0, 1.13 + k*.48, 0);
     }
-    ANIM.push(dt => { for (const c of arr){ c.position.x += .9*dt; if (c.position.x > L.x1) c.position.x -= (L.x1 - L.x0); } });
+    g.add(raw); g.add(fired);
+    scene.add(g); optimize(raw); optimize(fired);
+    g.traverse(o => { if (o.isMesh && !o.userData.unit) o.userData.unit = BY_ID.tb1; });
+    // раскладываем по кругу: каждая следующая отстаёт на равный срок
+    let step = 0, left = (CYCLE / N) * i;
+    while (left >= WAY[step].t){ left -= WAY[step].t; step = (step + 1) % WAY.length; }
+    wagons.push({g, raw, fired, step, t:left, wait:false});
   }
+
+  function place(w){
+    const s = WAY[w.step], k = s.t ? w.t / s.t : 0;
+    let x, z;
+    if (s.stand){ x = s.stand[0]; z = s.stand[1]; }
+    else if (s.tb){ x = s.x; z = s.z[0] + (s.z[1] - s.z[0]) * k; }
+    else { x = s.x[0] + (s.x[1] - s.x[0]) * k; z = s.z; }
+    w.g.position.set(x, 0, z);
+    // что на вагонетке: сырец после формовки, обожжённый после печи,
+    // пустая после упаковки
+    const load = w.load || "empty";
+    w.raw.visible = load === "raw";
+    w.fired.visible = load === "fired";
+    if (s.load === "raw"){ w.raw.visible = true; w.raw.scale.y = Math.max(.02, k); w.fired.visible = false; }
+    else if (s.load === "empty"){ w.raw.visible = false; w.fired.visible = true; w.fired.scale.y = Math.max(.02, 1 - k); }
+    else { w.raw.scale.y = 1; w.fired.scale.y = 1; }
+    if (s.tb) TB[s.tb].car.position.z = z - TB[s.tb].mid;
+  }
+
+  for (const w of wagons){ w.load = "raw"; place(w); }
+
+  // Наружу — только то, что и так видно на экране: где какая
+  // вагонетка и где тележки. Нужно проверке tests/test_plant_cycle.py.
+  window.acaiPlantCycle = {
+    cycle: CYCLE,
+    wagons: () => wagons.map(w => ({step:WAY[w.step].say || (WAY[w.step].tb ? "трансбордер " + WAY[w.step].tb : "едет"),
+                                    tb:WAY[w.step].tb || null, load:w.load, wait:w.wait, stand:!!WAY[w.step].stand,
+                                    x:+w.g.position.x.toFixed(2), z:+w.g.position.z.toFixed(2)})),
+    transfers: () => Object.fromEntries(Object.entries(TB).map(([k, v]) => [k, +(v.mid + v.car.position.z).toFixed(2)])),
+  };
+
+  ANIM.push(dt => {
+    for (const w of wagons){
+      const s = WAY[w.step];
+      // следующий шаг — въезд на трансбордер: занят, значит ждём.
+      // Это и есть простой: вагонетка стоит, круг не идёт.
+      const next = WAY[(w.step + 1) % WAY.length];
+      const blocked = next.tb && busy[next.tb] && busy[next.tb] !== w && w.t + dt >= s.t;
+      w.wait = !!blocked;
+      if (blocked){ w.t = s.t; continue; }
+      w.t += dt;
+      if (w.t >= s.t){
+        w.t -= s.t;
+        if (s.tb) busy[s.tb] = null;
+        if (s.load) w.load = s.load === "empty" ? "empty" : s.load;
+        w.step = (w.step + 1) % WAY.length;
+        if (WAY[w.step].tb) busy[WAY[w.step].tb] = w;
+      }
+      place(w);
+    }
+  });
 }
 
 function fitStage(){
@@ -1214,7 +1354,9 @@ function placeLabels(){
   const units = UNITS.slice().sort((a, b) => (b === SELECTED) - (a === SELECTED) || b.label.classList.contains("on-route") - a.label.classList.contains("on-route"));
   for (const u of units){
     const p = project(u.anchor), routed = ROUTE_KIND && u.label.classList.contains("on-route");
-    let show = p.vis && (camDist < (innerWidth <= 768 ? 250 : 190) || u === SELECTED || routed) && !(SELECTED === u && camDist < 26 && partLabels.length);
+    // Порог отодвинут вместе с камерой: завод стал шире (от угля до
+    // массаподготовки почти 180 м), и на общем виде подписи пропадали.
+    let show = p.vis && (camDist < (innerWidth <= 768 ? 420 : 330) || u === SELECTED || routed) && !(SELECTED === u && camDist < 26 && partLabels.length);
     if (show){
       const w = u.lw || (u.lw = u.name.length*6.8 + (routed ? 46 : 22)), r = {x0:p.x - w/2, x1:p.x + w/2, y0:p.y - 26, y1:p.y};
       if (u !== SELECTED && taken.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) show = false;
